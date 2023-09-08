@@ -1,0 +1,6 @@
+/cache
+/data
+/testman
+/__pycache__
+/**/__pycache__
+*.log

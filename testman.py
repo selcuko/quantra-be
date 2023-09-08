@@ -1,0 +1,137 @@
+from dataclasses import dataclass
+from datetime import datetime
+import json
+import os
+from typing import Literal
+from logger import logger
+from numpy import NaN
+
+@dataclass
+class Trade:
+    price: float
+    quantity: float
+    datetime: datetime
+    position: Literal["buy", "sell"]
+
+    def to_dict(self):
+        return {
+            'price': self.price,
+            'quantity': self.quantity,
+            'datetime': str(self.datetime),
+            'position': self.position,
+        }
+
+
+class TestManager:
+    def __init__(self, *args, **kwargs):
+        """Manager class to hold testing data, analyze results, and keep track of trades."""
+        self.trades = []
+        self.capital = kwargs.get('capital', 1000)
+        self.assets = 0
+        self.commission = kwargs.get('commission', 0.002)
+        self.shutdown_percent = kwargs.get('shutdown_percent', 50)
+        self.sell_at_shutdown = kwargs.get('sell_at_shutdown', False)
+        self.wins = 0
+        self.losses = 0
+        self.bought = False
+        self.bought_price = 0
+        self.profit_from_last_trade = 0
+        self.sold_price = 0
+        self.sold_at_shutdown = False
+        self.buy_signals = 0
+        self.sell_signals = 0
+        self.verbose = kwargs.get('verbose', False)
+
+
+    def buy(self, price):
+        self.buy_signals += 1
+        if self.bought:
+            if self.verbose:
+                print('Already bought, cannot buy again - ignoring buy signal')
+            return
+        price = float(price)
+        self.bought = True
+        self.bought_price = price
+        self.assets = (1 - self.commission) * (self.capital / price)
+        self.capital = 0
+        trade = Trade(price, self.assets, datetime.now(), 'buy')
+        self.trades.append(trade)
+
+    def sell(self, price):
+        self.sell_signals += 1
+        if not self.bought:
+            if self.verbose:
+                print('Not bought, cannot sell - ignoring sell signal')
+            return
+        price = float(price)
+        self.bought = False
+        self.capital = (1 - self.commission) * (self.assets * price)
+        self.assets = 0
+        self.profit_from_last_trade = (price - self.bought_price) / self.bought_price * 100
+        self.sold_price = price
+        if price > self.bought_price:
+            self.wins += 1
+        else:
+            self.losses += 1
+        trade = Trade(price, self.capital, datetime.now(), 'sell')
+        self.trades.append(trade)
+    
+    def shutdown(self, price):
+        if self.sell_at_shutdown and self.bought:
+            self.sell(price)
+            self.sold_at_shutdown = True
+        self.save_to_disk()
+    
+    @property
+    def equity(self):
+        """Total equity in USD."""
+        return self.capital + self.assets * self.bought_price
+
+    @property
+    def profit(self):
+        """Profit in percent."""
+        return ((self.equity - 1000) / 1000) * 100
+    
+    @property
+    def win_rate(self):
+        """Win rate in percent."""
+        if self.wins == 0 and self.losses == 0:
+            return NaN
+        return self.wins / (self.wins + self.losses) * 100
+
+    def summary(self):
+        return f'[{datetime.now()}] Position: {"IN" if self.bought else "OUT"} | Trades: {len(self.trades)} | Profit: {self.profit:.2f}% | Win Rate: {self.win_rate:.2f}% | Last Trade: {self.profit_from_last_trade:.2f}% | Capital: {self.capital:.2f} | Assets: {self.assets:.2f}'    
+
+    def to_dict(self):
+        return {
+            'trades_count': len(self.trades),
+            'capital': self.capital,
+            'assets': self.assets,
+            'commission': self.commission,
+            'shutdown_percent': self.shutdown_percent,
+            'sell_at_shutdown': self.sell_at_shutdown,
+            'wins': self.wins,
+            'losses': self.losses,
+            'bought': self.bought,
+            'bought_price': self.bought_price,
+            'profit_from_last_trade': self.profit_from_last_trade,
+            'sold_price': self.sold_price,
+            'sold_at_shutdown': self.sold_at_shutdown,
+            'buy_signals': self.buy_signals,
+            'sell_signals': self.sell_signals,
+            'trades': [trade.to_dict() for trade in self.trades],
+        }
+
+    def save_to_disk(self, filedir=None):
+        if not filedir:
+            filedir = f'testman/testman-{datetime.now()}.json'
+        os.makedirs(os.path.dirname(filedir), exist_ok=True)
+        if os.path.exists(filedir):
+            logger.error(f'File {filedir} already exists, failed to save')
+            return
+        with open(filedir, 'w') as f:
+            f.write(json.dumps(self.to_dict()))
+        logger.info(f'Saved TestMan instance to {filedir}')
+        return filedir
+
+    
