@@ -74,3 +74,7 @@ def download_symbol(market_name:str, symbol:str, start:datetime):
         return
     print('OK')
     return _get_filename(market.name, symbol)
+
+
+if __name__ == '__main__':
+    download_symbol('kucoin', 'btc-usdt', datetime(2023, 1, 1))

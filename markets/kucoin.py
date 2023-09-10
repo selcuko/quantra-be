@@ -17,15 +17,18 @@ class KucoinMarket:
             raise
     
     def _standardize_klines(self, klines):
-        klines = reversed(klines)
-        return [[ datetime.fromtimestamp(int(kline[0])).replace(second=0, microsecond=0),
-                    float(kline[1]),
-                    float(kline[2]),
-                    float(kline[3]),
-                    float(kline[4]),
-                    float(kline[5]),
-                ] for kline in klines ]
-    
+        try:
+            klines.reverse()
+            return [[ datetime.fromtimestamp(int(kline[0])).replace(second=0, microsecond=0),
+                        float(kline[1]),
+                        float(kline[2]),
+                        float(kline[3]),
+                        float(kline[4]),
+                        float(kline[5]),
+                    ] for kline in klines ]
+        except:
+            logger.error(f'Error while standardizing klines for {self.name}: {klines}', exc_info=True)
+            raise
     def _standardize_symbol(self, symbol):
         return symbol
     
@@ -55,7 +58,7 @@ class KucoinMarket:
         else:
             if end - start > calculated_timerange:
                 # calculate how many candles are in the timerange
-                candles_in_timerange = (end - start) / timedelta(minutes=interval_to_minutes(interval))
+                candles_in_timerange = (end - start) // timedelta(minutes=interval_to_minutes(interval))
                 raise ValueError(f'We can get a maximum of 1000 klines per request, your timerange is too wide ({candles_in_timerange} candles), please reduce the timerange or increase the interval')
         try:
             logger.debug('Hitting Kucoin API for {symbol} at {start} -> {end} with limit {limit}')
@@ -73,6 +76,8 @@ class KucoinMarket:
                 time.sleep(1)
                 return self._get_klines(symbol, interval, start, end, limit, retry-1)
             raise
+        if not klines or not isinstance(klines, list) or not isinstance(klines[0], list):
+            return []
         return self._standardize_klines(klines)
 
     def get_symbols(self):
