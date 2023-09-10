@@ -28,7 +28,7 @@ def _freq_to_timedelta(freq, minL):
         '3 day': timedelta(days=3),
         '1 week': timedelta(weeks=1),
         '1 month': timedelta(days=30),
-    }.get(freq, timedelta(minutes=1)) * minL
+    }[freq] * minL
 
 
 def StrategyV1(ds):
@@ -41,7 +41,6 @@ def StrategyV1(ds):
         'stochrsi': {
             'fastk_period': 14,
             'fastd_period': 3,
-            'fastd_matype': 0
         },
         't3': {
             'length': 5,
@@ -56,6 +55,15 @@ def StrategyV1(ds):
         logger.error(f'Error in StrategyV1 while calculating indicators: {e!r}')
         logger.exception(e)
         raise e
+    if not (
+        'macd' in ds.columns
+        and 'macd_signal' in ds.columns
+        and 'macd_diff' in ds.columns
+        and 'stoch_rsi_fastk' in ds.columns
+        and 'stochrsi_fastd' in ds.columns
+        and 't3' in ds.columns
+    ):
+        raise Exception('Error in StrategyV1 while calculating indicators: missing columns (this is probably due to dataset being too small)')
     
     ds['macd_buy'] = (ds['macd_diff'] >= 0) == (ds['macd_diff'].shift(1) < ds['macd_diff'])
     ds['macd_sell'] = (ds['macd_diff'] < 0) == (ds['macd_diff'].shift(1) >= ds['macd_diff'])

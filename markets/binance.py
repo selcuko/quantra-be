@@ -55,7 +55,7 @@ class BinanceMarket:
             '3 day': Client.KLINE_INTERVAL_3DAY,
             '1 week': Client.KLINE_INTERVAL_1WEEK,
             '1 month': Client.KLINE_INTERVAL_1MONTH,
-        }.get(interval, Client.KLINE_INTERVAL_1MINUTE)
+        }[interval]
 
     def _format_datetime(self, dt):
         return str(dt.timestamp())

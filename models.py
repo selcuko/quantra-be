@@ -18,7 +18,7 @@ def interval_to_minutes(interval):
         '3 day': 4320,
         '1 week': 10080,
         '1 month': 43200,
-    }.get(interval, 1)
+    }[interval]
 
 
 class OHLCVDataset(pd.DataFrame):
@@ -50,7 +50,7 @@ class OHLCVDataset(pd.DataFrame):
             '3 day': '3D',
             '1 week': '1W',
             '1 month': '1M',
-        }.get(freq, '1T')
+        }[freq]
     
     def change(self, freq):
         freq = self._standardize_freq(freq)

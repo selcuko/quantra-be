@@ -1,10 +1,11 @@
 from datetime import datetime, timedelta
+import time
 import requests, os
 from backtest import analyze
 from download import download_symbol
 from models import OHLCVDataset
 from strategy import StrategyV1
-
+from logger import logger
 from testman import TestManager
 
 token = 'REDACTED'
@@ -60,4 +61,11 @@ def process_request(symbol, market, freq) -> TestManager:
         testman = analyze(ds, strategy=StrategyV1, freq=freq)    
         return testman.summary() + '\n\n' + f'Test took place between these dates: \n{ds.index[0]}\n{ds.index[-1]}'
     except Exception as e:
+        logger.error(e, exc_info=True)
         return f'Error while processing request: {e}'
+
+if __name__ == '__main__':
+    while True:
+        poll_messages()
+        process_queue()
+        time.sleep(1)

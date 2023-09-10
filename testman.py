@@ -129,7 +129,10 @@ class TestManager:
 
     def save_to_disk(self, filedir=None):
         if not filedir:
-            filedir = f'testman/testman-{datetime.now()}-{self.symbol.upper()}-{self.market.upper()}.json'
+            if self.symbol and self.market:
+                filedir = f'testman/testman-{datetime.now()}-{self.symbol.upper()}-{self.market.upper()}.json'
+            else:
+                filedir = f'testman/testman-{datetime.now()}.json'
         os.makedirs(os.path.dirname(filedir), exist_ok=True)
         if os.path.exists(filedir):
             logger.error(f'File {filedir} already exists, failed to save')
