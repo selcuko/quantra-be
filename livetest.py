@@ -9,7 +9,8 @@ from logger import logger
 def run_livetest(symbol, market_name, freq='15 min', end:datetime=None):
     # do pre checks
     market = get_market(market_name)
-    testman = TestManager(symbol=symbol, market=market_name) # params are optional
+    symbol = symbol.upper()
+    testman = TestManager(symbol=symbol, market=market.name) # params are optional
     if isinstance(end, timedelta):
         end = datetime.now() + end
     
@@ -29,7 +30,7 @@ def run_livetest(symbol, market_name, freq='15 min', end:datetime=None):
         try:
             klines = market.get_last_klines(symbol, freq)
         except MarketError:
-            logger.fatal(f'Fatal error halted program while fetching klines for {symbol} from {market_name}')
+            logger.fatal(f'Fatal error halted program while fetching klines for {symbol} from {market.name}')
             testman.shutdown(price)
             return
         ds = OHLCVDataset(klines)

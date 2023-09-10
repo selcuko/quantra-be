@@ -5,7 +5,7 @@ from logger import logger
 
 
 def _get_filename(market_name, symbol):
-    return f'./data/{symbol}-{market_name}.csv'
+    return f'./data/{symbol.upper()}-{get_market(market_name).name}.csv'
 
 
 def _validate_file(filename):
@@ -45,7 +45,7 @@ def download_symbol(market_name:str, symbol:str, start:datetime):
             print('File is empty. Starting from scratch.')
     else:
         return
-    outfile = open(_get_filename(market_name, symbol), 'a+')
+    outfile = open(_get_filename(market.name, symbol), 'a+')
     prev_batch_end = start = start.replace(second=0, microsecond=0)
     new_klines = 0
 

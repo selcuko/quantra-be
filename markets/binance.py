@@ -84,7 +84,7 @@ class BinanceMarket:
             logger.error(f'Error while fetching klines for {symbol} from {self.name}', exc_info=True)
             if retry > 0:
                 logger.warning(f'Retrying {retry} more times')
-                time.sleep(3)
+                time.sleep(1)
                 return self._get_klines(symbol, interval, start, end, limit, retry-1)
             raise
         return self._standardize_klines(klines)
