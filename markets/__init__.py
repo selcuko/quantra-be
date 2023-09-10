@@ -6,3 +6,7 @@ def get_market(market_name, config=None):
         return BinanceMarket(config)
     else:
         raise ValueError(f'Unknown market: {market_name}')
+
+
+class MarketError(Exception):
+    pass

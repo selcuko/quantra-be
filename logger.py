@@ -2,7 +2,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-formatter = logging.Formatter('%(asctime)s %(levelname)s %(filename)s:%(lineno)d >> %(message)s')
+formatter = logging.Formatter('%(processName)s::%(asctime)s %(levelname)s %(filename)s:%(lineno)d >> %(message)s')
 
 console_handler = logging.StreamHandler()
 console_handler.setFormatter(formatter)

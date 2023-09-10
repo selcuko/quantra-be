@@ -1,3 +1,4 @@
+import time
 from binance.client import Client
 from datetime import datetime, timedelta
 from logger import logger
@@ -33,7 +34,7 @@ class BinanceMarket:
         return f'{symbol["baseAsset"]}-{symbol["quoteAsset"]}'
 
     def _format_symbol(self, symbol):
-        assert '-' in symbol, 'Symbol must be in the format BASE-QUOTE'
+        assert '-' in symbol, f'Symbol must be in the format BASE-QUOTE, you provided:{symbol}'
         symbol = symbol.replace('-', '').upper()
         return symbol
 
@@ -64,7 +65,7 @@ class BinanceMarket:
         #return memory.cache(self._get_klines, ignore=['self'])(symbol, interval, start, limit)
         return self._get_klines(symbol, interval, start, end, limit)
 
-    def _get_klines(self, symbol, interval, start:datetime, end:datetime=None, limit=1000):
+    def _get_klines(self, symbol, interval, start:datetime, end:datetime=None, limit=1000, retry=3):
         if end:
             logger.debug('param:end specified while fetching klines, ignoring param:limit')
             calculated_end = end
@@ -79,9 +80,12 @@ class BinanceMarket:
                         end_str=str(calculated_end),
                         limit=limit
                     )
-        except Exception as e:
-            logger.error(f'Error while fetching klines for {symbol} from {self.name}')
-            logger.exception(e)
+        except:
+            logger.error(f'Error while fetching klines for {symbol} from {self.name}', exc_info=True)
+            if retry > 0:
+                logger.warning(f'Retrying {retry} more times')
+                time.sleep(3)
+                return self._get_klines(symbol, interval, start, end, limit, retry-1)
             raise
         return self._standardize_klines(klines)
     
@@ -100,7 +104,7 @@ class BinanceMarket:
         start = now - timedelta(minutes=minutes*limit)
         klines = self.get_klines(symbol, interval, start, now)
         last_kline_dt = klines[-1][0]
-        if not last_kline_dt == now.replace(second=0, microsecond=0):
+        if (now - last_kline_dt) > timedelta(minutes=minutes):
             error = f'Last kline dt {last_kline_dt} does not match current time {now}, total klines: {len(klines)}, {start} -> {now}'
             logger.warning(error)
             raise Exception(error)

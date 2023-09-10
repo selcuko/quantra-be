@@ -29,8 +29,9 @@ def _validate_file(filename):
     return True
         
 
-def download_symbol(market_name, symbol, start:datetime):
+def download_symbol(market_name:str, symbol:str, start:datetime):
     market = get_market(market_name)
+    symbol = symbol.upper()
     print(f'Download {symbol} from {market.name} starting from {start}')
     lasttime = _validate_file(_get_filename(market.name, symbol))
     empty_file = False
@@ -72,3 +73,4 @@ def download_symbol(market_name, symbol, start:datetime):
         print('Validation failed. Please fix the discrepancies or delete the file.')
         return
     print('OK')
+    return _get_filename(market.name, symbol)

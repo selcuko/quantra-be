@@ -41,6 +41,8 @@ class TestManager:
         self.buy_signals = 0
         self.sell_signals = 0
         self.verbose = kwargs.get('verbose', False)
+        self.symbol = kwargs.get('symbol', None)
+        self.market = kwargs.get('market', None)
 
 
     def buy(self, price):
@@ -100,8 +102,11 @@ class TestManager:
         return self.wins / (self.wins + self.losses) * 100
 
     def summary(self):
-        return f'[{datetime.now()}] Position: {"IN" if self.bought else "OUT"} | Trades: {len(self.trades)} | Profit: {self.profit:.2f}% | Win Rate: {self.win_rate:.2f}% | Last Trade: {self.profit_from_last_trade:.2f}% | Capital: {self.capital:.2f} | Assets: {self.assets:.2f}'    
-
+        txt = f'[{datetime.now().strftime("%d-%m-%Y %H:%M:%S")}] Position: {"IN" if self.bought else "OUT"} | Trades: {len(self.trades)} | Profit: {self.profit:.2f}% | Win Rate: {self.win_rate:.2f}% | Last Trade: {self.profit_from_last_trade:.2f}% | Capital: {self.capital:.2f} | Assets: {self.assets:.2f}'    
+        if self.symbol and self.market:
+            txt = f'[{self.market.upper()}:{self.symbol.upper()}]' + txt
+        return txt
+    
     def to_dict(self):
         return {
             'trades_count': len(self.trades),
@@ -124,7 +129,7 @@ class TestManager:
 
     def save_to_disk(self, filedir=None):
         if not filedir:
-            filedir = f'testman/testman-{datetime.now()}.json'
+            filedir = f'testman/testman-{datetime.now()}-{self.symbol.upper()}-{self.market.upper()}.json'
         os.makedirs(os.path.dirname(filedir), exist_ok=True)
         if os.path.exists(filedir):
             logger.error(f'File {filedir} already exists, failed to save')
