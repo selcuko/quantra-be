@@ -39,12 +39,14 @@ def StrategyV1(ds):
             'signal': 9
         },
         'stochrsi': {
-            'fastk_period': 14,
-            'fastd_period': 3,
+            'length': 14,
+            'rsi_length': 14,
+            'k': 3,
+            'd': 3
         },
         't3': {
             'length': 5,
-            'volume_factor': 0.7
+            'a': 0.618
         }
     }
     try:
