@@ -86,5 +86,6 @@ class OHLCVDataset(pd.DataFrame):
     def add_dataset(self, ds):
         return OHLCVDataset(pd.concat([self, ds]), pass_thru=True)
 
-    
+    def copy(self, *args, **kwargs) -> "OHLCVDataset":
+        return OHLCVDataset(super().copy(*args, **kwargs), pass_thru=True)
 

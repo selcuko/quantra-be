@@ -1,6 +1,5 @@
 from datetime import datetime
 from models import OHLCVDataset
-from strategy import StrategyV1
 from testman import TestManager
 
 def analyze(ds:OHLCVDataset, strategy:callable, freq:str='15 min', start:datetime=None, end:datetime=None):
@@ -20,7 +19,6 @@ def analyze(ds:OHLCVDataset, strategy:callable, freq:str='15 min', start:datetim
             testman.sell({'time': i, **row.to_dict()})
     testman.shutdown()
 
-    print(testman.summary())
     return testman
 
 

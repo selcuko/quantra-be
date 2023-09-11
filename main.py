@@ -4,8 +4,20 @@ from download import download_symbol
 from strategy import get_strategy
 from backtest import analyze
 from livetest import run_livetest
+from indicators import calculate_ema, StochRSI
 
-download_symbol('binance', 'SUI-USDT', datetime(2023, 6, 1))
-ds = OHLCVDataset.from_csv('data/SUI-USDT-BINANCE.csv')
-tm = analyze(ds, get_strategy('v1', {'t3': {'length': 10}}), freq='5 min', start=datetime(2023, 6, 1), end=datetime(2023, 9, 1))
+ds = OHLCVDataset.from_csv('data/RNDR-USDT-BINANCE.csv')
+
+ds1 = ds.copy()
+ds2 = ds.copy()
+
+st1 = get_strategy('v1')
+st2 = get_strategy('v2')
+
+res1 = analyze(ds1, st1)
+res2 = analyze(ds2, st2)
+
+print("StrategyV1:", res1.summary())
+print("StrategyV2:", res2.summary())
+
 

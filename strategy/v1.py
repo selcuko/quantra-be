@@ -35,7 +35,7 @@ def StrategyV1(ds, params={}):
     print('StrategyV1 params:', params)
     try:
         ds.ta.macd(**params['macd'], append=True, col_names=('macd', 'macd_signal', 'macd_diff'))
-        ds.ta.stochrsi(**params['stochrsi'], append=True, col_names=('stoch_rsi_fastk', 'stochrsi_fastd'))
+        ds.ta.stochrsi(**params['stochrsi'], append=True, col_names=('stochrsi_fastk', 'stochrsi_fastd'))
         ds.ta.t3(**params['t3'], append=True, col_names=('t3',))
     except Exception as e:
         logger.error(f'Error in StrategyV1 while calculating indicators: {e!r}')
@@ -45,7 +45,7 @@ def StrategyV1(ds, params={}):
         'macd' in ds.columns
         and 'macd_signal' in ds.columns
         and 'macd_diff' in ds.columns
-        and 'stoch_rsi_fastk' in ds.columns
+        and 'stochrsi_fastk' in ds.columns
         and 'stochrsi_fastd' in ds.columns
         and 't3' in ds.columns
     ):
@@ -54,8 +54,8 @@ def StrategyV1(ds, params={}):
     ds['macd_buy'] = (ds['macd_diff'] >= 0) == (ds['macd_diff'].shift(1) < ds['macd_diff'])
     ds['macd_sell'] = (ds['macd_diff'] < 0) == (ds['macd_diff'].shift(1) >= ds['macd_diff'])
 
-    ds['stochrsi_buy'] = ds['stoch_rsi_fastk'] > ds['stochrsi_fastd']
-    ds['stochrsi_sell'] = ds['stoch_rsi_fastk'] < ds['stochrsi_fastd']
+    ds['stochrsi_buy'] = ds['stochrsi_fastk'] > ds['stochrsi_fastd']
+    ds['stochrsi_sell'] = ds['stochrsi_fastk'] < ds['stochrsi_fastd']
 
     ds['t3_buy'] = ds['t3'] > ds['t3'].shift(1)
     ds['t3_sell'] = ds['t3'] < ds['t3'].shift(1)
