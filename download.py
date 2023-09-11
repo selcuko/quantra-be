@@ -82,8 +82,6 @@ def _validate_file(filename, interpolate=True, drop_duplicates=True):
         notempty = True
         ts = int(line.split(',')[0])
         if last and ts - 60 != last:
-            logger.error(f'Inconsistent timestamps in file. Please fix or delete file {filename}')
-            logger.error(f'Erroneous line no: {i+1}  -->  {line}')
             if ts == last:
                 logger.debug(f'Found duplicate at line {i+1}')
                 if drop_duplicates:
