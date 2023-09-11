@@ -11,28 +11,7 @@ pd.options.mode.chained_assignment = None
 minL = 26
 
 
-def _freq_to_timedelta(freq, minL):
-    return {
-        '1 min': timedelta(minutes=1),
-        '3 min': timedelta(minutes=3),
-        '5 min': timedelta(minutes=5),
-        '15 min': timedelta(minutes=15),
-        '30 min': timedelta(minutes=30),
-        '1 hour': timedelta(hours=1),
-        '2 hour': timedelta(hours=2),
-        '4 hour': timedelta(hours=4),
-        '6 hour': timedelta(hours=6),
-        '8 hour': timedelta(hours=8),
-        '12 hour': timedelta(hours=12),
-        '1 day': timedelta(days=1),
-        '3 day': timedelta(days=3),
-        '1 week': timedelta(weeks=1),
-        '1 month': timedelta(days=30),
-    }[freq] * minL
-
-
-def StrategyV1(ds):
-    params = {
+default_params = {
         'macd': {
             'fast': 12,
             'slow': 26,
@@ -49,6 +28,11 @@ def StrategyV1(ds):
             'a': 0.618
         }
     }
+
+
+def StrategyV1(ds, params={}):
+    params = {**default_params, **params}
+    print('StrategyV1 params:', params)
     try:
         ds.ta.macd(**params['macd'], append=True, col_names=('macd', 'macd_signal', 'macd_diff'))
         ds.ta.stochrsi(**params['stochrsi'], append=True, col_names=('stoch_rsi_fastk', 'stochrsi_fastd'))
