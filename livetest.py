@@ -8,6 +8,13 @@ from logger import logger
 
 def run_livetest(symbol, market_name, strategy:callable, freq='15 min', end:datetime=None):
     # do pre checks
+    try:
+        klines = get_market(market_name).get_last_klines(symbol, freq)
+        ds = OHLCVDataset(klines)
+        ds = strategy(ds)
+    except:
+        # calling the strategy is required to set it's name and params from inside..
+        pass
     market = get_market(market_name)
     symbol = symbol.upper()
     testman = TestManager(symbol=symbol, market=market.name, live=True, strategy=strategy) # params are optional
@@ -55,4 +62,4 @@ def run_livetest(symbol, market_name, strategy:callable, freq='15 min', end:date
 if __name__ == '__main__':
     symbol = sys.argv[1] if len(sys.argv) > 1 else 'SUI-USDT'
     market = sys.argv[2] if len(sys.argv) > 2 else 'binance'
-    run_livetest(symbol, market, freq='1 min', end=timedelta(minutes=5))
+    run_livetest(symbol, market, strategy=StrategyV1, freq='1 min', end=timedelta(minutes=5))
