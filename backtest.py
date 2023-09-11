@@ -2,13 +2,13 @@ from datetime import datetime
 from models import OHLCVDataset
 from testman import TestManager
 
-def analyze(ds:OHLCVDataset, strategy:callable, freq:str='15 min', start:datetime=None, end:datetime=None):
+def analyze(ds:OHLCVDataset, strategy:callable, freq:str='15 min', start:datetime=None, end:datetime=None, symbol:str=None, market:str=None):
     """Analyze the dataset and return a report."""
     ds = ds.change(freq)
     ds = strategy(ds)
     ds = ds[start:end]
 
-    testman = TestManager()
+    testman = TestManager(symbol=symbol, market=market, strategy=strategy.name)
     last_price = None
     for i, row in ds.iterrows():
         last_price = row['close']

@@ -45,6 +45,7 @@ class TestManager:
         self.market = kwargs.get('market', None)
         self.last_kline_dt = None
         self.live = kwargs.get('live', False)
+        self.strategy = kwargs.get('strategy', None)
 
 
     def buy(self, kline):
@@ -131,12 +132,15 @@ class TestManager:
             'buy_signals': self.buy_signals,
             'sell_signals': self.sell_signals,
             'trades': [trade.to_dict() for trade in self.trades],
+            'symbol': self.symbol,
+            'market': self.market,
+            'strategy': self.strategy,
         }
 
     def save_to_disk(self, filedir=None):
         if not filedir:
-            if self.symbol and self.market:
-                filedir = f'testman/testman-{datetime.now()}-{self.symbol.upper()}-{self.market.upper()}.json'
+            if self.symbol and self.market and self.strategy:
+                filedir = f'testman/testman-{datetime.now()}-{self.symbol.upper()}-{self.market.upper()}-{self.strategy}.json'
             else:
                 filedir = f'testman/testman-{datetime.now()}.json'
         os.makedirs(os.path.dirname(filedir), exist_ok=True)

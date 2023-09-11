@@ -3,8 +3,12 @@ from .v2 import StrategyV2
 
 def get_strategy(name, params={}):
     if name == 'v1':
-        return lambda ds: StrategyV1(ds, params)
+        f = lambda ds: StrategyV1(ds, params)
+        f.name = 'StrategyV1.Lisa.PandasTA'
+        return f
     if name == 'v2':
-        return lambda ds: StrategyV2(ds, params)
+        f = lambda ds: StrategyV2(ds, params)
+        f.name = 'StrategyV2.Lisa.NumPy'
+        return f
     else:
         raise Exception(f'Unknown strategy: {name}')
