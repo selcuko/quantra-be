@@ -33,6 +33,8 @@ default_params = {
 
 def StrategyV2(ds, params={}):
     params = {**default_params, **params}
+    StrategyV2.name = 'StrategyV2.Lisa.NumPy'
+    StrategyV2.params = params
     try:
         MACD(ds, n_fast=params['macd']['fast'], n_slow=params['macd']['slow'], n_signal=params['macd']['signal'], inplace=True)
         StochRSI(ds, rsi_length=params['stochrsi']['rsi_length'], stoch_length=params['stochrsi']['length'], smoothK=params['stochrsi']['k'], smoothD=params['stochrsi']['d'], inplace=True)

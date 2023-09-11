@@ -6,11 +6,11 @@ from strategy import StrategyV1
 from testman import TestManager
 from logger import logger
 
-def run_livetest(symbol, market_name, freq='15 min', end:datetime=None):
+def run_livetest(symbol, market_name, strategy:callable, freq='15 min', end:datetime=None):
     # do pre checks
     market = get_market(market_name)
     symbol = symbol.upper()
-    testman = TestManager(symbol=symbol, market=market.name, live=True) # params are optional
+    testman = TestManager(symbol=symbol, market=market.name, live=True, strategy=strategy) # params are optional
     if isinstance(end, timedelta):
         end = datetime.now() + end
     
@@ -34,7 +34,7 @@ def run_livetest(symbol, market_name, freq='15 min', end:datetime=None):
             testman.shutdown()
             return
         ds = OHLCVDataset(klines)
-        ds = StrategyV1(ds)
+        ds = strategy(ds)
         should_buy = ds.iloc[-1]['buy']
         should_sell = ds.iloc[-1]['sell']
         kline = ds.iloc[-1]

@@ -32,6 +32,8 @@ default_params = {
 
 def StrategyV1(ds, params={}):
     params = {**default_params, **params}
+    StrategyV1.name = 'StrategyV1.Lisa.PandasTA'
+    StrategyV1.params = params
     try:
         ds.ta.macd(**params['macd'], append=True, col_names=('macd', 'macd_signal', 'macd_diff'))
         ds.ta.stochrsi(**params['stochrsi'], append=True, col_names=('stochrsi_fastk', 'stochrsi_fastd'))

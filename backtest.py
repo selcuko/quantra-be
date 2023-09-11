@@ -8,7 +8,7 @@ def analyze(ds:OHLCVDataset, strategy:callable, freq:str='15 min', start:datetim
     ds = strategy(ds)
     ds = ds[start:end]
 
-    testman = TestManager(symbol=symbol, market=market, strategy=strategy.name)
+    testman = TestManager(symbol=symbol, market=market, strategy=strategy)
     last_price = None
     for i, row in ds.iterrows():
         last_price = row['close']
