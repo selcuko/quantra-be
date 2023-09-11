@@ -10,7 +10,7 @@ def run_livetest(symbol, market_name, freq='15 min', end:datetime=None):
     # do pre checks
     market = get_market(market_name)
     symbol = symbol.upper()
-    testman = TestManager(symbol=symbol, market=market.name) # params are optional
+    testman = TestManager(symbol=symbol, market=market.name, live=True) # params are optional
     if isinstance(end, timedelta):
         end = datetime.now() + end
     
@@ -31,25 +31,24 @@ def run_livetest(symbol, market_name, freq='15 min', end:datetime=None):
             klines = market.get_last_klines(symbol, freq)
         except MarketError:
             logger.fatal(f'Fatal error halted program while fetching klines for {symbol} from {market.name}')
-            testman.shutdown(price)
+            testman.shutdown()
             return
         ds = OHLCVDataset(klines)
         ds = StrategyV1(ds)
         should_buy = ds.iloc[-1]['buy']
         should_sell = ds.iloc[-1]['sell']
-        price = ds.iloc[-1]['close']
+        kline = ds.iloc[-1]
         if should_buy:
-            testman.buy(price)
+            testman.buy({'time': ds.index[-1], **kline.to_dict()})
         elif should_sell:
-            testman.sell(price)
+            testman.sell({'time': ds.index[-1], **kline.to_dict()})
         print(testman.summary())
         try:
             time.sleep(loop_interval)
         except KeyboardInterrupt:
             logger.info('KeyboardInterrupt detected, shutting down gracefully')
-            testman.shutdown(price)
-            return
-    testman.shutdown(price)
+            break
+    testman.shutdown()
 
 
 

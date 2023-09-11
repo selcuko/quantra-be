@@ -14,11 +14,11 @@ def analyze(ds:OHLCVDataset, strategy:callable, freq:str='15 min', start:datetim
     for i, row in ds.iterrows():
         last_price = row['close']
         if row['buy']:
-            testman.buy(last_price)
+            testman.buy({'time': i, **row.to_dict()})
 
         elif row['sell']:
-            testman.sell(last_price)
-    testman.shutdown(last_price)
+            testman.sell({'time': i, **row.to_dict()})
+    testman.shutdown()
 
     print(testman.summary())
     return testman

@@ -5,6 +5,7 @@ import os
 from typing import Literal
 from logger import logger
 from numpy import NaN
+import pandas as pd
 
 @dataclass
 class Trade:
@@ -30,7 +31,6 @@ class TestManager:
         self.assets = 0
         self.commission = kwargs.get('commission', 0.002)
         self.shutdown_percent = kwargs.get('shutdown_percent', 50)
-        self.sell_at_shutdown = kwargs.get('sell_at_shutdown', False)
         self.wins = 0
         self.losses = 0
         self.bought = False
@@ -43,29 +43,32 @@ class TestManager:
         self.verbose = kwargs.get('verbose', False)
         self.symbol = kwargs.get('symbol', None)
         self.market = kwargs.get('market', None)
+        self.last_kline_dt = None
+        self.live = kwargs.get('live', False)
 
 
-    def buy(self, price):
+    def buy(self, kline):
         self.buy_signals += 1
         if self.bought:
             if self.verbose:
                 print('Already bought, cannot buy again - ignoring buy signal')
             return
-        price = float(price)
+        price = kline['close']
         self.bought = True
         self.bought_price = price
         self.assets = (1 - self.commission) * (self.capital / price)
         self.capital = 0
-        trade = Trade(price, self.assets, datetime.now(), 'buy')
+        trade = Trade(price, self.assets, kline['time'], 'buy')
         self.trades.append(trade)
+        self.last_kline_dt = kline['time']
 
-    def sell(self, price):
+    def sell(self, kline):
         self.sell_signals += 1
         if not self.bought:
             if self.verbose:
                 print('Not bought, cannot sell - ignoring sell signal')
             return
-        price = float(price)
+        price = kline['close']
         self.bought = False
         self.capital = (1 - self.commission) * (self.assets * price)
         self.assets = 0
@@ -75,13 +78,11 @@ class TestManager:
             self.wins += 1
         else:
             self.losses += 1
-        trade = Trade(price, self.capital, datetime.now(), 'sell')
+        trade = Trade(price, self.capital, kline['time'], 'sell')
         self.trades.append(trade)
+        self.last_kline_dt = kline['time']
     
-    def shutdown(self, price):
-        if self.sell_at_shutdown and self.bought:
-            self.sell(price)
-            self.sold_at_shutdown = True
+    def shutdown(self):
         self.save_to_disk()
     
     @property
@@ -102,7 +103,13 @@ class TestManager:
         return self.wins / (self.wins + self.losses) * 100
 
     def summary(self):
-        txt = f'[{datetime.now().strftime("%d-%m-%Y %H:%M:%S")}] Position: {"IN" if self.bought else "OUT"} | Trades: {len(self.trades)} | Profit: {self.profit:.2f}% | Win Rate: {self.win_rate:.2f}% | Last Trade: {self.profit_from_last_trade:.2f}% | Capital: {self.capital:.2f} | Assets: {self.assets:.2f}'    
+        if self.live:
+            txt = f'[{datetime.now().strftime("%d-%m-%Y %H:%M:%S")}] Position: {"IN" if self.bought else "OUT"} | Trades: {len(self.trades)} | Profit: {self.profit:.2f}% | Win Rate: {self.win_rate:.2f}% | Last Trade: {self.profit_from_last_trade:.2f}% | Capital: {self.capital:.2f} | Assets: {self.assets:.2f}'    
+        else:
+            if self.last_kline_dt:
+                txt = f'[{self.last_kline_dt.strftime("%d-%m-%Y %H:%M:%S")}] Position: {"IN" if self.bought else "OUT"} | Trades: {len(self.trades)} | Profit: {self.profit:.2f}% | Win Rate: {self.win_rate:.2f}% | Last Trade: {self.profit_from_last_trade:.2f}% | Capital: {self.capital:.2f} | Assets: {self.assets:.2f}'    
+            else:
+                txt = f'[%dd-%mm-%YYYY %HH:%MM:%SS] Position: {"IN" if self.bought else "OUT"} | Trades: {len(self.trades)} | Profit: {self.profit:.2f}% | Win Rate: {self.win_rate:.2f}% | Last Trade: {self.profit_from_last_trade:.2f}% | Capital: {self.capital:.2f} | Assets: {self.assets:.2f}'
         if self.symbol and self.market:
             txt = f'[{self.market.upper()}:{self.symbol.upper()}]' + txt
         return txt
@@ -114,7 +121,6 @@ class TestManager:
             'assets': self.assets,
             'commission': self.commission,
             'shutdown_percent': self.shutdown_percent,
-            'sell_at_shutdown': self.sell_at_shutdown,
             'wins': self.wins,
             'losses': self.losses,
             'bought': self.bought,
