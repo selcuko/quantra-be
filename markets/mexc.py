@@ -1,7 +1,5 @@
 from datetime import datetime, timedelta
-from pprint import pprint
 import time
-
 import requests
 from logger import logger
 from models import interval_to_minutes

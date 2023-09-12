@@ -128,6 +128,8 @@ def download_symbol(market_name:str, symbol:str, start:datetime):
             print('File is empty. Starting from scratch.')
     else:
         return
+    if not os.path.exists('./data'):
+        os.mkdir('./data')
     outfile = open(_get_filename(market.name, symbol), 'a+')
     prev_batch_end = start = start.replace(second=0, microsecond=0)
     new_klines = 0

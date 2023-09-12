@@ -2,11 +2,9 @@ import time
 from binance.client import Client
 from datetime import datetime, timedelta
 from logger import logger
-from joblib import Memory
 
 from models import interval_to_minutes
 
-memory = Memory('cache', verbose=5)
 
 class BinanceMarket:
     name = 'BINANCE'
