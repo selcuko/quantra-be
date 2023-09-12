@@ -152,7 +152,7 @@ class TestManager:
             logger.error(f'File {filedir} already exists, failed to save')
             return
         with open(filedir, 'w') as f:
-            f.write(json.dumps(self.to_dict()))
+            f.write(json.dumps(self.to_dict(), indent=4))
         logger.info(f'Saved TestMan instance to {filedir}')
         return filedir
 
