@@ -8,18 +8,118 @@ from numpy import NaN
 import pandas as pd
 
 @dataclass
+class Performance:
+    sharpe_ratio: float = None
+    sortino_ratio: float = None
+    calmar_ratio: float = None
+    omega_ratio: float = None
+    tail_ratio: float = None
+    common_sense_ratio: float = None
+    sterling_ratio: float = None
+    burke_ratio: float = None
+    information_ratio: float = None
+    kappa_three_ratio: float = None
+    gain_loss_ratio: float = None
+    upside_potential_ratio: float = None
+    downside_potential_ratio: float = None
+    profitability: float = None
+    max_drawdown: float = None
+    avg_drawdown: float = None
+    min_drawdown: float = None
+    max_holdtime: datetime = None
+    avg_holdtime: datetime = None
+    min_holdtime: datetime = None
+    max_runup: float = None
+    avg_runup: float = None
+    min_runup: float = None
+    total_profit: float = None
+    gross_profit: float = None
+    gross_loss: float = None
+    profit_factor: float = None
+    cumulative_return: float = None
+    avg_annual_return: float = None
+    avg_monthly_return: float = None
+    avg_weekly_return: float = None
+    avg_daily_return: float = None
+    avg_hourly_return: float = None
+    annual_volatility: float = None
+    skewness: float = None
+    kurtosis: float = None
+    value_at_risk: float = None
+    daily_value_at_risk: float = None
+    total_turnover: float = None
+    avg_turnover: float = None
+    avg_daily_turnover: float = None
+    avg_monthly_turnover: float = None
+    avg_annual_turnvover: float = None
+    stability: float = None
+    alpha: float = None
+    beta: float = None
+    eaten_by_commissions: float = None
+    _risk_free_rate = 0.15 # as of 2023, in Turkey
+
+
+    def to_dict(self):
+        attrs = [attr for attr in dir(self) if not callable(getattr(self, attr)) and not attr.startswith("__") and not getattr(self, attr) is None]
+        return {attr: getattr(self, attr) for attr in attrs}
+    
+    @classmethod
+    def calculate(cls, trades, capital):
+        drawdown_trades_count = len([trade.profit_pct for trade in trades if isinstance(trade.profit_pct, float) and trade.profit_pct < 0])
+        runup_trades_count = len([trade.profit_pct for trade in trades if isinstance(trade.profit_pct, float) and trade.profit_pct > 0])
+        return cls(
+            max_drawdown = f'{min([trade.profit_pct for trade in trades if isinstance(trade.profit_pct, float) and trade.profit_pct < 0]):.2f}%',
+            avg_drawdown = f'{sum([trade.profit_pct for trade in trades if isinstance(trade.profit_pct, float) and trade.profit_pct < 0]) / (drawdown_trades_count):.2f}%',
+            min_drawdown = f'{max([trade.profit_pct for trade in trades if isinstance(trade.profit_pct, float) and trade.profit_pct < 0]):.2f}%',
+            min_runup = f'{min([trade.profit_pct for trade in trades if isinstance(trade.profit_pct, float) and trade.profit_pct > 0]):.2f}%',
+            avg_runup = f'{sum([trade.profit_pct for trade in trades if isinstance(trade.profit_pct, float) and trade.profit_pct > 0]) / (runup_trades_count):.2f}%',
+            max_runup = f'{max([trade.profit_pct for trade in trades if isinstance(trade.profit_pct, float) and trade.profit_pct > 0]):.2f}%',
+            total_profit = trades[-1].equity - capital,
+            gross_profit = sum([trade.profit_pct for trade in trades if isinstance(trade.profit_pct, float) and trade.profit_pct > 0]),
+            gross_loss = sum([trade.profit_pct for trade in trades if isinstance(trade.profit_pct, float) and trade.profit_pct < 0]),
+            total_turnover = sum([trade.capital for trade in trades]),
+            skewness = pd.Series([trade.profit_pct for trade in trades]).skew(),
+            kurtosis = pd.Series([trade.profit_pct for trade in trades]).kurtosis(),
+            profit_factor = abs(sum([trade.profit_pct for trade in trades if isinstance(trade.profit_pct, float) and trade.profit_pct > 0]) / sum([trade.profit_pct for trade in trades if isinstance(trade.profit_pct, float) and trade.profit_pct < 0])),
+            cumulative_return = ((trades[-1].equity - capital) / capital) * 100,
+            profitability = len([trade.profit_pct for trade in trades if isinstance(trade.profit_pct, float) and trade.profit_pct > 0]) / len([trade.profit_pct for trade in trades if isinstance(trade.profit_pct, float)]) * 100,
+            burke_ratio = (trades[-1].equity - capital) / abs(min([trade.profit_pct for trade in trades if isinstance(trade.profit_pct, float) and trade.profit_pct < 0])),
+            sterling_ratio = (trades[-1].equity - capital) / abs(max([trade.profit_pct for trade in trades if isinstance(trade.profit_pct, float) and trade.profit_pct < 0])),
+            beta = pd.Series([trade.profit_pct for trade in trades]).cov(pd.Series([trade.profit_pct for trade in trades])),
+            alpha = ((trades[-1].equity - capital) / capital) - cls._risk_free_rate,
+            common_sense_ratio = (trades[-1].equity - capital) / abs(min([trade.profit_pct for trade in trades if isinstance(trade.profit_pct, float) and trade.profit_pct < 0])),
+            downside_potential_ratio = abs(sum([trade.profit_pct for trade in trades if isinstance(trade.profit_pct, float) and trade.profit_pct < 0]) / len([trade.profit_pct for trade in trades if isinstance(trade.profit_pct, float) and trade.profit_pct < 0])),
+            upside_potential_ratio = sum([trade.profit_pct for trade in trades if isinstance(trade.profit_pct, float) and trade.profit_pct > 0]) / len([trade.profit_pct for trade in trades if isinstance(trade.profit_pct, float) and trade.profit_pct > 0]),
+            eaten_by_commissions = sum([trade.equity * 0.002 for trade in trades]),
+        )
+
+
+
+@dataclass
 class Trade:
+    number: int
     price: float
-    quantity: float
+    assets: float
+    capital: float
     datetime: datetime
     position: Literal["buy", "sell"]
+    equity: float
+    profit: float
+    profit_pct: float
+    hold_time: datetime
 
     def to_dict(self):
         return {
+            'number': self.number,
             'price': self.price,
-            'quantity': self.quantity,
             'datetime': str(self.datetime),
             'position': self.position,
+            'equity': self.equity,
+            'profit': self.profit,
+            'profit_pct': self.profit_pct,
+            'hold_time': str(self.hold_time),
+            'assets': self.assets,
+            'capital': self.capital,
         }
 
 
@@ -27,7 +127,7 @@ class TestManager:
     def __init__(self, *args, **kwargs):
         """Manager class to hold testing data, analyze results, and keep track of trades."""
         self.trades = []
-        self.capital = kwargs.get('capital', 1000)
+        self.initial_capital = self.capital = kwargs.get('capital', 1000)
         self.assets = 0
         self.commission = kwargs.get('commission', 0.002)
         self.shutdown_percent = kwargs.get('shutdown_percent', 50)
@@ -61,7 +161,18 @@ class TestManager:
         self.bought_price = price
         self.assets = (1 - self.commission) * (self.capital / price)
         self.capital = 0
-        trade = Trade(price, self.assets, kline['time'], 'buy')
+        trade = Trade(
+            number=len(self.trades) + 1,
+            price=price,
+            assets=self.assets,
+            capital=self.capital,
+            datetime=kline['time'],
+            position='buy',
+            equity=self.equity,
+            profit=None,
+            profit_pct=None,
+            hold_time=None,
+        )
         self.trades.append(trade)
         self.last_kline_dt = kline['time']
 
@@ -72,16 +183,28 @@ class TestManager:
                 print('Not bought, cannot sell - ignoring sell signal')
             return
         price = kline['close']
+        old_equity = self.equity
         self.bought = False
         self.capital = (1 - self.commission) * (self.assets * price)
         self.assets = 0
-        self.profit_from_last_trade = (price - self.bought_price) / self.bought_price * 100
+        self.profit_from_last_trade = self.equity - old_equity
         self.sold_price = price
         if price > self.bought_price:
             self.wins += 1
         else:
             self.losses += 1
-        trade = Trade(price, self.capital, kline['time'], 'sell')
+        trade = Trade(
+            number=len(self.trades) + 1,
+            price=price,
+            assets=self.assets,
+            capital=self.capital,
+            datetime=kline['time'],
+            position='sell',
+            equity=self.equity,
+            profit=self.profit_from_last_trade,
+            profit_pct=(self.profit_from_last_trade / self.bought_price) * 100,
+            hold_time=None,
+        )
         self.trades.append(trade)
         self.last_kline_dt = kline['time']
     
@@ -137,6 +260,7 @@ class TestManager:
             'market': self.market,
             'strategy_name': self.strategy_name,
             'strategy_params': self.strategy_params,
+            'performance': Performance.calculate(self.trades, self.initial_capital).to_dict(),
             'trades': [trade.to_dict() for trade in self.trades],
         }
 
