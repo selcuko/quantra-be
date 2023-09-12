@@ -26,5 +26,6 @@ if __name__ == '__main__':
     from strategy import StrategyV1
     ds = OHLCVDataset.from_csv('./data/BTC-USDT-BINANCE.csv')
     strategy = StrategyV1
-    tm = analyze(ds, strategy, freq='1 min')
+    tm = analyze(ds, strategy, freq='15 min')
+    print(tm.summary())
     

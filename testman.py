@@ -146,6 +146,7 @@ class TestManager:
                 filedir = f'testman/testman-{datetime.now()}-{self.symbol.upper()}-{self.market.upper()}-{self.strategy_name}.json'
             else:
                 filedir = f'testman/testman-{datetime.now()}.json'
+        filedir = filedir.replace(' ', '_').replace(':', '-')
         os.makedirs(os.path.dirname(filedir), exist_ok=True)
         if os.path.exists(filedir):
             logger.error(f'File {filedir} already exists, failed to save')
