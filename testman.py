@@ -148,6 +148,8 @@ class TestManager:
         self.strategy = kwargs.get('strategy', None)
         self.strategy_name = self.strategy.name if self.strategy else None
         self.strategy_params = self.strategy.params if self.strategy else None
+        self.start = kwargs.get('start', None)
+        self.end = kwargs.get('end', None)
 
 
     def buy(self, kline):
@@ -162,7 +164,7 @@ class TestManager:
         self.assets = (1 - self.commission) * (self.capital / price)
         self.capital = 0
         trade = Trade(
-            number=len(self.trades) + 1,
+            number=len(self.trades) // 2 + 1,
             price=price,
             assets=self.assets,
             capital=self.capital,
@@ -175,6 +177,7 @@ class TestManager:
         )
         self.trades.append(trade)
         self.last_kline_dt = kline['time']
+        return True
 
     def sell(self, kline):
         self.sell_signals += 1
@@ -194,7 +197,7 @@ class TestManager:
         else:
             self.losses += 1
         trade = Trade(
-            number=len(self.trades) + 1,
+            number=len(self.trades) // 2 + 1,
             price=price,
             assets=self.assets,
             capital=self.capital,
@@ -207,6 +210,7 @@ class TestManager:
         )
         self.trades.append(trade)
         self.last_kline_dt = kline['time']
+        return True
     
     def shutdown(self):
         self.save_to_disk()
@@ -219,7 +223,7 @@ class TestManager:
     @property
     def profit(self):
         """Profit in percent."""
-        return ((self.equity - 1000) / 1000) * 100
+        return ((self.equity - self.initial_capital) / self.initial_capital) * 100
     
     @property
     def win_rate(self):
@@ -229,20 +233,21 @@ class TestManager:
         return self.wins / (self.wins + self.losses) * 100
 
     def summary(self):
+        dtime = f'%dd-%mm-%YYYY %HH:%MM:%SS'
         if self.live:
-            txt = f'[{datetime.now().strftime("%d-%m-%Y %H:%M:%S")}] Position: {"IN" if self.bought else "OUT"} | Trades: {len(self.trades)} | Profit: {self.profit:.2f}% | Win Rate: {self.win_rate:.2f}% | Last Trade: {self.profit_from_last_trade:.2f}% | Capital: {self.capital:.2f} | Assets: {self.assets:.2f}'    
-        else:
-            if self.last_kline_dt:
-                txt = f'[{self.last_kline_dt.strftime("%d-%m-%Y %H:%M:%S")}] Position: {"IN" if self.bought else "OUT"} | Trades: {len(self.trades)} | Profit: {self.profit:.2f}% | Win Rate: {self.win_rate:.2f}% | Last Trade: {self.profit_from_last_trade:.2f}% | Capital: {self.capital:.2f} | Assets: {self.assets:.2f}'    
-            else:
-                txt = f'[%dd-%mm-%YYYY %HH:%MM:%SS] Position: {"IN" if self.bought else "OUT"} | Trades: {len(self.trades)} | Profit: {self.profit:.2f}% | Win Rate: {self.win_rate:.2f}% | Last Trade: {self.profit_from_last_trade:.2f}% | Capital: {self.capital:.2f} | Assets: {self.assets:.2f}'
-        if self.symbol and self.market:
-            txt = f'[{self.market.upper()}:{self.symbol.upper()}]' + txt
+            dtime = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+        elif self.last_kline_dt:
+            dtime = self.last_kline_dt.strftime("%d-%m-%Y %H:%M:%S")
+        txt = f'[{dtime}][{self.trades[-1].number}] Position: {" IN" if self.bought else "OUT"} | Equity: {self.equity:>4.2f} USDT | Profit: {self.profit:>4.2f}% | Last trade: {self.profit_from_last_trade * 100 / self.equity:>3.2f}%'
         return txt
     
     def to_dict(self):
         return {
-            'trades_count': len(self.trades),
+            'start': str(self.start),
+            'end': str(self.end),
+            'duration': str((self.end - self.start) if self.end and self.start else None),
+            'live': self.live,
+            'trades_count': len(self.trades) // 2,
             'capital': self.capital,
             'assets': self.assets,
             'commission': self.commission,

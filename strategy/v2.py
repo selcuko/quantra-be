@@ -25,8 +25,8 @@ default_params = {
             'd': 3
         },
         't3': {
-            'length': 5,
-            'a': 0.618
+            'length': 7,
+            'a': 0.7
         }
     }
 
@@ -43,6 +43,7 @@ def StrategyV2(ds, params={}):
         logger.error(f'Error in StrategyV2 while calculating indicators: {e!r}')
         logger.exception(e)
         raise e
+    """
     if not (
         'macd' in ds.columns
         and 'macd_signal' in ds.columns
@@ -63,6 +64,33 @@ def StrategyV2(ds, params={}):
     ds['t3_sell'] = ds['t3'] < ds['t3'].shift(1)
 
     ds['buy'] = ds['macd_buy'] & ds['stochrsi_buy'] & ds['t3_buy']
-    ds['sell'] = ds['macd_sell'] & ds['stochrsi_sell'] & ds['t3_sell']
+    ds['sell'] = ds['macd_sell'] & ds['stochrsi_sell'] & ds['t3_sell']"""
+
+    # Writing stochrsi position
+    ds.loc[:, 'stochrsi_position'] = pd.NA
+    ds.loc[(ds['stochrsi_k'] > ds['stochrsi_d']), 'stochrsi_position'] = 'BUY_STOCHRSI'
+    ds.loc[(ds['stochrsi_k'] < ds['stochrsi_d']), 'stochrsi_position'] = 'SELL_STOCHRSI'
+
+
+    # Writing macd position
+    ds.loc[:, 'macd_position'] = pd.NA
+    ds.loc[(ds['macd_diff'] > ds['macd_diff'].shift()) & (ds['macd_diff'] <= 0), 'macd_position'] = 'BUY_MACD'
+    ds.loc[(ds['macd_diff'] < ds['macd_diff'].shift()) & (ds['macd_diff'] >= 0), 'macd_position'] = 'SELL_MACD'
+
+    # Writing t3 position
+    t3plot = ds['t3']
+    ds.loc[:, 't3_position'] = ['BUY' if (t3plot[i] > t3plot[i-1]) & (t3plot[i] >= 0) 
+                                else 'SELL' if (t3plot[i] < t3plot[i-1]) & (t3plot[i] >= 0) 
+                                else None for i in range(0, len(t3plot))]
+
+
+    # Writing signal
+    ds.loc[:, 'buy'] = False
+    ds.loc[:, 'sell'] = False
+    initial_osc = None
+    buy_signal = ((ds['stochrsi_k'] > ds['stochrsi_d']) & (ds['macd_position'] == 'BUY_MACD')) & (ds['t3_position'] == 'BUY')
+    sell_signal = ((ds['stochrsi_k'] < ds['stochrsi_d']) & (ds['macd_position'] == 'SELL_MACD')) & (ds['t3_position'] == 'SELL')
+    ds.loc[buy_signal, 'buy'] = True
+    ds.loc[sell_signal, 'sell'] = True
 
     return ds
