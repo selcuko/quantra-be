@@ -1,5 +1,8 @@
 import pandas as pd
 import numpy as np
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
+pd.options.mode.chained_assignment = None
 
 # Calculate EMA from scratch (TradingView)
 def calculate_ema(df, length  ):
