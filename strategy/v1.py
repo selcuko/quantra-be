@@ -1,67 +1,72 @@
-from datetime import datetime, timedelta
-from logger import logger
-import pandas_ta as ta
-import pandas as pd
-
 from models import OHLCVDataset
+import pandas_ta
 
-# disable pandas warnings
-pd.options.mode.chained_assignment = None
-
-minL = 26
-
-
-default_params = {
-        'macd': {
-            'fast': 12,
-            'slow': 26,
-            'signal': 9
-        },
-        'stochrsi': {
-            'length': 14,
-            'rsi_length': 14,
-            'k': 3,
-            'd': 3
-        },
-        't3': {
-            'length': 5,
-            'a': 0.618
-        }
-    }
-
-
-def StrategyV1(ds, params={}):
-    params = {**default_params, **params}
-    StrategyV1.name = 'StrategyV1.Lisa.PandasTA'
-    StrategyV1.params = params
-    try:
-        ds.ta.macd(**params['macd'], append=True, col_names=('macd', 'macd_signal', 'macd_diff'))
-        ds.ta.stochrsi(**params['stochrsi'], append=True, col_names=('stochrsi_fastk', 'stochrsi_fastd'))
-        ds.ta.t3(**params['t3'], append=True, col_names=('t3',))
-    except Exception as e:
-        logger.error(f'Error in StrategyV1 while calculating indicators: {e!r}')
-        logger.exception(e)
-        raise e
-    if not (
-        'macd' in ds.columns
-        and 'macd_signal' in ds.columns
-        and 'macd_diff' in ds.columns
-        and 'stochrsi_fastk' in ds.columns
-        and 'stochrsi_fastd' in ds.columns
-        and 't3' in ds.columns
-    ):
-        raise Exception('Error in StrategyV1 while calculating indicators: missing columns (this is probably due to dataset being too small)')
+class StrategyV1:
+    def __init__(self, params={}):
+        self.params = {**self.default_params(), **params}
+        self.name = 'StrategyV1.Lisa.PandasTA'
+        self.ds = None
     
-    ds['macd_buy'] = (ds['macd_diff'] >= 0) == (ds['macd_diff'].shift(1) < ds['macd_diff'])
-    ds['macd_sell'] = (ds['macd_diff'] < 0) == (ds['macd_diff'].shift(1) >= ds['macd_diff'])
+    def __call__(self, ds:OHLCVDataset):
+        return self.calculate(ds)
 
-    ds['stochrsi_buy'] = ds['stochrsi_fastk'] > ds['stochrsi_fastd']
-    ds['stochrsi_sell'] = ds['stochrsi_fastk'] < ds['stochrsi_fastd']
+    def default_params(self):
+        return {
+            'macd': {
+                'fast': 12,
+                'slow': 26,
+                'signal': 9
+            },
+            'stochrsi': {
+                'length': 14,
+                'rsi_length': 14,
+                'k': 3,
+                'd': 3
+            },
+            't3': {
+                'length': 7,
+                'a': 0.7
+            }
+        }
 
-    ds['t3_buy'] = ds['t3'] > ds['t3'].shift(1)
-    ds['t3_sell'] = ds['t3'] < ds['t3'].shift(1)
+    def calculate(self, ds:OHLCVDataset):
+        self.ds = ds
+        self.indicators()
+        self.indicator_signals()
+        self.signals()
+        return self.ds
 
-    ds['buy'] = ds['macd_buy'] & ds['stochrsi_buy'] & ds['t3_buy']
-    ds['sell'] = ds['macd_sell'] & ds['stochrsi_sell'] & ds['t3_sell']
+    def indicators(self):
+        self.ds.ta.macd(
+            fast=self.params['macd']['fast'], 
+            slow=self.params['macd']['slow'], 
+            signal=self.params['macd']['signal'],
+            col_names=('macd', 'macd_signal', 'macd_diff'),
+            append=True)
+        self.ds.ta.stochrsi(
+            length=self.params['stochrsi']['length'],
+            rsi_length=self.params['stochrsi']['rsi_length'],
+            k=self.params['stochrsi']['k'],
+            d=self.params['stochrsi']['d'],
+            col_names=('stochrsi_k', 'stochrsi_d'),
+            append=True)
+        self.ds.ta.t3(
+            length=self.params['t3']['length'],
+            a=self.params['t3']['a'],
+            col_names=('t3',),
+            append=True)
 
-    return ds
+    def indicator_signals(self):
+        self.ds['macd_buy']  = (self.ds['macd_diff'] > self.ds['macd_diff'].shift()) & (self.ds['macd_diff'] <= 0)
+        self.ds['macd_sell'] = (self.ds['macd_diff'] < self.ds['macd_diff'].shift()) & (self.ds['macd_diff'] >= 0)
+
+        self.ds['stochrsi_buy']  = self.ds['stochrsi_k'] > self.ds['stochrsi_d']
+        self.ds['stochrsi_sell'] = self.ds['stochrsi_k'] < self.ds['stochrsi_d']
+
+        self.ds['t3_buy']  = (self.ds['t3'] > self.ds['t3'].shift()) & (self.ds['t3'] >= 0)
+        self.ds['t3_sell'] = (self.ds['t3'] < self.ds['t3'].shift()) & (self.ds['t3'] >= 0)
+    
+    def signals(self):
+        self.ds['buy']  = self.ds['macd_buy'] & self.ds['stochrsi_buy'] & self.ds['t3_buy']
+        self.ds['sell'] = self.ds['macd_sell'] & self.ds['stochrsi_sell'] & self.ds['t3_sell']
+
