@@ -10,13 +10,12 @@ def analyze(ds:OHLCVDataset, strategy:callable, freq:str='15 min', start:datetim
     ds = strategy(ds)
 
     testman = TestManager(symbol=symbol, market=market, strategy=strategy, start=start, end=end)
-    last_price = None
     for i, row in ds.iterrows():
-        last_price = row['close']
         if row['buy']:
             ok = testman.buy({'time': i, **row.to_dict()})
             if ok and verbose:
-                print(testman.summary())
+                #print(testman.summary())
+                continue
         elif row['sell']:
             ok = testman.sell({'time': i, **row.to_dict()})
             if ok and verbose:
@@ -28,8 +27,8 @@ def analyze(ds:OHLCVDataset, strategy:callable, freq:str='15 min', start:datetim
 
 if __name__ == '__main__':
     from strategy import StrategyV1, StrategyV2
-    symbol = 'ARB-USDT'
-    market = 'BINANCE'
+    symbol = 'XRP-USDT'
+    market = 'KUCOIN'
     ds = OHLCVDataset.from_csv(f'./data/{symbol}-{market}.csv')
     #download_symbol(market, symbol, start=datetime(2023, 7, 1))
     tm = analyze(ds, StrategyV2, freq='15 min', symbol=symbol, market=market, verbose=True, start=datetime(2023, 7, 1), end=datetime(2023, 9, 13))

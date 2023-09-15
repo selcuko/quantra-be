@@ -1,5 +1,6 @@
+import os
 import pandas as pd
-
+from logger import logger
 
 def interval_to_minutes(interval):
     return {
@@ -64,7 +65,9 @@ class OHLCVDataset(pd.DataFrame):
 
     @classmethod
     def from_csv(cls, filename):
-        # values are string, convert to float
+        if not os.path.exists(filename):
+            logger.fatal(f'File {filename} does not exist')
+            raise FileNotFoundError(f'File {filename} does not exist')
         ds = pd.read_csv(filename)
         ds.columns = ['time', 'open', 'high', 'low', 'close', 'volume']
         ds['time'] = pd.to_datetime(ds['time'], unit='s')
