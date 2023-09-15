@@ -41,7 +41,7 @@ class StrategyV1:
             fast=self.params['macd']['fast'], 
             slow=self.params['macd']['slow'], 
             signal=self.params['macd']['signal'],
-            col_names=('macd', 'macd_signal', 'macd_diff'),
+            col_names=('macd', 'macd_diff', 'macd_signal'),
             append=True)
         self.ds.ta.stochrsi(
             length=self.params['stochrsi']['length'],

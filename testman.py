@@ -142,8 +142,8 @@ class TestManager:
         self.losses = 0
         self.bought = False
         self.bought_price = 0
-        self.profit_from_last_trade = 0
         self.sold_price = 0
+        self.last_profit_pct = 0
         self.sold_at_shutdown = False
         self.buy_signals = 0
         self.sell_signals = 0
@@ -193,11 +193,11 @@ class TestManager:
                 print('Not bought, cannot sell - ignoring sell signal')
             return
         price = kline['close']
-        old_equity = self.equity
         self.bought = False
         self.capital = (1 - self.commission) * (self.assets * price)
         self.assets = 0
-        self.profit_from_last_trade = self.equity - old_equity
+        self.last_profit = self.equity - self.trades[-1].equity
+        self.last_profit_pct = self.last_profit * 100 / self.trades[-1].equity
         self.sold_price = price
         if price > self.bought_price:
             self.wins += 1
@@ -211,8 +211,8 @@ class TestManager:
             datetime=kline['time'],
             position='sell',
             equity=self.equity,
-            profit=self.profit_from_last_trade,
-            profit_pct=self.profit_from_last_trade * 100 / self.equity,
+            profit=self.last_profit,
+            profit_pct=self.last_profit_pct,
             hold_time=kline['time'] - self.trades[-1].datetime
         )
         self.trades.append(trade)
@@ -238,7 +238,7 @@ class TestManager:
             dtime = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
         elif self.last_kline_dt:
             dtime = self.last_kline_dt.strftime("%d-%m-%Y %H:%M:%S")
-        txt = f'[{dtime}][{self.trades[-1].number:>3d}:{"BUY" if self.bought else "SLL"}] Equity: {self.equity:>4.2f} USDT | Profit: {self.profit:>4.2f}% | Last trade: {self.profit_from_last_trade * 100 / self.equity:>3.2f}%'
+        txt = f'[{dtime}][{self.trades[-1].number:>3d}:{"BUY" if self.bought else "SLL"}] Equity: {self.equity:>6.2f} USDT | Profit: {self.profit:>4.2f}% | Last trade: {self.last_profit_pct:>3.2f}%'
         return txt
     
     def to_dict(self):
@@ -256,7 +256,6 @@ class TestManager:
             'losses': self.losses,
             'bought': self.bought,
             'bought_price': self.bought_price,
-            'profit_from_last_trade': self.profit_from_last_trade,
             'sold_price': self.sold_price,
             'sold_at_shutdown': self.sold_at_shutdown,
             'buy_signals': self.buy_signals,

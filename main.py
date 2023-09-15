@@ -15,6 +15,7 @@ from strategy.v2 import StrategyV2
 symbol = 'XRP-USDT'
 market = 'KUCOIN'
 ds = OHLCVDataset.from_csv(f'data/{symbol}-{market}.csv')
+ds = ds[datetime(2023, 7, 1):]
 
 strategy = StrategyV1()
 

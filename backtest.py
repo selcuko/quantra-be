@@ -30,8 +30,8 @@ if __name__ == '__main__':
     symbol = 'XRP-USDT'
     market = 'KUCOIN'
     ds = OHLCVDataset.from_csv(f'./data/{symbol}-{market}.csv')
-    strategy = StrategyV1()
-    #strategy = StrategyV2
+    #strategy = StrategyV1()
+    strategy = StrategyV2
     #download_symbol(market, symbol, start=datetime(2023, 7, 1))
     tm = analyze(ds, strategy, freq='15 min', symbol=symbol, market=market, verbose=True, start=datetime(2023, 7, 1), end=datetime(2023, 9, 13))
     #print(tm.summary())
