@@ -114,8 +114,10 @@ class Trade:
     profit: float
     profit_pct: float
     hold_time: timedelta
+    rawrow: dict
 
     def to_dict(self):
+        self.rawrow.pop('time', None)
         return {
             'number': self.number,
             'price': self.price,
@@ -127,6 +129,7 @@ class Trade:
             'hold_time': str(self.hold_time),
             'assets': self.assets,
             'capital': self.capital,
+            'rawrow': self.rawrow,
         }
 
 
@@ -181,6 +184,7 @@ class TestManager:
             profit=None,
             profit_pct=None,
             hold_time=None,
+            rawrow=kline
         )
         self.trades.append(trade)
         self.last_kline_dt = kline['time']
@@ -213,7 +217,8 @@ class TestManager:
             equity=self.equity,
             profit=self.last_profit,
             profit_pct=self.last_profit_pct,
-            hold_time=kline['time'] - self.trades[-1].datetime
+            hold_time=kline['time'] - self.trades[-1].datetime,
+            rawrow=kline
         )
         self.trades.append(trade)
         self.last_kline_dt = kline['time']
