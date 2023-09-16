@@ -9,7 +9,7 @@ def analyze(ds:OHLCVDataset, strategy:callable, freq:str='15 min', start:datetim
     ds = ds[start:end]
     ds = strategy(ds)
 
-    testman = TestManager(symbol=symbol, market=market, strategy=strategy, start=start, end=end)
+    testman = TestManager(symbol=symbol, market=market, strategy=strategy, start=start, end=end, interval=freq)
     for i, row in ds.iterrows():
         if row['buy']:
             ok = testman.buy({'time': i, **row.to_dict()})

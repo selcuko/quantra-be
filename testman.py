@@ -160,6 +160,7 @@ class TestManager:
         self.strategy_params = self.strategy.params if self.strategy else None
         self.start = kwargs.get('start', None)
         self.end = kwargs.get('end', None)
+        self.interval = kwargs.get('interval', None)
 
 
     def buy(self, kline):
@@ -254,6 +255,7 @@ class TestManager:
             'start': str(self.start),
             'end': str(self.end),
             'duration': str((self.end - self.start) if self.end and self.start else None),
+            'interval': self.interval,
             'live': self.live,
             'trades_count': len(self.trades) // 2,
             'capital': self.capital,
