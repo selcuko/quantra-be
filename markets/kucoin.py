@@ -41,8 +41,8 @@ class KucoinMarket:
     def _format_datetime(self, dt):
         return int(dt.timestamp())
     
-    def get_klines(self, symbol, interval, start=None, end=None, limit=1000):
-        return self._get_klines(symbol, interval, start, end, limit)
+    def get_klines(self, symbol, interval, start=None, end=None, limit=1000, retry=0):
+        return self._get_klines(symbol, interval, start, end, limit, retry)
     
     def _get_klines(self, symbol, interval, start=None, end=None, limit=1000, retry=3):
         if not start and not end:
@@ -61,7 +61,7 @@ class KucoinMarket:
                 candles_in_timerange = (end - start) // timedelta(minutes=interval_to_minutes(interval))
                 raise ValueError(f'We can get a maximum of 1000 klines per request, your timerange is too wide ({candles_in_timerange} candles), please reduce the timerange or increase the interval')
         try:
-            logger.debug('Hitting Kucoin API for {symbol} at {start} -> {end} with limit {limit}')
+            logger.debug(f'Hitting Kucoin API for {symbol} at {start} -> {end} with limit {limit}')
             klines = self.client.get_kline(
                 symbol=self._format_symbol(symbol),
                 kline_type=self._format_interval(interval),

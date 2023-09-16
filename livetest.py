@@ -62,5 +62,5 @@ if __name__ == '__main__':
     from strategy import get_strategy
     symbol = sys.argv[1] if len(sys.argv) > 1 else 'SUI-USDT'
     market = sys.argv[2] if len(sys.argv) > 2 else 'binance'
-    strategy = get_strategy(sys.argv[3] if len(sys.argv) > 3 else 'v1')
+    strategy = get_strategy(sys.argv[3] if len(sys.argv) > 3 else 'v1')()
     run_livetest(symbol, market, strategy=strategy, freq='1 min', end=timedelta(minutes=5))
