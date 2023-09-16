@@ -47,7 +47,7 @@ class KucoinMarket:
         return symbol
     
     def _format_symbol(self, symbol):
-        return symbol
+        return symbol.upper()
     
     def _format_interval(self, interval):
         return interval.replace(' ', '')
@@ -66,11 +66,9 @@ class KucoinMarket:
         price = math.floor(price / increment) * increment
         return price
 
-    def place_market_order(self, symbol, side, funds, remark=None):
+    def place_market_order(self, symbol, side, funds):
         if not self.authenticated:
             raise ValueError(f'You must provide an API config to place orders on {self.name}')
-        if remark and len(remark) > 100:
-            raise ValueError('Remark must be less than 100 characters')
         client_oid = uuid.uuid4().hex
         response = self.trade.create_market_order(
             symbol=self._format_symbol(symbol),
@@ -82,11 +80,9 @@ class KucoinMarket:
             raise ValueError(f'Error while placing market order on {self.name}')
         return response.get('orderId')
 
-    def place_limit_order(self, symbol, side, price, size, remark=None):
+    def place_limit_order(self, symbol, side, price, size):
         if not self.authenticated:
             raise ValueError(f'You must provide an API config to place orders on {self.name}')
-        if remark and len(remark) > 100:
-            raise ValueError('Remark must be less than 100 characters')
         client_oid = uuid.uuid4().hex
         response = self.trade.create_limit_order(
             symbol=self._format_symbol(symbol),
@@ -94,7 +90,6 @@ class KucoinMarket:
             price=self._round_price(symbol, price),
             size=size,
             client_oid=client_oid,
-            remark=remark
         )
         if not response:
             raise ValueError(f'Error while placing limit order on {self.name}')
@@ -154,7 +149,7 @@ class KucoinMarket:
                 candles_in_timerange = (end - start) // timedelta(minutes=interval_to_minutes(interval))
                 raise ValueError(f'We can get a maximum of 1000 klines per request, your timerange is too wide ({candles_in_timerange} candles), please reduce the timerange or increase the interval')
         try:
-            logger.debug(f'Hitting Kucoin API for {symbol} at {start} -> {end} with limit {limit}')
+            logger.debug(f'Hitting Kucoin API for {self._format_symbol(symbol)} at {start} -> {end} with limit {limit}')
             klines = self.market.get_kline(
                 symbol=self._format_symbol(symbol),
                 kline_type=self._format_interval(interval),
@@ -163,7 +158,7 @@ class KucoinMarket:
                 limit=limit
             )
         except:
-            logger.error(f'Error while fetching klines for {symbol} from {self.name}', exc_info=True)
+            logger.error(f'Error while fetching klines for {self._format_symbol(symbol)} from {self.name}', exc_info=True)
             if retry > 0:
                 logger.warning(f'Retrying {retry} more times')
                 time.sleep(1)
@@ -182,7 +177,7 @@ class KucoinMarket:
         start = now - timedelta(minutes=minutes*limit)
         klines = self.get_klines(symbol, interval, start, now)
         last_kline_dt = klines[-1][0]
-        if (now - last_kline_dt) > timedelta(minutes=minutes):
+        if (now - last_kline_dt) > timedelta(minutes=minutes*2):
             error = f'Last kline dt {last_kline_dt} does not match current time {now}, total klines: {len(klines)}, {start} -> {now}'
             logger.warning(error)
             raise Exception(error)
