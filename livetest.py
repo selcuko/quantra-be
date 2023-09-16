@@ -70,6 +70,7 @@ def run_livetest_in_sandbox(symbol, market, config, strategy, freq='15 min', end
         return True
 
     while break_check():
+        loop_start = time.time()
         klines = market.get_last_klines(symbol, freq)
         ds = OHLCVDataset(klines)
         ds = strategy(ds)
@@ -94,7 +95,9 @@ def run_livetest_in_sandbox(symbol, market, config, strategy, freq='15 min', end
             testman.sell({'time': ds.index[-1], **kline.to_dict()})
         print(testman.summary())
         try:
-            time.sleep(loop_interval)
+            loop_end = time.time()
+            loop_took = loop_end - loop_start
+            time.sleep(loop_interval - loop_took)
         except KeyboardInterrupt:
             logger.info('KeyboardInterrupt detected, shutting down gracefully')
             break
@@ -105,5 +108,6 @@ if __name__ == '__main__':
     from strategy import get_strategy
     symbol = sys.argv[1] if len(sys.argv) > 1 else 'SUI-USDT'
     market = sys.argv[2] if len(sys.argv) > 2 else 'binance'
-    strategy = get_strategy(sys.argv[3] if len(sys.argv) > 3 else 'v1')()
-    run_livetest(symbol, market, strategy=strategy, freq='1 min')
+    freq = sys.argv[3] if len(sys.argv) > 3 else '1 min'
+    strategy = get_strategy(sys.argv[4] if len(sys.argv) > 4 else 'v1')()
+    run_livetest(symbol, market, strategy=strategy, freq=freq)
