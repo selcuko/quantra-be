@@ -243,7 +243,8 @@ class TestManager:
             dtime = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
         elif self.last_kline_dt:
             dtime = self.last_kline_dt.strftime("%d-%m-%Y %H:%M:%S")
-        txt = f'[{dtime}][{self.trades[-1].number:>3d}:{"BUY" if self.bought else "SLL"}] Equity: {self.equity:>6.2f} USDT'
+        number = self.trades[-1].number if self.trades else 0
+        txt = f'[{dtime}][{number:>3d}:{"BUY" if self.bought else "SLL"}] Equity: {self.equity:>6.2f} USDT'
         if not self.bought:
             txt += f' | Profit: {self.profit:>4.2f}% | Last trade: {self.last_profit_pct:>3.2f}%'
         return txt
