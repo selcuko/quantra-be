@@ -85,13 +85,17 @@ class BinanceMarket:
         increment = float(price_filter['tickSize'])
         return math.floor(price / increment) * increment
 
-    def place_market_order(self, symbol, side, funds):
+    def place_market_order(self, symbol, side, funds=None, quantity=None):
         client_oid = uuid.uuid4().hex
         if not self.authenticated:
             raise ValueError(f'You must provide an API config to place orders on {self.name}')
+        if not funds and not quantity:
+            raise ValueError(f'You must provide either funds or quantity to place a market order on {self.name}')
+        if funds and quantity:
+            raise ValueError(f'You can only provide either funds or quantity to place a market order on {self.name}')
         try:
             funds = self._round_price(symbol, funds)
-            order = self.client.order_market(side=side, symbol=self._format_symbol(symbol), quoteOrderQty=funds, newClientOrderId=client_oid)
+            order = self.client.order_market(side=side, symbol=self._format_symbol(symbol), quantity=quantity, quoteOrderQty=funds, newClientOrderId=client_oid)
             return order['orderId']
         except:
             logger.error(f'Error while placing market order on {self.name}', exc_info=True)

@@ -27,7 +27,6 @@ def run_livetest(symbol, market_name, strategy:callable, freq='15 min', end:date
             return True
         return False
 
-    price = None
     loop_interval = interval_to_minutes(freq) * 60
 
     while True:
@@ -56,6 +55,50 @@ def run_livetest(symbol, market_name, strategy:callable, freq='15 min', end:date
             break
     testman.shutdown()
 
+def run_livetest_in_sandbox(symbol, market, config, strategy, freq='15 min', end:datetime=None):
+    if not config.get('TESTNET'):
+        raise ValueError('You can only run this live test in sandbox mode')
+    if isinstance(end, timedelta):
+        end = datetime.now() + end
+    market = get_market(market, config)
+    testman = TestManager(symbol=symbol, market=market.name, live=True, strategy=strategy) # params are optional
+    loop_interval = interval_to_minutes(freq) * 60
+
+    def break_check():
+        if end:
+            return end > datetime.now()
+        return True
+
+    while break_check():
+        klines = market.get_last_klines(symbol, freq)
+        ds = OHLCVDataset(klines)
+        ds = strategy(ds)
+        should_buy = ds.iloc[-1]['buy']
+        should_sell = ds.iloc[-1]['sell']
+        kline = ds.iloc[-1]
+        order_id = None
+
+        if should_buy:
+            if not testman.bought:
+                order_id = market.place_market_order(symbol, 'buy', funds=testman.capital)
+                print('Placed order', order_id)
+                order = market.get_order(order_id)
+                print('Detail view', order)
+            testman.buy({'time': ds.index[-1], **kline.to_dict()})
+        elif should_sell:
+            if testman.bought:
+                order_id = market.place_market_order(symbol, 'sell', quantity=testman.assets)
+                print('Placed order', order_id)
+                order = market.get_order(order_id)
+                print('Detail view', order)
+            testman.sell({'time': ds.index[-1], **kline.to_dict()})
+        print(testman.summary())
+        try:
+            time.sleep(loop_interval)
+        except KeyboardInterrupt:
+            logger.info('KeyboardInterrupt detected, shutting down gracefully')
+            break
+    testman.shutdown()
 
 
 if __name__ == '__main__':
@@ -63,4 +106,4 @@ if __name__ == '__main__':
     symbol = sys.argv[1] if len(sys.argv) > 1 else 'SUI-USDT'
     market = sys.argv[2] if len(sys.argv) > 2 else 'binance'
     strategy = get_strategy(sys.argv[3] if len(sys.argv) > 3 else 'v1')()
-    run_livetest(symbol, market, strategy=strategy, freq='1 min', end=timedelta(minutes=5))
+    run_livetest(symbol, market, strategy=strategy, freq='1 min')
