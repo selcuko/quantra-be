@@ -6,7 +6,8 @@ from binance.client import Client
 from datetime import datetime, timedelta
 from logger import logger
 from markets.helper import authentication_required
-from models import ExchangeSymbol, interval_to_minutes
+from models import ExchangeSymbol, Order, interval_to_minutes
+from filters import LotFilter, PriceFilter, FundFilter
 
 
 class BinanceMarket:
@@ -214,8 +215,10 @@ class BinanceMarket:
         return self._standardize_klines(klines)
     
     def get_symbols(self) -> list[ExchangeSymbol]:
-        def symbol_to_object(symbol: dict):
-            return ExchangeSymbol(
+        return { self._standardize_symbol(symbol): self._prep_symbol(symbol) for symbol in self.client.get_exchange_info()['symbols']}
+
+    def _prep_symbol(self, symbol:dict):
+        exc_symbol = ExchangeSymbol(
                 name = symbol['symbol'],
                 base = symbol['baseAsset'],
                 quote = symbol['quoteAsset'],
@@ -226,8 +229,63 @@ class BinanceMarket:
                 margin_trading_enabled = symbol['isMarginTradingAllowed'],
                 iceberg_allowed = symbol['icebergAllowed'],
                 oco_allowed = symbol['ocoAllowed'])
-
-        return { self._standardize_symbol(symbol): symbol_to_object(symbol) for symbol in self.client.get_exchange_info()['symbols']}
+        if raw_price_filter := [filter for filter in symbol['filters'] if filter['filterType'] == 'PRICE_FILTER']:
+            raw_price_filter = raw_price_filter[0]
+            exc_symbol.filters.append(
+                PriceFilter(
+                    max_price=raw_price_filter.get('maxPrice'),
+                    min_price=raw_price_filter.get('minPrice'),
+                    tick_size=raw_price_filter.get('tickSize'),
+                    ask_multiplier_up=raw_price_filter.get('askMultiplierUp'),
+                    ask_multiplier_down=raw_price_filter.get('askMultiplierDown'),
+                    bid_multiplier_up=raw_price_filter.get('bidMultiplierUp'),
+                    bid_multiplier_down=raw_price_filter.get('bidMultiplierDown')
+                    )
+                )
+        if raw_pct_price_filter := [filter for filter in symbol['filters'] if filter['filterType'] == 'PERCENT_PRICE_BY_SIDE']:
+            raw_pct_price_filter = raw_pct_price_filter[0]
+            exc_symbol.filters.append(
+                PriceFilter(
+                    max_price=raw_pct_price_filter.get('maxPrice'),
+                    min_price=raw_pct_price_filter.get('minPrice'),
+                    tick_size=raw_pct_price_filter.get('tickSize'),
+                    ask_multiplier_up=raw_pct_price_filter.get('askMultiplierUp'),
+                    ask_multiplier_down=raw_pct_price_filter.get('askMultiplierDown'),
+                    bid_multiplier_up=raw_pct_price_filter.get('bidMultiplierUp'),
+                    bid_multiplier_down=raw_pct_price_filter.get('bidMultiplierDown')
+                    )
+                )
+        if raw_lot_filter := [filter for filter in symbol['filters'] if filter['filterType'] == 'LOT_SIZE']:
+            raw_lot_filter = raw_lot_filter[0]
+            exc_symbol.filters.append(
+                LotFilter(
+                    minimum_quantity=raw_lot_filter.get('minQty'),
+                    maximum_quantity=raw_lot_filter.get('maxQty'),
+                    step_size=raw_lot_filter.get('stepSize'),
+                    applies_to_market=False
+                    )
+                )
+        if raw_market_lot_filter := [filter for filter in symbol['filters'] if filter['filterType'] == 'MARKET_LOT_SIZE']:
+            raw_market_lot_filter = raw_market_lot_filter[0]
+            exc_symbol.filters.append(
+                LotFilter(
+                    minimum_quantity=raw_market_lot_filter.get('minQty'),
+                    maximum_quantity=raw_market_lot_filter.get('maxQty'),
+                    step_size=raw_market_lot_filter.get('stepSize'),
+                    applies_to_market=True
+                    )
+                )
+        if raw_notional_filter := [filter for filter in symbol['filters'] if filter['filterType'] == 'MIN_NOTIONAL']:
+            raw_notional_filter = raw_notional_filter[0]
+            exc_symbol.filters.append(
+                FundFilter(
+                    minimum_notional=raw_notional_filter.get('minNotional'),
+                    maximum_notional=raw_notional_filter.get('maxNotional'),
+                    apply_max_to_market=raw_notional_filter.get('applyMaxToMarket'),
+                    apply_min_to_market=raw_notional_filter.get('applyMinToMarket'),
+                    )
+                )
+        return exc_symbol
     
     def get_last_klines(self, symbol, interval, limit=100):
         minutes = interval_to_minutes(interval)

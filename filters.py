@@ -13,15 +13,6 @@ class PriceFilter:
         self.min_price: float = kwargs.get('min_price')
         self.tick_size: float = kwargs.get('tick_size')
 
-        assert self.ask_multiplier_down > 0, 'ask_multiplier_down must be greater than 0'
-        assert self.ask_multiplier_up > 0, 'ask_multiplier_up must be greater than 0'
-        assert self.bid_multiplier_down > 0, 'bid_multiplier_down must be greater than 0'
-        assert self.bid_multiplier_up > 0, 'bid_multiplier_up must be greater than 0'
-        assert self.max_price > 0, 'max_price must be greater than 0'
-        assert self.min_price > 0, 'min_price must be greater than 0'
-        assert self.tick_size >= 0, 'tick_size cannot be negative'
-        assert self.max_price > self.min_price, 'max_price must be greater than min_price'
-
     def round(self, price:float) -> float:
         if not self.tick_size:
             return price
