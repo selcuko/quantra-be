@@ -96,7 +96,6 @@ class OHLCVDataset(pd.DataFrame):
         return OHLCVDataset(super().copy(*args, **kwargs), pass_thru=True)
 
 
-@dataclass
 class Order:
     def __init__(self, oid, symbol, market, side, price, created, deal_funds, deal_size, funds, **kwargs) -> None:
         self.oid: str = oid
@@ -104,10 +103,7 @@ class Order:
         self.market: str = market
         self.side: str = side
         self.price: float = price
-        
-        self.fee: float = kwargs.get('fee', 0)
         self.created: datetime = created
-        
         self.deal_funds: float = deal_funds
         self.deal_size: float = deal_size
         self.funds: float = funds
@@ -133,6 +129,9 @@ class Order:
             'client_oid': self.client_oid,
         }
 
+    def __str__(self) -> str:
+        return f'Order@{self.market}:{self.oid} {self.status} {self.type} {self.side} {self.symbol}'
+
 
 class ExchangeSymbol:
     def __init__(self, name, base, quote, **kwargs) -> None:
@@ -155,3 +154,11 @@ class ExchangeSymbol:
             'spot_trading_enabled': self.spot_trading_enabled,
             'margin_trading_enabled': self.margin_trading_enabled,
         }
+
+    def __str__(self) -> str:
+        return self.std_name
+    
+    @property
+    def std_name(self):
+        return f'{self.base}-{self.quote}'
+

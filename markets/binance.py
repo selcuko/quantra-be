@@ -75,93 +75,97 @@ class BinanceMarket:
             raise ValueError(f'Symbol {symbol_name} is not present in {self.name}')
 
     @authentication_required
-    def place_market_order(self, symbol:ExchangeSymbol, side:Literal['buy', 'sell'], funds:float=None, quantity:float=None):
+    def place_market_order(self, symbol:ExchangeSymbol, side:Literal['buy', 'sell'], funds:float=None, quantity:float=None) -> Order:
         if isinstance(symbol, str):
             symbol = self.get_symbol_from_name(symbol)
         client_oid = uuid.uuid4().hex
         if (not funds and not quantity) or (funds and quantity):
             raise ValueError(f'You must provide either funds or quantity to place a market order on {self.name}')
         try:
-            logger.info(f'Placing market order on {self.name} for {symbol.name} with side {side} and funds {funds} and quantity {quantity}')
+            logger.info(f'Placing market order on {self.name} for {symbol} with side {side} and funds {funds} and quantity {quantity}')
             order = self.client.order_market(
                 side=side, 
                 symbol=symbol.name, 
                 quantity=quantity, 
                 quoteOrderQty=funds, 
                 newClientOrderId=client_oid)
-            logger.info(f'Market order placed on {self.name} for {symbol.name} with side {side} and funds {funds} and quantity {quantity} with order id {order["orderId"]}')
-            return order['orderId']
+            logger.info(f'Market order placed on {self.name} for {symbol} with side {side} and funds {funds} and quantity {quantity} with order id {order["orderId"]}')
+            return self._prep_order(order, symbol)
         except:
             logger.error(f'Error while placing market order on {self.name}', exc_info=True)
             raise
     
     @authentication_required
-    def place_limit_order(self, symbol:ExchangeSymbol, side:Literal['buy', 'sell'], price:float, size:float):
+    def place_limit_order(self, symbol:ExchangeSymbol, side:Literal['buy', 'sell'], price:float, quantity:float) -> Order:
         if isinstance(symbol, str):
             symbol = self.get_symbol_from_name(symbol)
         client_oid = uuid.uuid4().hex
         try:
-            logger.info(f'Placing limit order on {self.name} for {symbol.name} with side {side} and price {price} and size {size}')
+            logger.info(f'Placing limit order on {self.name} for {symbol} with side {side} and price {price} and quantity {quantity}')
             order = self.client.order_limit(
                 side=side, 
                 symbol=symbol.name, 
                 price=price, 
-                quantity=size, 
+                quantity=quantity, 
                 newClientOrderId=client_oid)
-            logger.info(f'Limit order placed on {self.name} for {symbol.name} with side {side} and price {price} and size {size} with order id {order["orderId"]}')
-            return order['orderId']
+            logger.info(f'Limit order placed on {self.name} for {symbol} with side {side} and price {price} and quantity {quantity} with order id {order["orderId"]}')
+            return self._prep_order(order, symbol)
         except:
             logger.error(f'Error while placing limit order on {self.name}', exc_info=True)
             raise
     
     @authentication_required
-    def get_order(self, symbol:ExchangeSymbol, order_id:int):
+    def get_order(self, symbol:ExchangeSymbol, order_id:int) -> Order:
         if isinstance(symbol, str):
             symbol = self.get_symbol_from_name(symbol)
+        if isinstance(order_id, Order):
+            order_id = order_id.oid
         try:
-            logger.info(f'Getting order {order_id} on {self.name} for {symbol.name}')
+            logger.info(f'Getting order {order_id} on {self.name} for {symbol}')
             order = self.client.get_order(symbol=symbol.name, orderId=order_id)
-            return order
+            return self._prep_order(order, symbol)
         except:
             logger.error(f'Error while getting order on {self.name}', exc_info=True)
             raise
     
     @authentication_required
-    def get_orders(self, symbol:ExchangeSymbol, limit:int=100):
+    def get_orders(self, symbol:ExchangeSymbol, limit:int=100) -> list[Order]:
         if isinstance(symbol, str):
             symbol = self.get_symbol_from_name(symbol)
         try:
-            logger.info(f'Getting orders on {self.name} for {symbol.name}')
+            logger.info(f'Getting orders on {self.name} for {symbol}')
             orders = self.client.get_all_orders(symbol=symbol.name, limit=limit)
-            return orders
+            return [self._prep_order(order, symbol) for order in orders]
         except:
             logger.error(f'Error while getting order list on {self.name}', exc_info=True)
             raise
     
     @authentication_required
-    def get_open_orders(self, symbol:ExchangeSymbol=None):
+    def get_open_orders(self, symbol:ExchangeSymbol=None) -> list[Order]:
         if isinstance(symbol, str):
             symbol = self.get_symbol_from_name(symbol)
         try:
             if symbol:
-                logger.info(f'Getting open orders on {self.name} for {symbol.name}')
+                logger.info(f'Getting open orders on {self.name} for {symbol}')
                 orders = self.client.get_open_orders(symbol=symbol.name)
             else:
                 logger.info(f'Getting open orders on {self.name}')
                 orders = self.client.get_open_orders()
-            return orders
+            return [self._prep_order(order, symbol) for order in orders]
         except:
             logger.error(f'Error while getting open orders on {self.name}', exc_info=True)
             raise
 
     @authentication_required
-    def cancel_order(self, symbol:ExchangeSymbol, order_id:int):
+    def cancel_order(self, symbol:ExchangeSymbol, order_id:int) -> Order:
         if isinstance(symbol, str):
             symbol = self.get_symbol_from_name(symbol)
+        if isinstance(order_id, Order):
+            order_id = order_id.oid
         try:
-            logger.info(f'Canceling order {order_id} on {self.name} for {symbol.name}')
+            logger.info(f'Canceling order {order_id} on {self.name} for {symbol}')
             order = self.client.cancel_order(symbol=symbol.name, orderId=order_id)
-            return order
+            return self._prep_order(order, symbol)
         except Exception as e:
             if 'Unknown order sent' in str(e):
                 logger.warning(f'Order {order_id} not found on {self.name}')
@@ -170,17 +174,17 @@ class BinanceMarket:
             raise
     
     @authentication_required
-    def cancel_all_orders(self, symbol:ExchangeSymbol=None):
+    def cancel_all_orders(self, symbol:ExchangeSymbol=None) -> list[Order]:
         if isinstance(symbol, str):
             symbol = self.get_symbol_from_name(symbol)
         try:
             if symbol:
-                logger.info(f'Canceling all orders on {self.name} for {symbol.name}')
+                logger.info(f'Canceling all orders on {self.name} for {symbol}')
                 orders = self.client.cancel_open_orders(symbol=symbol.name)
             else:
                 logger.info(f'Canceling all orders on {self.name}')
                 orders = self.client.cancel_open_orders()
-            return orders
+            return [self._prep_order(order, symbol) for order in orders]
         except:
             logger.error(f'Error while canceling all orders on {self.name}', exc_info=True)
             raise
@@ -286,6 +290,23 @@ class BinanceMarket:
                     )
                 )
         return exc_symbol
+
+    def _prep_order(self, order:dict, symbol:ExchangeSymbol):
+        order_time = order.get('time') or order.get('workingTime') or order.get('transactTime') or order.get('updateTime')
+        return Order(
+            oid=order['orderId'],
+            client_oid=order['clientOrderId'],
+            symbol=symbol,
+            market=self.name,
+            type=order['type'].upper(),
+            side=order['side'].upper(),
+            price=float(order['price']),
+            created=datetime.fromtimestamp(int(order_time // 1000)),
+            deal_funds=float(order.get('cummulativeQuoteQty', 0)),
+            deal_size=float(order.get('origQty', 0)),
+            status=order['status'].upper(),
+            funds=float(order.get('origQuoteOrderQty', 0)),
+        )
     
     def get_last_klines(self, symbol, interval, limit=100):
         minutes = interval_to_minutes(interval)
