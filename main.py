@@ -8,7 +8,9 @@ config = json.load(open('api.json'))['BINANCE-TESTNET']
 market = get_market('BINANCE', config)
 strategy = get_strategy('v1')
 symbol = 'BTC-USDT'
-order_id = market.place_market_order(symbol, 'buy', funds=100)
+order_id = market.place_limit_order(symbol, 'buy', price=26000, size=0.01)
 order = market.get_order(symbol, order_id)
-print('\nSEP\n')
-pprint(order)
+client_oid = order['clientOrderId']
+response = market.cancel_order(symbol, order_id)
+print(order)
+print(response)

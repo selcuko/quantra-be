@@ -1,10 +1,11 @@
 import math
 import time
+from typing import Literal
 import uuid
 from binance.client import Client
 from datetime import datetime, timedelta
 from logger import logger
-
+from markets.helper import authentication_required
 from models import ExchangeSymbol, interval_to_minutes
 
 
@@ -12,20 +13,17 @@ class BinanceMarket:
     name = 'BINANCE'
     def __init__(self, config={}):
         self.authenticated = False
-        if config:
-            self.authenticated = True
+        self.authenticated = bool(config.get('API_KEY') and config.get('API_SECRET'))
         try:
             if self.authenticated:
                 self.client = Client(
                     api_key=config['API_KEY'],
                     api_secret=config['API_SECRET'],
-                    testnet=config['TESTNET']
-                )
+                    testnet=config['TESTNET'])
             else:
                 self.client = Client()
         except Exception as e:
-            logger.error(f'Error while initializing {self.name}')
-            logger.exception(e)
+            logger.error(f'Error while initializing {self.name}', exc_info=True)
             raise
         self.symbols = self.get_symbols()
     
@@ -68,88 +66,118 @@ class BinanceMarket:
     def _format_datetime(self, dt):
         return str(dt.timestamp())
 
-    def place_market_order(self, symbol, side, funds=None, quantity=None):
-        client_oid = uuid.uuid4().hex
-        if not self.authenticated:
-            raise ValueError(f'You must provide an API config to place orders on {self.name}')
-        if not funds and not quantity:
-            raise ValueError(f'You must provide either funds or quantity to place a market order on {self.name}')
-        if funds and quantity:
-            raise ValueError(f'You can only provide either funds or quantity to place a market order on {self.name}')
+    def get_symbol_from_name(self, symbol_name:str):
         try:
-            order = self.client.order_market(side=side, symbol=self._format_symbol(symbol), quantity=quantity, quoteOrderQty=funds, newClientOrderId=client_oid)
+            return self.symbols[symbol_name]
+        except:
+            logger.error(f'Symbol {symbol_name} is not present in {self.name}')
+            raise ValueError(f'Symbol {symbol_name} is not present in {self.name}')
+
+    @authentication_required
+    def place_market_order(self, symbol:ExchangeSymbol, side:Literal['buy', 'sell'], funds:float=None, quantity:float=None):
+        if isinstance(symbol, str):
+            symbol = self.get_symbol_from_name(symbol)
+        client_oid = uuid.uuid4().hex
+        if (not funds and not quantity) or (funds and quantity):
+            raise ValueError(f'You must provide either funds or quantity to place a market order on {self.name}')
+        try:
+            logger.info(f'Placing market order on {self.name} for {symbol.name} with side {side} and funds {funds} and quantity {quantity}')
+            order = self.client.order_market(
+                side=side, 
+                symbol=symbol.name, 
+                quantity=quantity, 
+                quoteOrderQty=funds, 
+                newClientOrderId=client_oid)
+            logger.info(f'Market order placed on {self.name} for {symbol.name} with side {side} and funds {funds} and quantity {quantity} with order id {order["orderId"]}')
             return order['orderId']
         except:
             logger.error(f'Error while placing market order on {self.name}', exc_info=True)
             raise
     
-    def place_limit_order(self, symbol, side, price, size):
-        symbol = self._format_symbol(symbol)
+    @authentication_required
+    def place_limit_order(self, symbol:ExchangeSymbol, side:Literal['buy', 'sell'], price:float, size:float):
+        if isinstance(symbol, str):
+            symbol = self.get_symbol_from_name(symbol)
         client_oid = uuid.uuid4().hex
-        if not self.authenticated:
-            raise ValueError(f'You must provide an API config to place orders on {self.name}')
         try:
-            order = self.client.order_limit(side=side, symbol=symbol, price=price, quantity=size, newClientOrderId=client_oid)
+            logger.info(f'Placing limit order on {self.name} for {symbol.name} with side {side} and price {price} and size {size}')
+            order = self.client.order_limit(
+                side=side, 
+                symbol=symbol.name, 
+                price=price, 
+                quantity=size, 
+                newClientOrderId=client_oid)
+            logger.info(f'Limit order placed on {self.name} for {symbol.name} with side {side} and price {price} and size {size} with order id {order["orderId"]}')
             return order['orderId']
         except:
             logger.error(f'Error while placing limit order on {self.name}', exc_info=True)
             raise
     
-    def get_order(self, symbol, order_id):
-        symbol = self._format_symbol(symbol)
-        if not self.authenticated:
-            raise ValueError(f'You must provide an API config to get orders on {self.name}')
+    @authentication_required
+    def get_order(self, symbol:ExchangeSymbol, order_id:int):
+        if isinstance(symbol, str):
+            symbol = self.get_symbol_from_name(symbol)
         try:
-            order = self.client.get_order(symbol=symbol, orderId=order_id)
+            logger.info(f'Getting order {order_id} on {self.name} for {symbol.name}')
+            order = self.client.get_order(symbol=symbol.name, orderId=order_id)
             return order
         except:
             logger.error(f'Error while getting order on {self.name}', exc_info=True)
             raise
     
-    def get_order_list(self, symbol, limit=100):
-        symbol = self._format_symbol(symbol)
-        if not self.authenticated:
-            raise ValueError(f'You must provide an API config to get orders on {self.name}')
+    @authentication_required
+    def get_orders(self, symbol:ExchangeSymbol, limit:int=100):
+        if isinstance(symbol, str):
+            symbol = self.get_symbol_from_name(symbol)
         try:
-            orders = self.client.get_all_orders(symbol=symbol, limit=limit)
+            logger.info(f'Getting orders on {self.name} for {symbol.name}')
+            orders = self.client.get_all_orders(symbol=symbol.name, limit=limit)
             return orders
         except:
             logger.error(f'Error while getting order list on {self.name}', exc_info=True)
             raise
     
-    def get_open_orders(self, symbol=None):
-        if not self.authenticated:
-            raise ValueError(f'You must provide an API config to get orders on {self.name}')
+    @authentication_required
+    def get_open_orders(self, symbol:ExchangeSymbol=None):
+        if isinstance(symbol, str):
+            symbol = self.get_symbol_from_name(symbol)
         try:
             if symbol:
-                symbol = self._format_symbol(symbol)
-                orders = self.client.get_open_orders(symbol=symbol)
+                logger.info(f'Getting open orders on {self.name} for {symbol.name}')
+                orders = self.client.get_open_orders(symbol=symbol.name)
             else:
+                logger.info(f'Getting open orders on {self.name}')
                 orders = self.client.get_open_orders()
             return orders
         except:
             logger.error(f'Error while getting open orders on {self.name}', exc_info=True)
             raise
 
-    def cancel_order(self, symbol, order_id):
-        symbol = self._format_symbol(symbol)
-        if not self.authenticated:
-            raise ValueError(f'You must provide an API config to cancel orders on {self.name}')
+    @authentication_required
+    def cancel_order(self, symbol:ExchangeSymbol, order_id:int):
+        if isinstance(symbol, str):
+            symbol = self.get_symbol_from_name(symbol)
         try:
-            order = self.client.cancel_order(symbol=symbol, orderId=order_id)
+            logger.info(f'Canceling order {order_id} on {self.name} for {symbol.name}')
+            order = self.client.cancel_order(symbol=symbol.name, orderId=order_id)
             return order
-        except:
+        except Exception as e:
+            if 'Unknown order sent' in str(e):
+                logger.warning(f'Order {order_id} not found on {self.name}')
+                return
             logger.error(f'Error while canceling order on {self.name}', exc_info=True)
             raise
     
-    def cancel_all_orders(self, symbol=None):
-        if not self.authenticated:
-            raise ValueError(f'You must provide an API config to cancel orders on {self.name}')
+    @authentication_required
+    def cancel_all_orders(self, symbol:ExchangeSymbol=None):
+        if isinstance(symbol, str):
+            symbol = self.get_symbol_from_name(symbol)
         try:
             if symbol:
-                symbol = self._format_symbol(symbol)
-                orders = self.client.cancel_open_orders(symbol=symbol)
+                logger.info(f'Canceling all orders on {self.name} for {symbol.name}')
+                orders = self.client.cancel_open_orders(symbol=symbol.name)
             else:
+                logger.info(f'Canceling all orders on {self.name}')
                 orders = self.client.cancel_open_orders()
             return orders
         except:
@@ -188,7 +216,7 @@ class BinanceMarket:
     def get_symbols(self) -> list[ExchangeSymbol]:
         def symbol_to_object(symbol: dict):
             return ExchangeSymbol(
-                name = self._standardize_symbol(symbol),
+                name = symbol['symbol'],
                 base = symbol['baseAsset'],
                 quote = symbol['quoteAsset'],
                 base_precision = symbol['baseAssetPrecision'],
