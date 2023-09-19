@@ -5,7 +5,7 @@ from binance.client import Client
 from datetime import datetime, timedelta
 from logger import logger
 
-from models import interval_to_minutes
+from models import ExchangeSymbol, interval_to_minutes
 
 
 class BinanceMarket:
@@ -67,23 +67,6 @@ class BinanceMarket:
 
     def _format_datetime(self, dt):
         return str(dt.timestamp())
-    
-    def _round_price(self, symbol, price):
-        if not self.symbols[symbol]['isSpotTradingAllowed']:
-            raise ValueError(f'Spot trading is not enabled for {symbol} on {self.name}')
-        filters = self.symbols[symbol]['filters']
-        price_filter = [f for f in filters if f['filterType'] == 'PRICE_FILTER'][0]
-        if price > float(price_filter['maxPrice']):
-            raise ValueError(f'Price {price} is greater than maxPrice {price_filter["maxPrice"]} for {symbol} on {self.name}')
-        if price < float(price_filter['minPrice']):
-            raise ValueError(f'Price {price} is less than minPrice {price_filter["minPrice"]} for {symbol} on {self.name}')
-        notional_filter = [f for f in filters if f['filterType'] == 'NOTIONAL'][0]
-        if price > float(notional_filter['maxNotional']):
-            raise ValueError(f'Price {price} is greater than maxNotional {notional_filter["maxNotional"]} for {symbol} on {self.name}')
-        if price < float(notional_filter['minNotional']):
-            raise ValueError(f'Price {price} is less than minNotional {notional_filter["minNotional"]} for {symbol} on {self.name}')
-        increment = float(price_filter['tickSize'])
-        return math.floor(price / increment) * increment
 
     def place_market_order(self, symbol, side, funds=None, quantity=None):
         client_oid = uuid.uuid4().hex
@@ -94,7 +77,6 @@ class BinanceMarket:
         if funds and quantity:
             raise ValueError(f'You can only provide either funds or quantity to place a market order on {self.name}')
         try:
-            funds = self._round_price(symbol, funds)
             order = self.client.order_market(side=side, symbol=self._format_symbol(symbol), quantity=quantity, quoteOrderQty=funds, newClientOrderId=client_oid)
             return order['orderId']
         except:
@@ -107,7 +89,6 @@ class BinanceMarket:
         if not self.authenticated:
             raise ValueError(f'You must provide an API config to place orders on {self.name}')
         try:
-            price = self._round_price(symbol, price)
             order = self.client.order_limit(side=side, symbol=symbol, price=price, quantity=size, newClientOrderId=client_oid)
             return order['orderId']
         except:
@@ -204,8 +185,21 @@ class BinanceMarket:
             raise
         return self._standardize_klines(klines)
     
-    def get_symbols(self):
-        return { self._standardize_symbol(symbol): symbol for symbol in self.client.get_exchange_info()['symbols']}
+    def get_symbols(self) -> list[ExchangeSymbol]:
+        def symbol_to_object(symbol: dict):
+            return ExchangeSymbol(
+                name = self._standardize_symbol(symbol),
+                base = symbol['baseAsset'],
+                quote = symbol['quoteAsset'],
+                base_precision = symbol['baseAssetPrecision'],
+                quote_precision = symbol['quotePrecision'],
+                status = symbol['status'],
+                spot_trading_enabled = symbol['isSpotTradingAllowed'],
+                margin_trading_enabled = symbol['isMarginTradingAllowed'],
+                iceberg_allowed = symbol['icebergAllowed'],
+                oco_allowed = symbol['ocoAllowed'])
+
+        return { self._standardize_symbol(symbol): symbol_to_object(symbol) for symbol in self.client.get_exchange_info()['symbols']}
     
     def get_last_klines(self, symbol, interval, limit=100):
         minutes = interval_to_minutes(interval)

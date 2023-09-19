@@ -1,4 +1,7 @@
+from dataclasses import dataclass
+from datetime import datetime
 import os
+from typing import Literal
 import pandas as pd
 from logger import logger
 
@@ -92,3 +95,63 @@ class OHLCVDataset(pd.DataFrame):
     def copy(self, *args, **kwargs) -> "OHLCVDataset":
         return OHLCVDataset(super().copy(*args, **kwargs), pass_thru=True)
 
+
+@dataclass
+class Order:
+    def __init__(self, oid, symbol, market, side, price, created, deal_funds, deal_size, funds, **kwargs) -> None:
+        self.oid: str = oid
+        self.symbol: ExchangeSymbol = symbol
+        self.market: str = market
+        self.side: str = side
+        self.price: float = price
+        
+        self.fee: float = kwargs.get('fee', 0)
+        self.created: datetime = created
+        
+        self.deal_funds: float = deal_funds
+        self.deal_size: float = deal_size
+        self.funds: float = funds
+        
+        self.client_oid: str = kwargs.get('client_oid')
+        self.type: Literal['LIMIT', 'MARKET'] = kwargs.get('type', 'MARKET')
+        self.status: Literal['ACTIVE', 'FILLED', 'CANCELLED'] = kwargs.get('status', 'ACTIVE')
+
+    def json(self):
+        return {
+            'oid': self.oid,
+            'symbol': self.symbol.json(),
+            'market': self.market,
+            'side': self.side,
+            'price': self.price,
+            'type': self.type,
+            'fee': self.fee,
+            'created': self.created,
+            'status': self.status,
+            'deal_funds': self.deal_funds,
+            'deal_size': self.deal_size,
+            'funds': self.funds,
+            'client_oid': self.client_oid,
+        }
+
+
+class ExchangeSymbol:
+    def __init__(self, name, base, quote, **kwargs) -> None:
+        self.name = name
+        self.base = base
+        self.quote = quote
+        self.base_precision = kwargs.get('base_precision')
+        self.quote_precision = kwargs.get('quote_precision')
+        self.spot_trading_enabled = kwargs.get('spot_trading_enabled', True)
+        self.margin_trading_enabled = kwargs.get('margin_trading_enabled', False)
+        self.filters = kwargs.get('filters', [])
+    
+    def json(self):
+        return {
+            'name': self.name,
+            'base': self.base,
+            'quote': self.quote,
+            'base_precision': self.base_precision,
+            'quote_precision': self.quote_precision,
+            'spot_trading_enabled': self.spot_trading_enabled,
+            'margin_trading_enabled': self.margin_trading_enabled,
+        }
