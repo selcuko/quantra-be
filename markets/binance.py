@@ -67,7 +67,7 @@ class BinanceMarket:
     def _format_datetime(self, dt):
         return str(dt.timestamp())
 
-    def get_symbol_from_name(self, symbol_name:str):
+    def _get_symbol_from_name(self, symbol_name:str):
         try:
             return self.symbols[symbol_name]
         except:
@@ -77,7 +77,7 @@ class BinanceMarket:
     @authentication_required
     def place_market_order(self, symbol:ExchangeSymbol, side:Literal['buy', 'sell'], funds:float=None, quantity:float=None) -> Order:
         if isinstance(symbol, str):
-            symbol = self.get_symbol_from_name(symbol)
+            symbol = self._get_symbol_from_name(symbol)
         client_oid = uuid.uuid4().hex
         if (not funds and not quantity) or (funds and quantity):
             raise ValueError(f'You must provide either funds or quantity to place a market order on {self.name}')
@@ -98,7 +98,7 @@ class BinanceMarket:
     @authentication_required
     def place_limit_order(self, symbol:ExchangeSymbol, side:Literal['buy', 'sell'], price:float, quantity:float) -> Order:
         if isinstance(symbol, str):
-            symbol = self.get_symbol_from_name(symbol)
+            symbol = self._get_symbol_from_name(symbol)
         client_oid = uuid.uuid4().hex
         try:
             logger.info(f'Placing limit order on {self.name} for {symbol} with side {side} and price {price} and quantity {quantity}')
@@ -117,7 +117,7 @@ class BinanceMarket:
     @authentication_required
     def get_order(self, symbol:ExchangeSymbol, order_id:int) -> Order:
         if isinstance(symbol, str):
-            symbol = self.get_symbol_from_name(symbol)
+            symbol = self._get_symbol_from_name(symbol)
         if isinstance(order_id, Order):
             order_id = order_id.oid
         try:
@@ -131,7 +131,7 @@ class BinanceMarket:
     @authentication_required
     def get_orders(self, symbol:ExchangeSymbol, limit:int=100) -> list[Order]:
         if isinstance(symbol, str):
-            symbol = self.get_symbol_from_name(symbol)
+            symbol = self._get_symbol_from_name(symbol)
         try:
             logger.info(f'Getting orders on {self.name} for {symbol}')
             orders = self.client.get_all_orders(symbol=symbol.name, limit=limit)
@@ -143,7 +143,7 @@ class BinanceMarket:
     @authentication_required
     def get_open_orders(self, symbol:ExchangeSymbol=None) -> list[Order]:
         if isinstance(symbol, str):
-            symbol = self.get_symbol_from_name(symbol)
+            symbol = self._get_symbol_from_name(symbol)
         try:
             if symbol:
                 logger.info(f'Getting open orders on {self.name} for {symbol}')
@@ -159,7 +159,7 @@ class BinanceMarket:
     @authentication_required
     def cancel_order(self, symbol:ExchangeSymbol, order_id:int) -> Order:
         if isinstance(symbol, str):
-            symbol = self.get_symbol_from_name(symbol)
+            symbol = self._get_symbol_from_name(symbol)
         if isinstance(order_id, Order):
             order_id = order_id.oid
         try:
@@ -176,7 +176,7 @@ class BinanceMarket:
     @authentication_required
     def cancel_all_orders(self, symbol:ExchangeSymbol=None) -> list[Order]:
         if isinstance(symbol, str):
-            symbol = self.get_symbol_from_name(symbol)
+            symbol = self._get_symbol_from_name(symbol)
         try:
             if symbol:
                 logger.info(f'Canceling all orders on {self.name} for {symbol}')

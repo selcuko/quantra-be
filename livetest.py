@@ -1,7 +1,9 @@
 from datetime import datetime, timedelta
+import json
 import time, sys
 from markets import MarketError, get_market
 from models import OHLCVDataset, interval_to_minutes
+from strategy import get_strategy
 from testman import TestManager
 from logger import logger
 
@@ -77,20 +79,20 @@ def run_livetest_in_sandbox(symbol, market, config, strategy, freq='15 min', end
         should_buy = ds.iloc[-1]['buy']
         should_sell = ds.iloc[-1]['sell']
         kline = ds.iloc[-1]
-        order_id = None
+        last_order = None
 
         if should_buy:
             if not testman.bought:
-                order_id = market.place_market_order(symbol, 'buy', funds=testman.capital)
-                print('Placed order', order_id)
-                order = market.get_order(order_id)
+                last_order = market.place_market_order(symbol, 'buy', funds=testman.capital)
+                print('Placed order', last_order)
+                order = market.get_order(last_order.symbol, last_order.id)
                 print('Detail view', order)
             testman.buy({'time': ds.index[-1], **kline.to_dict()})
         elif should_sell:
             if testman.bought:
-                order_id = market.place_market_order(symbol, 'sell', quantity=testman.assets)
-                print('Placed order', order_id)
-                order = market.get_order(order_id)
+                last_order = market.place_market_order(symbol, 'sell', quantity=testman.assets)
+                print('Placed order', last_order)
+                order = market.get_order(last_order.symbol, last_order.id)
                 print('Detail view', order)
             testman.sell({'time': ds.index[-1], **kline.to_dict()})
         print(testman.summary())
@@ -105,9 +107,6 @@ def run_livetest_in_sandbox(symbol, market, config, strategy, freq='15 min', end
 
 
 if __name__ == '__main__':
-    from strategy import get_strategy
-    symbol = sys.argv[1] if len(sys.argv) > 1 else 'SUI-USDT'
-    market = sys.argv[2] if len(sys.argv) > 2 else 'binance'
-    freq = sys.argv[3] if len(sys.argv) > 3 else '1 min'
-    strategy = get_strategy(sys.argv[4] if len(sys.argv) > 4 else 'v1')()
-    run_livetest(symbol, market, strategy=strategy, freq=freq)
+    conf = json.load(open('api.json'))['BINANCE-TESTNET']
+    strg = get_strategy('v1')()
+    run_livetest_in_sandbox('BTC-USDT', 'BINANCE', conf, strg)
