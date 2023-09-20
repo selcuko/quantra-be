@@ -6,7 +6,7 @@ from .binance import BinanceMarket
 from .kucoin import KucoinMarket
 from .mexc import MEXCMarket
 
-def get_market(market_name, config=None) -> 'Market':
+def get_market(market_name, config={}) -> 'Market':
     market_name = market_name.lower()
     if market_name == 'binance':
         return BinanceMarket(config)
@@ -19,7 +19,7 @@ def get_market(market_name, config=None) -> 'Market':
 
 
 class Market:
-    def __init__(self, config=None):
+    def __init__(self, config={}):
         pass
     def place_market_order(self, symbol:ExchangeSymbol|str, side:Literal['buy', 'sell'], funds:float=None, quantity:float=None) -> 'Order':
         pass
