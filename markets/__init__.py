@@ -19,6 +19,8 @@ def get_market(market_name, config={}) -> 'Market':
 
 
 class Market:
+    authenticated: bool
+    symbols: list[ExchangeSymbol]
     def __init__(self, config={}):
         pass
     def place_market_order(self, symbol:ExchangeSymbol|str, side:Literal['buy', 'sell'], funds:float=None, quantity:float=None) -> 'Order':
@@ -27,7 +29,7 @@ class Market:
         pass
     def get_order(self, symbol:ExchangeSymbol|str, order:Order|int) -> 'Order':
         pass
-    def get_orders(self, symbol:ExchangeSymbol|str, limit:int=100) -> list['Order']:
+    def get_orders(self, symbol:ExchangeSymbol|str) -> list['Order']:
         pass
     def get_open_orders(self, symbol:ExchangeSymbol|str=None, limit:int=100) -> list['Order']:
         pass

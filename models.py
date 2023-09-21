@@ -4,6 +4,9 @@ import os
 from typing import Literal
 import pandas as pd
 from logger import logger
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from markets import Market
 
 def interval_to_minutes(interval):
     return {
@@ -100,8 +103,8 @@ class Order:
     def __init__(self, oid, symbol, market, side, price, created, deal_funds, deal_size, funds, **kwargs) -> None:
         self.oid: str = oid
         self.symbol: ExchangeSymbol = symbol
-        self.market: str = market
-        self.side: str = side
+        self.market: Market = market
+        self.side: Literal['BUY', 'SELL'] = side
         self.price: float = price
         self.created: datetime = created
         self.deal_funds: float = deal_funds
@@ -110,17 +113,16 @@ class Order:
         
         self.client_oid: str = kwargs.get('client_oid')
         self.type: Literal['LIMIT', 'MARKET'] = kwargs.get('type', 'MARKET')
-        self.status: Literal['ACTIVE', 'FILLED', 'CANCELLED'] = kwargs.get('status', 'ACTIVE')
+        self.status: Literal['ACTIVE', 'FILLED', 'CANCELLED', 'CLOSED'] = kwargs.get('status', 'ACTIVE')
 
     def json(self):
         return {
             'oid': self.oid,
             'symbol': self.symbol.json(),
-            'market': self.market,
+            'market': str(self.market),
             'side': self.side,
             'price': self.price,
             'type': self.type,
-            'fee': self.fee,
             'created': self.created,
             'status': self.status,
             'deal_funds': self.deal_funds,
@@ -130,7 +132,21 @@ class Order:
         }
 
     def __str__(self) -> str:
-        return f'Order@{self.market}:{self.oid} {self.status} {self.type} {self.side} {self.symbol}'
+        return f'Order@{self.market!s}:{self.oid} {self.status} {self.type} {self.side} {self.symbol}'
+    
+    def refresh(self):
+        """Update this order with the latest information from the exchange"""
+        order = self.market.get_order(self.symbol, self.oid)
+        self.status = order.status
+        self.deal_funds = order.deal_funds
+        self.deal_size = order.deal_size
+        self.funds = order.funds
+        self.price = order.price
+        self.side = order.side
+        self.type = order.type
+        self.created = order.created
+        self.client_oid = order.client_oid
+        return self
 
 
 class ExchangeSymbol:

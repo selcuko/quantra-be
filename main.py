@@ -6,13 +6,13 @@ from livetest import run_livetest_in_sandbox
 
 
 
-config = json.load(open('api.json'))['BINANCE-TESTNET']
-market = get_market('BINANCE', config)
+config = json.load(open('api.json'))['KUCOIN']
+market = get_market('KUCOIN', config)
 strategy = get_strategy('v1')
-symbol = 'BTC-USDT'
-#order = market.place_limit_order(symbol, 'buy', price=26000, quantity=0.01)
-order = market.place_market_order(symbol, 'buy', funds=100)
-client_oid = order.client_oid
-response = market.cancel_order(symbol, order)
-print(order)
-print(response)
+
+
+order = market.place_market_order('SUI-USDT', 'sell', quantity=0.179112321)
+print('RAW', order)
+order.refresh()
+print('REFRESHED', order)
+print('JSON', order.json())

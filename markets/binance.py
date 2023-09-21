@@ -13,7 +13,6 @@ from filters import LotFilter, PriceFilter, FundFilter
 class BinanceMarket:
     name = 'BINANCE'
     def __init__(self, config={}):
-        self.authenticated = False
         self.authenticated = bool(config.get('API_KEY') and config.get('API_SECRET'))
         try:
             if self.authenticated:
@@ -28,6 +27,9 @@ class BinanceMarket:
             raise
         self.symbols = self.get_symbols()
     
+    def __str__(self) -> str:
+        return f'{self.name} (Authenticated: {self.authenticated})'
+
     def _standardize_klines(self, klines):
         return [[ datetime.fromtimestamp(int(kline[0]) // 1000).replace(second=0, microsecond=0),
                   float(kline[1]),
@@ -70,7 +72,7 @@ class BinanceMarket:
     def _get_symbol_from_name(self, symbol_name:str):
         try:
             return self.symbols[symbol_name]
-        except:
+        except KeyError:
             logger.error(f'Symbol {symbol_name} is not present in {self.name}')
             raise ValueError(f'Symbol {symbol_name} is not present in {self.name}')
 
@@ -129,12 +131,12 @@ class BinanceMarket:
             raise
     
     @authentication_required
-    def get_orders(self, symbol:ExchangeSymbol, limit:int=100) -> list[Order]:
+    def get_orders(self, symbol:ExchangeSymbol) -> list[Order]:
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         try:
             logger.info(f'Getting orders on {self.name} for {symbol}')
-            orders = self.client.get_all_orders(symbol=symbol.name, limit=limit)
+            orders = self.client.get_all_orders(symbol=symbol.name)
             return [self._prep_order(order, symbol) for order in orders]
         except:
             logger.error(f'Error while getting order list on {self.name}', exc_info=True)
@@ -228,11 +230,8 @@ class BinanceMarket:
                 quote = symbol['quoteAsset'],
                 base_precision = symbol['baseAssetPrecision'],
                 quote_precision = symbol['quotePrecision'],
-                status = symbol['status'],
                 spot_trading_enabled = symbol['isSpotTradingAllowed'],
-                margin_trading_enabled = symbol['isMarginTradingAllowed'],
-                iceberg_allowed = symbol['icebergAllowed'],
-                oco_allowed = symbol['ocoAllowed'])
+                margin_trading_enabled = symbol['isMarginTradingAllowed'])
         if raw_price_filter := [filter for filter in symbol['filters'] if filter['filterType'] == 'PRICE_FILTER']:
             raw_price_filter = raw_price_filter[0]
             exc_symbol.filters.append(
@@ -297,7 +296,7 @@ class BinanceMarket:
             oid=order['orderId'],
             client_oid=order['clientOrderId'],
             symbol=symbol,
-            market=self.name,
+            market=self,
             type=order['type'].upper(),
             side=order['side'].upper(),
             price=float(order['price']),

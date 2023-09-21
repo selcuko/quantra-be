@@ -1,5 +1,6 @@
 
 
+from decimal import Decimal
 from typing import Literal
 
 
@@ -26,7 +27,7 @@ class PriceFilter:
             raise ValueError(f'Price {price} is too high, maximum is {self.max_price}')
         if self.min_price and price < float(self.min_price):
             raise ValueError(f'Price {price} is too low, minimum is {self.min_price}')
-        if self.tick_size and float(self.tick_size) > 0 and price % float(self.tick_size) != 0:
+        if self.tick_size and float(self.tick_size) > 0 and Decimal(str(price)) % Decimal(str(self.tick_size)) != 0:
             raise ValueError(f'Price {price} is not a multiple of {self.tick_size}')
         
         # Percent price filters
@@ -62,7 +63,7 @@ class LotFilter:
             raise ValueError(f'Quantity {quantity} is too low, minimum is {self.minimum_quantity}')
         if self.maximum_quantity and quantity > float(self.maximum_quantity):
             raise ValueError(f'Quantity {quantity} is too high, maximum is {self.maximum_quantity}')
-        if self.step_size and float(self.step_size) > 0 and quantity % float(self.step_size) != 0:
+        if self.step_size and float(self.step_size) > 0 and Decimal(str(quantity)) % Decimal(str(self.step_size)) != 0:
             raise ValueError(f'Quantity {quantity} is not a multiple of {self.step_size}')
         return True
     
@@ -74,6 +75,9 @@ class FundFilter:
         self.applies_to_market: bool = kwargs.get('apply_to_market', True)
         self.applies_min_to_market: bool = kwargs.get('apply_min_to_market', self.applies_to_market)
         self.applies_max_to_market: bool = kwargs.get('apply_max_to_market', self.applies_to_market)
+
+    def round(self, funds:float) -> float:
+        return float(funds)
     
     def validate(self, funds:float, order_type:Literal['limit', 'market']):
         if not self.applies_to_market and order_type == 'market':
