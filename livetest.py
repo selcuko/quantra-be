@@ -85,14 +85,14 @@ def run_livetest_in_sandbox(symbol, market, config, strategy, freq='15 min', end
             if not testman.bought:
                 last_order = market.place_market_order(symbol, 'buy', funds=testman.capital)
                 print('Placed order', last_order)
-                order = market.get_order(last_order.symbol, last_order.id)
+                order = market.get_order(last_order.symbol, last_order.oid)
                 print('Detail view', order)
             testman.buy({'time': ds.index[-1], **kline.to_dict()})
         elif should_sell:
             if testman.bought:
                 last_order = market.place_market_order(symbol, 'sell', quantity=testman.assets)
                 print('Placed order', last_order)
-                order = market.get_order(last_order.symbol, last_order.id)
+                order = market.get_order(last_order.symbol, last_order.oid)
                 print('Detail view', order)
             testman.sell({'time': ds.index[-1], **kline.to_dict()})
         print(testman.summary())
@@ -106,7 +106,14 @@ def run_livetest_in_sandbox(symbol, market, config, strategy, freq='15 min', end
     testman.shutdown()
 
 
-if __name__ == '__main__':
+def sample_livetest():
+    strg = get_strategy('v1')()
+    run_livetest('TARA-USDT', 'MEXC', strg)
+
+def sample_livetest_sandbox():
     conf = json.load(open('api.json'))['BINANCE-TESTNET']
     strg = get_strategy('v1')()
-    run_livetest_in_sandbox('BTC-USDT', 'BINANCE', conf, strg)
+    run_livetest_in_sandbox('XRP-USDT', 'BINANCE', conf, strg, freq='1 min')
+
+if __name__ == '__main__':
+    sample_livetest_sandbox()
