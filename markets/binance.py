@@ -26,6 +26,12 @@ class BinanceMarket:
             logger.error(f'Error while initializing {self.name}', exc_info=True)
             raise
         self.symbols = self.get_symbols()
+        if self.authenticated:
+            self.get_account()
+        else:
+            self.spot_trading_enabled = False
+            self.assets = {}
+            self.capital = 0
     
     def __str__(self) -> str:
         return f'{self.name} (Authenticated: {self.authenticated})'
@@ -190,6 +196,14 @@ class BinanceMarket:
         except:
             logger.error(f'Error while canceling all orders on {self.name}', exc_info=True)
             raise
+    
+    @authentication_required
+    def get_account(self):
+        logger.info(f'Getting account data on {self.name}')
+        account = self.client.get_account()
+        self.spot_trading_enabled = 'SPOT' in account.get('permissions', []) and account.get('canTrade')
+        self.assets = { asset['asset']: float(asset['free']) for asset in account['balances'] }
+        self.capital = self.assets.get('USDT', 0)
     
     def get_klines(self, symbol, interval, start:datetime, end:datetime=None, limit=1000):
         start = start.replace(second=0, microsecond=0)

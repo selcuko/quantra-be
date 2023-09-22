@@ -63,7 +63,15 @@ def run_livetest_in_sandbox(symbol, market, config, strategy, freq='15 min', end
     if isinstance(end, timedelta):
         end = datetime.now() + end
     market = get_market(market, config)
-    testman = TestManager(symbol=symbol, market=market.name, live=True, strategy=strategy, interval=freq) # params are optional
+    assert market.spot_trading_enabled, f'Spot trading is not enabled for this market ({market.name})'
+    testman = TestManager(
+        symbol=symbol, 
+        market=market.name, 
+        live=True, 
+        strategy=strategy, 
+        interval=freq,
+        initial_capital=market.capital,
+        commission={'buyer': 0.002, 'seller': 0.002})
     loop_interval = interval_to_minutes(freq) * 60
 
     def break_check():

@@ -69,4 +69,10 @@ class StrategyV1:
     def signals(self):
         self.ds['buy']  = self.ds['macd_buy'] & self.ds['stochrsi_buy'] & self.ds['t3_buy']
         self.ds['sell'] = self.ds['macd_sell'] & self.ds['stochrsi_sell'] & self.ds['t3_sell']
+    
+    def json(self):
+        return {
+            'name': self.name,
+            'params': self.params
+        }
 

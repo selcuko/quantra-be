@@ -4,6 +4,7 @@ import json
 import os
 from typing import Literal
 from logger import logger
+from markets import Market
 
 class Performance:
     def __init__(self, trades:list["Trade"], initial_capital:float=1000.):
@@ -134,33 +135,45 @@ class Trade:
 
 
 class TestManager:
-    def __init__(self, *args, **kwargs):
+    def __init__(self, 
+                 symbol:str, 
+                 market:Market, 
+                 type:Literal['live.basic', 'live.sandbox', 'live.mainnet', 'backtest'],
+                 strategy:callable,
+                 capital:float,
+                 interval:str,
+                 commission:dict={},
+                 start:datetime=None,
+                 end:datetime=None,
+                 verbose:bool=False,):
         """Manager class to hold testing data, analyze results, and keep track of trades."""
+        self.symbol = symbol
+        self.market = market
+        self.start = start
+        self.end = end
+        self.interval = interval
+        self.initial_capital = capital
+        self.type = type
+        self.strategy = strategy
+
         self.trades = []
-        self.initial_capital = self.capital = kwargs.get('capital', 1000)
         self.assets = 0
-        self.commission = kwargs.get('commission', 0.002)
-        self.shutdown_percent = kwargs.get('shutdown_percent', 50)
+        self.commissions = commission
+        if isinstance(self.commissions, float):
+            self.commissions = {'buyer': self.commission, 'seller': self.commission}
+        self.buyer_commission = self.commissions.get('buyer', 0)
+        self.seller_commission = self.commissions.get('seller', 0)
         self.wins = 0
         self.losses = 0
         self.bought = False
         self.bought_price = 0
         self.sold_price = 0
         self.last_profit_pct = 0
-        self.sold_at_shutdown = False
         self.buy_signals = 0
         self.sell_signals = 0
-        self.verbose = kwargs.get('verbose', False)
-        self.symbol = kwargs.get('symbol', None)
-        self.market = kwargs.get('market', None)
-        self.last_kline_dt = None
-        self.live = kwargs.get('live', False)
-        self.strategy = kwargs.get('strategy', None)
-        self.strategy_name = self.strategy.name if self.strategy else None
-        self.strategy_params = self.strategy.params if self.strategy else None
-        self.start = kwargs.get('start', None)
-        self.end = kwargs.get('end', None)
-        self.interval = kwargs.get('interval', None)
+        self.verbose = verbose
+        self.last_kline_dt = None     
+        self.capital = capital   
 
 
     def buy(self, kline):
@@ -172,7 +185,7 @@ class TestManager:
         price = kline['close']
         self.bought = True
         self.bought_price = price
-        self.assets = (1 - self.commission) * (self.capital / price)
+        self.assets = (1 - self.buyer_commission) * (self.capital / price)
         self.capital = 0
         trade = Trade(
             number=len(self.trades) // 2 + 1,
@@ -199,7 +212,7 @@ class TestManager:
             return
         price = kline['close']
         self.bought = False
-        self.capital = (1 - self.commission) * (self.assets * price)
+        self.capital = (1 - self.seller_commission) * (self.assets * price)
         self.assets = 0
         self.last_profit = self.equity - self.trades[-1].equity
         self.last_profit_pct = self.last_profit * 100 / self.trades[-1].equity
@@ -240,7 +253,7 @@ class TestManager:
 
     def summary(self):
         dtime = f'%dd-%mm-%YYYY %HH:%MM:%SS'
-        if self.live:
+        if self.type.startswith('live'):
             dtime = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
         elif self.last_kline_dt:
             dtime = self.last_kline_dt.strftime("%d-%m-%Y %H:%M:%S")
@@ -252,28 +265,26 @@ class TestManager:
     
     def to_dict(self):
         return {
+            'profit_pct': round(self.profit, 2),
             'start': str(self.start),
             'end': str(self.end),
             'duration': str((self.end - self.start) if self.end and self.start else None),
             'interval': self.interval,
-            'live': self.live,
+            'type': self.type,
             'trades_count': len(self.trades) // 2,
             'capital': self.capital,
             'assets': self.assets,
-            'commission': self.commission,
-            'shutdown_percent': self.shutdown_percent,
+            'commission': self.commissions,
             'wins': self.wins,
             'losses': self.losses,
             'bought': self.bought,
             'bought_price': self.bought_price,
             'sold_price': self.sold_price,
-            'sold_at_shutdown': self.sold_at_shutdown,
             'buy_signals': self.buy_signals,
             'sell_signals': self.sell_signals,
             'symbol': self.symbol,
             'market': self.market,
-            'strategy_name': self.strategy_name,
-            'strategy_params': self.strategy_params,
+            'strategy': self.strategy.json(),
             'performance': Performance(self.trades, self.initial_capital).to_dict(),
             'trades': [trade.to_dict() for trade in self.trades],
         }
@@ -281,7 +292,7 @@ class TestManager:
     def save_to_disk(self, filedir=None):
         if not filedir:
             if self.symbol and self.market and self.strategy:
-                filedir = f'testman/testman-{datetime.now()}-{self.symbol.upper()}-{self.market.upper()}-{self.strategy_name}.json'
+                filedir = f'testman/testman-{datetime.now()}-{self.symbol.upper()}-{self.market.upper()}-{self.strategy.name}.json'
             else:
                 filedir = f'testman/testman-{datetime.now()}.json'
         filedir = filedir.replace(' ', '_').replace(':', '-')
