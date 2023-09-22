@@ -20,8 +20,8 @@ class BinanceTests(QuantTestBase):
             '15m': 15,
         }
         interval = inv_map[interval]
-        start = datetime.fromtimestamp(float(start_str))
-        end = datetime.fromtimestamp(float(end_str))
+        start = self.market._standardize_datetime(start_str)
+        end = self.market._standardize_datetime(end_str)
         klines = []
         dtloop = start
         for i in range(limit):
@@ -71,4 +71,48 @@ class BinanceTests(QuantTestBase):
             end_str=expected_end,
         )
 
-        
+    @mock.patch.object(BinanceClient, 'get_historical_klines')
+    def test_get_klines(self, mock_get_historical_klines):
+        mock_get_historical_klines.side_effect = self.mock_get_historical_klines
+
+        start = datetime(2020, 1, 1, 5, 5)
+        end = datetime(2020, 1, 1, 5, 15)
+        klines = self.market.get_klines('BTC-USDT', '5 min', start, end)
+        self.assertEqual(len(klines), 3)
+        expected_start = self.market._format_datetime(start)
+        expected_end = self.market._format_datetime(end)
+        mock_get_historical_klines.assert_called_once_with(
+            symbol='BTCUSDT', 
+            interval='5m',
+            limit=1000,
+            start_str=expected_start,
+            end_str=expected_end,
+        )
+    
+    def test_json(self):
+        json = self.market.json()
+        self.assertEqual(json['name'], 'BINANCE')
+        self.assertFalse(json['authenticated'])
+        self.assertFalse(json['testnet'])
+    
+    def test_formatting_and_standardizing(self):
+        dtime = datetime(2020, 1, 1, 5, 5)
+        self.assertEqual(self.market._format_datetime(dtime), '1577844300000')
+
+        symbol = 'btc-USDT'
+        self.assertEqual(self.market._format_symbol(symbol), 'BTCUSDT')
+
+        interval = '15 min'
+        self.assertEqual(self.market._format_interval(interval), '15m')
+
+        kline = ['1577844300000', '1', '2', '3', '4', '5']
+        self.assertEqual(self.market._standardize_klines([kline]), [
+            [datetime(2020, 1, 1, 5, 5), 1, 2, 3, 4, 5]
+        ])
+
+        symbol = {'baseAsset': 'BTC', 'quoteAsset': 'USDT'}
+        self.assertEqual(self.market._standardize_symbol(symbol), 'BTC-USDT')
+
+        dtstr = '1577844300000'
+        self.assertEqual(self.market._standardize_datetime(dtstr), datetime(2020, 1, 1, 5, 5))
+
