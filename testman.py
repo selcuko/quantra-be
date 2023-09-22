@@ -179,8 +179,6 @@ class TestManager:
     def buy(self, kline):
         self.buy_signals += 1
         if self.bought:
-            if self.verbose:
-                print('Already bought, cannot buy again - ignoring buy signal')
             return
         price = kline['close']
         self.bought = True
@@ -207,8 +205,6 @@ class TestManager:
     def sell(self, kline):
         self.sell_signals += 1
         if not self.bought:
-            if self.verbose:
-                print('Not bought, cannot sell - ignoring sell signal')
             return
         price = kline['close']
         self.bought = False
@@ -278,12 +274,10 @@ class TestManager:
             'wins': self.wins,
             'losses': self.losses,
             'bought': self.bought,
-            'bought_price': self.bought_price,
-            'sold_price': self.sold_price,
             'buy_signals': self.buy_signals,
             'sell_signals': self.sell_signals,
             'symbol': self.symbol,
-            'market': self.market,
+            'market': self.market.json(),
             'strategy': self.strategy.json(),
             'performance': Performance(self.trades, self.initial_capital).to_dict(),
             'trades': [trade.to_dict() for trade in self.trades],
@@ -292,7 +286,7 @@ class TestManager:
     def save_to_disk(self, filedir=None):
         if not filedir:
             if self.symbol and self.market and self.strategy:
-                filedir = f'testman/testman-{datetime.now()}-{self.symbol.upper()}-{self.market.upper()}-{self.strategy.name}.json'
+                filedir = f'testman/testman-{datetime.now()}-{self.symbol.upper()}-{self.market.name.upper()}-{self.strategy.name}.json'
             else:
                 filedir = f'testman/testman-{datetime.now()}.json'
         filedir = filedir.replace(' ', '_').replace(':', '-')

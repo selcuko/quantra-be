@@ -14,12 +14,14 @@ class BinanceMarket:
     name = 'BINANCE'
     def __init__(self, config={}):
         self.authenticated = bool(config.get('API_KEY') and config.get('API_SECRET'))
+        self.testnet = False
         try:
             if self.authenticated:
+                self.testnet = config.get('TESTNET', False)
                 self.client = Client(
                     api_key=config['API_KEY'],
                     api_secret=config['API_SECRET'],
-                    testnet=config['TESTNET'])
+                    testnet=self.testnet)
             else:
                 self.client = Client()
         except Exception as e:
@@ -332,4 +334,11 @@ class BinanceMarket:
             logger.warning(error)
             raise Exception(error)
         return klines
+    
+    def json(self):
+        return {
+            'name': self.name,
+            'authenticated': self.authenticated,
+            'testnet': self.testnet,
+        }
         

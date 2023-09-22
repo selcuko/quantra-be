@@ -1,9 +1,9 @@
 from datetime import datetime, timedelta
 import json
 import time, sys
-from markets import MarketError, get_market
+from markets import Market, MarketError, get_market
 from models import OHLCVDataset, interval_to_minutes
-from strategy import get_strategy
+from strategy import Strategy, get_strategy
 from testman import TestManager
 from logger import logger
 
@@ -57,20 +57,22 @@ def run_livetest(symbol, market_name, strategy:callable, freq='15 min', end:date
             break
     testman.shutdown()
 
-def run_livetest_in_sandbox(symbol, market, config, strategy, freq='15 min', end:datetime=None):
-    if not config.get('TESTNET'):
-        raise ValueError('You can only run this live test in sandbox mode')
+def run_livetest_in_sandbox(symbol, market:Market, strategy:Strategy, freq='15 min', end:datetime=None, capital=100):
     if isinstance(end, timedelta):
         end = datetime.now() + end
-    market = get_market(market, config)
+
+    assert market.testnet, f'This market config ({market.name}) is not using a testnet'
     assert market.spot_trading_enabled, f'Spot trading is not enabled for this market ({market.name})'
+    assert capital > 0, 'Capital must be greater than 0'
+    assert capital < market.capital, f'Capital must be less than account funds of ${market.capital:.2f}'
+
     testman = TestManager(
         symbol=symbol, 
-        market=market.name, 
-        live=True, 
+        market=market, 
+        type='live.sandbox', 
         strategy=strategy, 
         interval=freq,
-        initial_capital=market.capital,
+        capital=capital,
         commission={'buyer': 0.002, 'seller': 0.002})
     loop_interval = interval_to_minutes(freq) * 60
 
@@ -81,28 +83,31 @@ def run_livetest_in_sandbox(symbol, market, config, strategy, freq='15 min', end
 
     while break_check():
         loop_start = time.time()
-        klines = market.get_last_klines(symbol, freq)
-        ds = OHLCVDataset(klines)
-        ds = strategy(ds)
-        should_buy = ds.iloc[-1]['buy']
-        should_sell = ds.iloc[-1]['sell']
-        kline = ds.iloc[-1]
+        
+        last_klines = market.get_last_klines(symbol, freq)
+        raw_ds = OHLCVDataset(last_klines)
+        stg_ds = strategy(raw_ds)
+
+        last_kline = stg_ds.iloc[-1]
+        should_buy = last_kline['buy']
+        should_sell = last_kline['sell']
+        
         last_order = None
 
         if should_buy:
             if not testman.bought:
                 last_order = market.place_market_order(symbol, 'buy', funds=testman.capital)
                 print('Placed order', last_order)
-                order = market.get_order(last_order.symbol, last_order.oid)
-                print('Detail view', order)
-            testman.buy({'time': ds.index[-1], **kline.to_dict()})
+                last_order = market.get_order(last_order.symbol, last_order.oid)
+                print('Detail view', last_order)
+            testman.buy({'time': stg_ds.index[-1], **last_kline.to_dict()})
         elif should_sell:
             if testman.bought:
                 last_order = market.place_market_order(symbol, 'sell', quantity=testman.assets)
                 print('Placed order', last_order)
-                order = market.get_order(last_order.symbol, last_order.oid)
-                print('Detail view', order)
-            testman.sell({'time': ds.index[-1], **kline.to_dict()})
+                last_order = market.get_order(last_order.symbol, last_order.oid)
+                print('Detail view', last_order)
+            testman.sell({'time': stg_ds.index[-1], **last_kline.to_dict()})
         print(testman.summary())
         try:
             loop_end = time.time()

@@ -11,9 +11,8 @@ from markets.helper import authentication_required
 class KucoinMarket:
     name = 'KUCOIN'
     def __init__(self, config={}) -> None:
-        self.authenticated = False
-        if config:
-            self.authenticated = bool(config.get('API_KEY') and config.get('API_SECRET') and config.get('API_PASSPHRASE'))
+        self.authenticated = bool(config.get('API_KEY') and config.get('API_SECRET') and config.get('API_PASSPHRASE'))
+        self.testnet = False # KuCoin does not offer a TestNet at the moment (2023-09-22)
         try:
             if self.authenticated:
                 self.market = Market(
@@ -315,3 +314,10 @@ class KucoinMarket:
             logger.warning(error)
             raise Exception(error)
         return klines
+
+    def json(self):
+        return {
+            'name': self.name,
+            'authenticated': self.authenticated,
+            'testnet': self.testnet,
+        }
