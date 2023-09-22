@@ -9,23 +9,26 @@ if TYPE_CHECKING:
     from markets import Market
 
 def interval_to_minutes(interval):
-    return {
-        '1 min': 1,
-        '3 min': 3,
-        '5 min': 5,
-        '15 min': 15,
-        '30 min': 30,
-        '1 hour': 60,
-        '2 hour': 120,
-        '4 hour': 240,
-        '6 hour': 360,
-        '8 hour': 480,
-        '12 hour': 720,
-        '1 day': 1440,
-        '3 day': 4320,
-        '1 week': 10080,
-        '1 month': 43200,
-    }[interval]
+    try:
+        return {
+            '1 min': 1,
+            '3 min': 3,
+            '5 min': 5,
+            '15 min': 15,
+            '30 min': 30,
+            '1 hour': 60,
+            '2 hour': 120,
+            '4 hour': 240,
+            '6 hour': 360,
+            '8 hour': 480,
+            '12 hour': 720,
+            '1 day': 1440,
+            '3 day': 4320,
+            '1 week': 10080,
+            '1 month': 43200,
+        }[interval]
+    except KeyError:
+        raise ValueError(f'Intverval "{interval}" is in invalid format, provide in the form of "1 min" or "1 hour"')
 
 
 class OHLCVDataset(pd.DataFrame):

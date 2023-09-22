@@ -51,7 +51,7 @@ class BinanceMarket:
         return f'{symbol["baseAsset"]}-{symbol["quoteAsset"]}'
 
     def _format_symbol(self, symbol):
-        assert '-' in symbol, f'Symbol must be in the format BASE-QUOTE, you provided:{symbol}'
+        assert '-' in symbol, f'Symbol must be in the format BASE-QUOTE (e.g. BTC-USDT), you provided: "{symbol}"'
         symbol = symbol.replace('-', '').upper()
         return symbol
 
@@ -75,7 +75,7 @@ class BinanceMarket:
         }[interval]
 
     def _format_datetime(self, dt):
-        return str(dt.timestamp())
+        return str(int(dt.replace(second=0, microsecond=0).timestamp()))
 
     def _get_symbol_from_name(self, symbol_name:str):
         try:
@@ -208,11 +208,9 @@ class BinanceMarket:
         self.capital = self.assets.get('USDT', 0)
     
     def get_klines(self, symbol, interval, start:datetime, end:datetime=None, limit=1000):
-        start = start.replace(second=0, microsecond=0)
-        #return memory.cache(self._get_klines, ignore=['self'])(symbol, interval, start, limit)
         return self._get_klines(symbol, interval, start, end, limit)
 
-    def _get_klines(self, symbol, interval, start:datetime, end:datetime=None, limit=1000, retry=3):
+    def _get_klines(self, symbol, interval, start:datetime, end:datetime=None, limit=1000, retry=0):
         if end:
             logger.debug('param:end specified while fetching klines, ignoring param:limit')
             calculated_end = end
@@ -224,7 +222,7 @@ class BinanceMarket:
                         symbol=self._format_symbol(symbol), 
                         interval=self._format_interval(interval), 
                         start_str=self._format_datetime(start),
-                        end_str=str(calculated_end),
+                        end_str=self._format_datetime(calculated_end),
                         limit=limit
                     )
         except:
@@ -327,9 +325,12 @@ class BinanceMarket:
         minutes = interval_to_minutes(interval)
         now = datetime.now()
         start = now - timedelta(minutes=minutes*limit)
-        klines = self.get_klines(symbol, interval, start, now)
+        klines = self.get_klines(symbol, interval, start, now, limit=limit)
+        if klines == []:
+            logger.warning(f'No klines found for {symbol} at {start} -> {now}')
+            return []
         last_kline_dt = klines[-1][0]
-        if (now - last_kline_dt) > timedelta(minutes=minutes):
+        if (now - last_kline_dt) > timedelta(minutes=minutes*2):
             error = f'Last kline dt {last_kline_dt} does not match current time {now}, total klines: {len(klines)}, {start} -> {now}'
             logger.warning(error)
             raise Exception(error)
