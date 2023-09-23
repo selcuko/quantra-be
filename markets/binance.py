@@ -236,6 +236,7 @@ class BinanceMarket:
                 quantity=quantity, 
                 quoteOrderQty=funds, 
                 newClientOrderId=client_oid)
+            print("raw", order)
             logger.info(f'Market order placed on {self.name} for {symbol} with side {side} and funds {funds} and quantity {quantity} with order id {order["orderId"]}')
             return self._prep_order(order, symbol)
         except:
@@ -341,7 +342,12 @@ class BinanceMarket:
         logger.info(f'Getting account data on {self.name}')
         account = self.client.get_account()
         self.spot_trading_enabled = 'SPOT' in account.get('permissions', []) and account.get('canTrade')
-        self.assets = { asset['asset']: float(asset['free']) for asset in account['balances'] }
+        self.assets = { asset['asset']: float(asset['free']) for asset in account.get('balances', []) }
         self.capital = self.assets.get('USDT', 0)
+        
+        if not account.get('balances'):
+            logger.error('`balances` key not found in account data, revise Binance interface')
+        if not self.spot_trading_enabled:
+            logger.error('Spot trading is not enabled on Binance account')
 
 

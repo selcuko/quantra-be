@@ -1,16 +1,19 @@
 from datetime import datetime, timedelta
+from random import randint
+import uuid
 from tests import QuantTestBase
 import unittest
 from unittest import mock
 from markets import get_market
 from binance.client import Client as BinanceClient
-from models import interval_to_minutes
+from models import Order, interval_to_minutes
 
 class BinanceTests(QuantTestBase):
 
-    @mock.patch('binance.client.Client')
-    def setUp(self, mock_client):
-        self.market = get_market('BINANCE')
+    @mock.patch.object(BinanceClient, 'get_account')
+    def setUp(self, mock_get_account):
+        mock_get_account.return_value = {}
+        self.market = get_market('BINANCE', {'API_KEY': 'apikey', 'API_SECRET': 'apisecret', 'TESTNET': True})
     
     def mock_get_historical_klines(self, symbol:str, interval:str, start_str:str, end_str:str, limit:int=500):
         inv_map = {
@@ -37,6 +40,48 @@ class BinanceTests(QuantTestBase):
             if dtloop > end:
                 break
         return klines
+
+    def mock_create_order(self, symbol:str, side:str, type:str, quantity:float=None, funds:float=None, price:float=None, newClientOrderId:str=None, quoteOrderQty:float=None, stopPrice:float=None, icebergQty:float=None, newOrderRespType:str=None, recvWindow:int=None, timeInForce:str=None):
+        assert quantity or funds if type == 'MARKET' else price and quantity, f'Must specify quantity or funds for market orders, or price and quantity for limit orders (type={type}, qty={quantity}, funds={funds}, price={price})'
+        price = '0.00000000' if not price else str(price)
+        quantity = '0.00000000' if not quantity else str(quantity)
+        funds = '0.00000000' if not funds else str(funds)
+        status = 'FILLED' if type == 'MARKET' else 'NEW'
+        return {
+            'symbol': self.market._format_symbol(symbol), 
+            'orderId': randint(1000000000, 9999999999),
+            'orderListId': -1, 
+            'clientOrderId': newClientOrderId, 
+            'transactTime': datetime.now().timestamp() * 1000, 
+            'price': price, 
+            'origQty': quantity, 
+            'executedQty': quantity, 
+            'cummulativeQuoteQty': funds, 
+            'status': status, 
+            'timeInForce': 'GTC', 
+            'type': type, 
+            'side': side, 
+            'workingTime': datetime.now().timestamp() * 1000, 
+            'fills': [], 
+            'selfTradePreventionMode': 'NONE'
+        }
+
+    @mock.patch.object(uuid, 'uuid4')
+    @mock.patch.object(BinanceClient, 'create_order')
+    def test_place_market_order(self, mock_create_order, mock_uuid4):
+        mock_create_order.side_effect = self.mock_create_order
+        mock_uuid4.return_value = uuid.UUID('12345678-1234-1234-1234-123456789012')
+
+        order: Order = self.market.place_market_order('BTC-USDT', 'buy', funds=50)
+        args, kwargs = mock_create_order.call_args
+        self.assertEqual(kwargs['symbol'], 'BTCUSDT')
+        self.assertEqual(kwargs['side'], 'BUY')
+        self.assertEqual(kwargs['type'], 'MARKET')
+        self.assertEqual(kwargs['quantity'], '0.00000000')
+        self.assertEqual(kwargs['funds'], '50.00000000')
+        self.assertEqual(kwargs['price'], '0.00000000')
+        self.assertEqual(kwargs['newClientOrderId'], None)
+        self.assertEqual(order.symbol.name, 'BTC-USDT')
 
 
     @mock.patch.object(BinanceClient, 'get_historical_klines')
@@ -115,4 +160,3 @@ class BinanceTests(QuantTestBase):
 
         dtstr = '1577844300000'
         self.assertEqual(self.market._standardize_datetime(dtstr), datetime(2020, 1, 1, 5, 5))
-
