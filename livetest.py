@@ -58,6 +58,7 @@ def run_livetest(symbol, market_name, strategy:callable, freq='15 min', end:date
     testman.shutdown()
 
 def run_livetest_in_sandbox(symbol, market:Market, strategy:Strategy, freq='15 min', end:datetime=None, capital=100):
+    print(f'Running live test on {symbol} from {market.name} with freq {freq.replace(" ", "").upper()}, planned shutdown at {end}')
     if isinstance(end, timedelta):
         end = datetime.now() + end
 
@@ -73,10 +74,11 @@ def run_livetest_in_sandbox(symbol, market:Market, strategy:Strategy, freq='15 m
         strategy=strategy, 
         interval=freq,
         capital=capital,
-        commission={'buyer': 0.002, 'seller': 0.002})
-    loop_interval = interval_to_minutes(freq) * 60
+        commission=market.commission)
+    loop_interval_s = interval_to_minutes(freq) * 60
 
     def break_check():
+        """Reserved for future functionality"""
         if end:
             return end > datetime.now()
         return True
@@ -91,28 +93,30 @@ def run_livetest_in_sandbox(symbol, market:Market, strategy:Strategy, freq='15 m
         last_kline = stg_ds.iloc[-1]
         should_buy = last_kline['buy']
         should_sell = last_kline['sell']
-        
         last_order = None
-
+        testman.update(kline={'time': stg_ds.index[-1], **last_kline.to_dict()})
         if should_buy:
             if not testman.bought:
                 last_order = market.place_market_order(symbol, 'buy', funds=testman.capital)
-                print('Placed order', last_order)
                 last_order = market.get_order(last_order.symbol, last_order.oid)
-                print('Detail view', last_order)
-            testman.buy({'time': stg_ds.index[-1], **last_kline.to_dict()})
+                if not last_order.status in ['ACTIVE', 'FILLED']:
+                    logger.error(f'Order {last_order.oid} failed to fill, status: {last_order.status}')
+            testman.buy({'time': stg_ds.index[-1], **last_kline.to_dict()}, sync=last_order)
+            #print('\n', testman.summary())
         elif should_sell:
             if testman.bought:
                 last_order = market.place_market_order(symbol, 'sell', quantity=testman.assets)
-                print('Placed order', last_order)
                 last_order = market.get_order(last_order.symbol, last_order.oid)
-                print('Detail view', last_order)
-            testman.sell({'time': stg_ds.index[-1], **last_kline.to_dict()})
+                if not last_order.status in ['ACTIVE', 'FILLED']:
+                    logger.error(f'Order {last_order.oid} failed to fill, status: {last_order.status}')
+            testman.sell({'time': stg_ds.index[-1], **last_kline.to_dict()}, sync=last_order)
+            #print('\n', testman.summary())
+        #print(':', end='', flush=True)
         print(testman.summary())
         try:
             loop_end = time.time()
             loop_took = loop_end - loop_start
-            time.sleep(loop_interval - loop_took)
+            time.sleep(loop_interval_s - loop_took)
         except KeyboardInterrupt:
             logger.info('KeyboardInterrupt detected, shutting down gracefully')
             break
@@ -126,7 +130,7 @@ def sample_livetest():
 def sample_livetest_sandbox():
     conf = json.load(open('api.json'))['BINANCE-TESTNET']
     strg = get_strategy('v1')()
-    run_livetest_in_sandbox('XRP-USDT', 'BINANCE', conf, strg, freq='1 min')
+    run_livetest_in_sandbox('XRP-USDT', get_market('BINANCE', conf), strg, freq='1 min')
 
 if __name__ == '__main__':
     sample_livetest_sandbox()

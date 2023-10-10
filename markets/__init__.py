@@ -24,6 +24,8 @@ class Market:
     testnet: bool
     name: str
     spot_trading_enabled: bool
+    capital: float
+    commission: dict[str, float]
     def __init__(self, config:dict={}):
         """Initialize a market instance with config if provided."""
         pass

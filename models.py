@@ -161,7 +161,11 @@ class ExchangeSymbol:
         self.quote_precision = kwargs.get('quote_precision')
         self.spot_trading_enabled = kwargs.get('spot_trading_enabled', True)
         self.margin_trading_enabled = kwargs.get('margin_trading_enabled', False)
-        self.filters = kwargs.get('filters', [])
+        self.filters = kwargs.get('filters', {
+            'price': [],
+            'lot': [],
+            'fund': [],
+        })
     
     def json(self):
         return {

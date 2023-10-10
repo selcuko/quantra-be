@@ -5,6 +5,7 @@ import os
 from typing import Literal
 from logger import logger
 from markets import Market
+from models import Order
 
 class Performance:
     def __init__(self, trades:list["Trade"], initial_capital:float=1000.):
@@ -174,17 +175,27 @@ class TestManager:
         self.verbose = verbose
         self.last_kline_dt = None     
         self.capital = capital   
+        self.last_kline = None
 
-
-    def buy(self, kline):
+    def buy(self, kline, sync:Order=None):
         self.buy_signals += 1
         if self.bought:
             return
-        price = kline['close']
+        self.update(kline)
+        price = self.last_kline['close']
         self.bought = True
         self.bought_price = price
-        self.assets = (1 - self.buyer_commission) * (self.capital / price)
-        self.capital = 0
+        if sync:
+            self.assets += sync.deal_size
+            self.capital -= sync.deal_funds
+            if self.capital < 0:
+                logger.error('Capital is less than 0, TestMan went out of sync with market data. (setting to 0)')
+                self.capital = 0
+        else:
+            if self.type in ['live.sandbox', 'live.mainnet']:
+                logger.error('Sync order is not provided in live mode, results may be inaccurate.')
+            self.assets = (1 - self.buyer_commission) * (self.capital / price)
+            self.capital = 0
         trade = Trade(
             number=len(self.trades) // 2 + 1,
             price=price,
@@ -199,17 +210,26 @@ class TestManager:
             rawrow=kline
         )
         self.trades.append(trade)
-        self.last_kline_dt = kline['time']
         return True
 
-    def sell(self, kline):
+    def sell(self, kline, sync:Order=None):
         self.sell_signals += 1
         if not self.bought:
             return
-        price = kline['close']
+        self.update(kline)
+        price = self.last_kline['close']
         self.bought = False
-        self.capital = (1 - self.seller_commission) * (self.assets * price)
-        self.assets = 0
+        if sync:
+            self.capital += sync.deal_funds
+            self.assets -= sync.deal_size
+            if self.assets < 0:
+                logger.error('Assets is less than 0, TestMan went out of sync with market data. (setting to 0)')
+                self.assets = 0
+        else:
+            if self.type in ['live.sandbox', 'live.mainnet']:
+                logger.error('Sync order is not provided in live mode, results may be inaccurate.')
+            self.capital = (1 - self.seller_commission) * (self.assets * price)
+            self.assets = 0
         self.last_profit = self.equity - self.trades[-1].equity
         self.last_profit_pct = self.last_profit * 100 / self.trades[-1].equity
         self.sold_price = price
@@ -231,7 +251,6 @@ class TestManager:
             rawrow=kline
         )
         self.trades.append(trade)
-        self.last_kline_dt = kline['time']
         return True
     
     def shutdown(self):
@@ -240,7 +259,7 @@ class TestManager:
     @property
     def equity(self):
         """Total equity in USD."""
-        return self.capital + self.assets * self.bought_price
+        return self.capital + self.assets * self.last_kline['close']
 
     @property
     def profit(self):
@@ -254,9 +273,14 @@ class TestManager:
         elif self.last_kline_dt:
             dtime = self.last_kline_dt.strftime("%d-%m-%Y %H:%M:%S")
         number = self.trades[-1].number if self.trades else 0
-        txt = f'[{dtime}][{number:>3d}:{"BUY" if self.bought else "SLL"}] Equity: {self.equity:>6.2f} USDT'
-        if not self.bought:
-            txt += f' | Profit: {self.profit:>4.2f}% | Last trade: {self.last_profit_pct:>3.2f}%'
+        txt = f'''\
+[{dtime}][{number:>3d}:{" IN" if self.bought else "OUT"}] \
+Equity: {self.equity:>3.2f} USDT | \
+Price: {self.last_kline["close"]:>3.4f} USDT | \
+Profit: {self.profit:>4.2f}% | \
+Last trade: {self.last_profit_pct:>3.2f}% | \
+Assets: {self.assets:>3.2f} | \
+Capital: {self.capital:>3.2f} USDT '''
         return txt
     
     def to_dict(self):
@@ -299,4 +323,6 @@ class TestManager:
         logger.info(f'Saved TestMan instance to {filedir}')
         return filedir
 
-    
+    def update(self, kline):
+        self.last_kline = kline
+        self.last_kline_dt = kline['time']

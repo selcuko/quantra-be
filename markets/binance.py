@@ -1,9 +1,10 @@
+from decimal import Decimal
 import uuid, time
 from typing import Literal
 from datetime import datetime, timedelta
 from binance.client import Client
 from logger import logger
-from markets.helper import authentication_required
+from markets.helper import authentication_required, float_to_precision
 from models import ExchangeSymbol, Order, interval_to_minutes
 from filters import LotFilter, PriceFilter, FundFilter
 
@@ -103,7 +104,7 @@ class BinanceMarket:
                 margin_trading_enabled = symbol['isMarginTradingAllowed'])
         if raw_price_filter := [filter for filter in symbol['filters'] if filter['filterType'] == 'PRICE_FILTER']:
             raw_price_filter = raw_price_filter[0]
-            exc_symbol.filters.append(
+            exc_symbol.filters['price'].append(
                 PriceFilter(
                     max_price=raw_price_filter.get('maxPrice'),
                     min_price=raw_price_filter.get('minPrice'),
@@ -116,7 +117,7 @@ class BinanceMarket:
                 )
         if raw_pct_price_filter := [filter for filter in symbol['filters'] if filter['filterType'] == 'PERCENT_PRICE_BY_SIDE']:
             raw_pct_price_filter = raw_pct_price_filter[0]
-            exc_symbol.filters.append(
+            exc_symbol.filters['price'].append(
                 PriceFilter(
                     max_price=raw_pct_price_filter.get('maxPrice'),
                     min_price=raw_pct_price_filter.get('minPrice'),
@@ -129,7 +130,7 @@ class BinanceMarket:
                 )
         if raw_lot_filter := [filter for filter in symbol['filters'] if filter['filterType'] == 'LOT_SIZE']:
             raw_lot_filter = raw_lot_filter[0]
-            exc_symbol.filters.append(
+            exc_symbol.filters['lot'].append(
                 LotFilter(
                     minimum_quantity=raw_lot_filter.get('minQty'),
                     maximum_quantity=raw_lot_filter.get('maxQty'),
@@ -139,7 +140,7 @@ class BinanceMarket:
                 )
         if raw_market_lot_filter := [filter for filter in symbol['filters'] if filter['filterType'] == 'MARKET_LOT_SIZE']:
             raw_market_lot_filter = raw_market_lot_filter[0]
-            exc_symbol.filters.append(
+            exc_symbol.filters['lot'].append(
                 LotFilter(
                     minimum_quantity=raw_market_lot_filter.get('minQty'),
                     maximum_quantity=raw_market_lot_filter.get('maxQty'),
@@ -147,9 +148,9 @@ class BinanceMarket:
                     applies_to_market=True
                     )
                 )
-        if raw_notional_filter := [filter for filter in symbol['filters'] if filter['filterType'] == 'MIN_NOTIONAL']:
+        if raw_notional_filter := [filter for filter in symbol['filters'] if filter['filterType'] == 'NOTIONAL']:
             raw_notional_filter = raw_notional_filter[0]
-            exc_symbol.filters.append(
+            exc_symbol.filters['fund'].append(
                 FundFilter(
                     minimum_notional=raw_notional_filter.get('minNotional'),
                     maximum_notional=raw_notional_filter.get('maxNotional'),
@@ -158,6 +159,27 @@ class BinanceMarket:
                     )
                 )
         return exc_symbol
+
+    def _prep_order_values(self, symbol:ExchangeSymbol, **kwargs):
+        if kwargs.get('price'):
+            if not symbol.filters['price']:
+                return kwargs['price']
+            for filter in symbol.filters['price']:
+                kwargs['price'] = filter.round(kwargs['price'])
+            return kwargs['price']
+        if kwargs.get('quantity'):
+            if not symbol.filters['lot']:
+                return kwargs['quantity']
+            for filter in symbol.filters['lot']:
+                kwargs['quantity'] = filter.round(kwargs['quantity'])
+            return kwargs['quantity']
+        if kwargs.get('funds'):
+            if not symbol.filters['fund']:
+                return kwargs['funds']
+            for filter in symbol.filters['fund']:
+                kwargs['funds'] = filter.round(kwargs['funds'])
+            return kwargs['funds']
+        raise ValueError(f'Could not round values for {symbol} with kwargs {kwargs}')
 
     def _prep_order(self, order:dict, symbol:ExchangeSymbol):
         order_time = order.get('time') or order.get('workingTime') or order.get('transactTime') or order.get('updateTime')
@@ -228,6 +250,10 @@ class BinanceMarket:
         client_oid = uuid.uuid4().hex
         if (not funds and not quantity) or (funds and quantity):
             raise ValueError(f'You must provide either funds or quantity to place a market order on {self.name}')
+        if funds:
+            funds = float_to_precision(Decimal(funds), Decimal(symbol.quote_precision))
+        if quantity:
+            quantity = float_to_precision(Decimal(quantity), Decimal(symbol.base_precision))
         try:
             logger.info(f'Placing market order on {self.name} for {symbol} with side {side} and funds {funds} and quantity {quantity}')
             order = self.client.order_market(
@@ -339,11 +365,16 @@ class BinanceMarket:
 
     @authentication_required
     def get_account(self):
-        logger.info(f'Getting account data on {self.name}')
         account = self.client.get_account()
         self.spot_trading_enabled = 'SPOT' in account.get('permissions', []) and account.get('canTrade')
         self.assets = { asset['asset']: float(asset['free']) for asset in account.get('balances', []) }
         self.capital = self.assets.get('USDT', 0)
+        self.commission = {
+            'buyer': float(account.get('buyerCommission', 0)),
+            'seller': float(account.get('sellerCommission', 0)),
+            'maker': float(account.get('makerCommission', 0)),
+            'taker': float(account.get('takerCommission', 0)),
+        }
         
         if not account.get('balances'):
             logger.error('`balances` key not found in account data, revise Binance interface')
