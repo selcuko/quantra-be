@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta
 import os, sys
+
+import pytz
 from markets import get_market
 from logger import logger
 
@@ -73,7 +75,7 @@ def _get_starting_point(filename):
         return None
     with open(filename, 'r') as infile:
         for line in infile:
-            return datetime.fromtimestamp(int(line.split(',')[0]))
+            return datetime.fromtimestamp(int(line.split(',')[0]), tz=pytz.UTC)
 
 
 def _validate_file(filename, interpolate=True, drop_duplicates=True):
@@ -112,7 +114,7 @@ def _validate_file(filename, interpolate=True, drop_duplicates=True):
         last = int(line.split(',')[0])
     logger.debug(f'File {filename} is valid.')
     if notempty:
-        return datetime.fromtimestamp(int(line.split(',')[0]) + 60).replace(second=0, microsecond=0)
+        return datetime.fromtimestamp(int(line.split(',')[0]) + 60, tz=pytz.UTC).replace(second=0, microsecond=0)
     return True
 
 
@@ -170,7 +172,7 @@ def download_symbol(market_name:str, symbol:str, start:datetime, end:datetime=No
             new_klines += 1
             line = f'{int(kline[0].timestamp())},{kline[1]},{kline[2]},{kline[3]},{kline[4]},{kline[5]}\n'
             outfile.write(line)
-        logger.info(f'[DownloadInProgress][{datetime.now()}] Klines: {new_klines} | Last kline: {klines[-1][0]}')
+        logger.info(f'[DownloadInProgress][{datetime.now(tz=pytz.UTC)}] Klines: {new_klines} | Last kline: {klines[-1][0]}')
     if new_klines: print()
     outfile.close()
     validation_ok = _validate_file(_get_filename(market.name, symbol), interpolate, drop_duplicates)

@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 import json
-import time, sys
+import time
+import pytz
 from markets import Market, MarketError, get_market
 from models import OHLCVDataset, interval_to_minutes
 from strategy import Strategy, get_strategy
@@ -20,12 +21,12 @@ def run_livetest(symbol, market_name, strategy:callable, freq='15 min', end:date
     symbol = symbol.upper()
     testman = TestManager(symbol=symbol, market=market.name, live=True, strategy=strategy) # params are optional
     if isinstance(end, timedelta):
-        end = datetime.now() + end
+        end = datetime.now(tz=pytz.UTC) + end
     
     logger.info(f'Running live test on {symbol} from {market.name} with freq {freq.replace(" ", "").upper()}, planned shutdown at {end}')
     def break_check():
         # more like brake check haha
-        if end and datetime.now() > end:
+        if end and datetime.now(tz=pytz.UTC) > end:
             return True
         return False
 
@@ -60,7 +61,7 @@ def run_livetest(symbol, market_name, strategy:callable, freq='15 min', end:date
 def run_livetest_in_sandbox(symbol, market:Market, strategy:Strategy, freq='15 min', end:datetime=None, capital=100):
     print(f'Running live test on {symbol} from {market.name} with freq {freq.replace(" ", "").upper()}, planned shutdown at {end}')
     if isinstance(end, timedelta):
-        end = datetime.now() + end
+        end = datetime.now(tz=pytz.UTC) + end
 
     assert market.testnet, f'This market config ({market.name}) is not using a testnet'
     assert market.spot_trading_enabled, f'Spot trading is not enabled for this market ({market.name})'
@@ -75,17 +76,23 @@ def run_livetest_in_sandbox(symbol, market:Market, strategy:Strategy, freq='15 m
         interval=freq,
         capital=capital,
         commission=market.commission)
+    last_kline_ts = None
     loop_interval_s = interval_to_minutes(freq) * 60
 
     def break_check():
-        """Reserved for future functionality"""
+        """Wait before the first seconds of next candle"""
         if end:
-            return end > datetime.now()
+            return end > datetime.now(tz=pytz.UTC)
+        if last_kline_ts: # calculate time to the next minute
+            residue = last_kline_ts + loop_interval_s + 5 - time.time()
+            if residue > 0:
+                time.sleep(residue)
+            else:
+                # new candle is not available yet
+                time.sleep(1)
         return True
 
-    while break_check():
-        loop_start = time.time()
-        
+    while break_check():        
         last_klines = market.get_last_klines(symbol, freq)
         raw_ds = OHLCVDataset(last_klines)
         stg_ds = strategy(raw_ds)
@@ -102,7 +109,6 @@ def run_livetest_in_sandbox(symbol, market:Market, strategy:Strategy, freq='15 m
                 if not last_order.status in ['ACTIVE', 'FILLED']:
                     logger.error(f'Order {last_order.oid} failed to fill, status: {last_order.status}')
             testman.buy({'time': stg_ds.index[-1], **last_kline.to_dict()}, sync=last_order)
-            #print('\n', testman.summary())
         elif should_sell:
             if testman.bought:
                 last_order = market.place_market_order(symbol, 'sell', quantity=testman.assets)
@@ -110,16 +116,8 @@ def run_livetest_in_sandbox(symbol, market:Market, strategy:Strategy, freq='15 m
                 if not last_order.status in ['ACTIVE', 'FILLED']:
                     logger.error(f'Order {last_order.oid} failed to fill, status: {last_order.status}')
             testman.sell({'time': stg_ds.index[-1], **last_kline.to_dict()}, sync=last_order)
-            #print('\n', testman.summary())
-        #print(':', end='', flush=True)
         print(testman.summary())
-        try:
-            loop_end = time.time()
-            loop_took = loop_end - loop_start
-            time.sleep(loop_interval_s - loop_took)
-        except KeyboardInterrupt:
-            logger.info('KeyboardInterrupt detected, shutting down gracefully')
-            break
+        last_kline_ts = stg_ds.index[-1].timestamp()
     testman.shutdown()
 
 
@@ -130,7 +128,7 @@ def sample_livetest():
 def sample_livetest_sandbox():
     conf = json.load(open('api.json'))['BINANCE-TESTNET']
     strg = get_strategy('v1')()
-    run_livetest_in_sandbox('XRP-USDT', get_market('BINANCE', conf), strg, freq='1 min')
+    run_livetest_in_sandbox('XRP-USDT', get_market('BINANCE', conf), strg, freq='3 min')
 
 if __name__ == '__main__':
     sample_livetest_sandbox()

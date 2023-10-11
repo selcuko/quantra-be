@@ -3,6 +3,8 @@ from datetime import datetime, timedelta
 import json
 import os
 from typing import Literal
+
+import pytz
 from logger import logger
 from markets import Market
 from models import Order
@@ -269,7 +271,7 @@ class TestManager:
     def summary(self):
         dtime = f'%dd-%mm-%YYYY %HH:%MM:%SS'
         if self.type.startswith('live'):
-            dtime = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+            dtime = datetime.now(tz=pytz.UTC).strftime("%d-%m-%Y %H:%M:%S")
         elif self.last_kline_dt:
             dtime = self.last_kline_dt.strftime("%d-%m-%Y %H:%M:%S")
         number = self.trades[-1].number if self.trades else 0

@@ -3,6 +3,7 @@ import uuid, time
 from typing import Literal
 from datetime import datetime, timedelta
 from binance.client import Client
+import pytz
 from logger import logger
 from markets.helper import authentication_required, float_to_precision
 from models import ExchangeSymbol, Order, interval_to_minutes
@@ -45,7 +46,7 @@ class BinanceMarket:
         }
 
     def _standardize_klines(self, klines:list[list]):
-        return [[ datetime.fromtimestamp(int(kline[0]) // 1000).replace(second=0, microsecond=0),
+        return [[ datetime.fromtimestamp(int(kline[0]) // 1000, tz=pytz.UTC).replace(second=0, microsecond=0),
                   float(kline[1]),
                   float(kline[2]),
                   float(kline[3]),
@@ -57,7 +58,7 @@ class BinanceMarket:
         return f'{symbol["baseAsset"]}-{symbol["quoteAsset"]}'
 
     def _standardize_datetime(self, dtstr:str):
-        return datetime.fromtimestamp(int(dtstr) // 1000).replace(second=0, microsecond=0)
+        return datetime.fromtimestamp(int(dtstr) // 1000, tz=pytz.UTC).replace(second=0, microsecond=0)
 
     def _format_symbol(self, symbol:str):
         assert '-' in symbol, f'Symbol must be in the format BASE-QUOTE (e.g. BTC-USDT), you provided: "{symbol}"'
@@ -191,7 +192,7 @@ class BinanceMarket:
             type=order['type'].upper(),
             side=order['side'].upper(),
             price=float(order['price']),
-            created=datetime.fromtimestamp(int(order_time // 1000)),
+            created=datetime.fromtimestamp(int(order_time // 1000), tz=pytz.UTC),
             deal_funds=float(order.get('cummulativeQuoteQty', 0)),
             deal_size=float(order.get('origQty', 0)),
             status=order['status'].upper(),
@@ -225,11 +226,11 @@ class BinanceMarket:
     def get_klines(self, symbol, interval, start:datetime, end:datetime=None, limit=1000, retry=0):
         return self._get_klines(symbol, interval, start, end, limit, retry=retry)
 
-    def get_last_klines(self, symbol, interval, limit=100):
+    def get_last_klines(self, symbol, interval, limit=100, retry=1, silent=True):
         minutes = interval_to_minutes(interval)
-        now = datetime.now()
+        now = datetime.now(tz=pytz.UTC)
         start = now - timedelta(minutes=minutes*limit)
-        klines = self.get_klines(symbol, interval, start, now, limit=limit)
+        klines = self.get_klines(symbol, interval, start, now, limit=limit*2)
         if klines == []:
             logger.warning(f'No klines found for {symbol} at {start} -> {now}')
             return []
@@ -237,7 +238,11 @@ class BinanceMarket:
         if (now - last_kline_dt) > timedelta(minutes=minutes*2):
             error = f'Last kline dt {last_kline_dt} does not match current time {now}, total klines: {len(klines)}, {start} -> {now}'
             logger.warning(error)
-            raise Exception(error)
+            # FIXME: should check len(klines) != limit?
+            if retry > 0:
+                return self.get_last_klines(symbol, interval, limit, retry-1, silent)
+            if not silent:
+                raise Exception(error)
         return klines
 
     def get_symbols(self) -> list[ExchangeSymbol]:

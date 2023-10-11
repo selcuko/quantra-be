@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 import time
+import pytz
 import requests
 from logger import logger
 from models import interval_to_minutes
@@ -13,7 +14,7 @@ class MEXCMarket:
         self.url = 'https://api.mexc.com'
     
     def _standardize_klines(self, klines):
-        klines = [[ datetime.fromtimestamp(int(kline[0]) // 1000).replace(second=0, microsecond=0),
+        klines = [[ datetime.fromtimestamp(int(kline[0]) // 1000, tz=pytz.UTC).replace(second=0, microsecond=0),
                   float(kline[1]),
                   float(kline[2]),
                   float(kline[3]),
@@ -106,7 +107,7 @@ class MEXCMarket:
     
     def get_last_klines(self, symbol, interval, limit=100):
         minutes = interval_to_minutes(interval)
-        now = datetime.now()
+        now = datetime.now(tz=pytz.UTC)
         start = now - timedelta(minutes=minutes*limit)
         klines = self.get_klines(symbol, interval, start, now)
         last_kline_dt = klines[-1][0]

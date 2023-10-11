@@ -3,6 +3,7 @@ import time
 from typing import Literal
 import uuid
 from kucoin.client import Market, Trade
+import pytz
 from filters import FundFilter, LotFilter, PriceFilter
 from logger import logger
 from models import ExchangeSymbol, Order, interval_to_minutes
@@ -36,7 +37,7 @@ class KucoinMarket:
     def _standardize_klines(self, klines):
         try:
             klines.reverse()
-            return [[ datetime.fromtimestamp(int(kline[0])).replace(second=0, microsecond=0),
+            return [[ datetime.fromtimestamp(int(kline[0]), tz=pytz.UTC).replace(second=0, microsecond=0),
                         float(kline[1]),
                         float(kline[2]),
                         float(kline[3]),
@@ -260,7 +261,7 @@ class KucoinMarket:
             type=order.get('type', '').upper(),
             side=order.get('side', '').upper(),
             price=float(order.get('price', 0)),
-            created=datetime.fromtimestamp(int(order.get('createdAt'))/1000) if order.get('createdAt') else None,
+            created=datetime.fromtimestamp(int(order.get('createdAt'))/1000, tz=pytz.UTC) if order.get('createdAt') else None,
             deal_funds=float(order.get('dealFunds', 0)),
             deal_size=float(order.get('dealSize', 0)),
             status='ACTIVE' if order.get('isActive') else 'CLOSED',
@@ -305,7 +306,7 @@ class KucoinMarket:
     
     def get_last_klines(self, symbol, interval, limit=100):
         minutes = interval_to_minutes(interval)
-        now = datetime.now()
+        now = datetime.now(tz=pytz.UTC)
         start = now - timedelta(minutes=minutes*limit)
         klines = self.get_klines(symbol, interval, start, now)
         last_kline_dt = klines[-1][0]
