@@ -134,7 +134,7 @@ def run_livetest_in_sandbox(symbol, market:Market, strategy:Strategy, freq='15 m
                     size=last_order.deal_size,
                     order_type=last_order.type,
                     status=last_order.status,
-                    timestamp=last_order.timestamp
+                    timestamp=last_order.created
                 )
                 if not last_order.status in ['ACTIVE', 'FILLED']:
                     logger.error(f'Order {last_order.oid} failed to fill, status: {last_order.status}')
@@ -158,7 +158,7 @@ def run_livetest_in_sandbox(symbol, market:Market, strategy:Strategy, freq='15 m
                     size=last_order.deal_size,
                     order_type=last_order.type,
                     status=last_order.status,
-                    timestamp=last_order.timestamp
+                    timestamp=last_order.created
                 )
                 if not last_order.status in ['ACTIVE', 'FILLED']:
                     logger.error(f'Order {last_order.oid} failed to fill, status: {last_order.status}')
