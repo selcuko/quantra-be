@@ -1,14 +1,16 @@
-from decimal import Decimal
-import uuid, time
-from typing import Literal
+import time
+import uuid
 from datetime import datetime, timedelta
-from binance.client import Client
+from decimal import Decimal
+from typing import Literal
+
 import pytz
+from binance.client import Client
+
+from filters import FundFilter, LotFilter, PriceFilter
 from logger import logger
-from markets import MarketError
 from markets.helper import authentication_required, float_to_precision
 from models import ExchangeSymbol, Order, interval_to_minutes
-from filters import LotFilter, PriceFilter, FundFilter
 
 
 class BinanceMarket:
@@ -44,10 +46,11 @@ class BinanceMarket:
             'name': self.name,
             'authenticated': self.authenticated,
             'testnet': self.testnet,
+            'spot_trading_enabled': self.spot_trading_enabled,
         }
 
     def _standardize_klines(self, klines:list[list]) -> list[list]:
-        return [[ datetime.fromtimestamp(int(kline[0]) // 1000, tz=pytz.UTC).replace(second=0, microsecond=0),
+        return [[ self._standardize_datetime(kline[0]),
                   float(kline[1]),
                   float(kline[2]),
                   float(kline[3]),
@@ -164,20 +167,14 @@ class BinanceMarket:
 
     def _prep_order_values(self, symbol:ExchangeSymbol, **kwargs) -> float:
         if kwargs.get('price'):
-            if not symbol.filters['price']:
-                return kwargs['price']
             for filter in symbol.filters['price']:
                 kwargs['price'] = filter.round(kwargs['price'])
             return kwargs['price']
         if kwargs.get('quantity'):
-            if not symbol.filters['lot']:
-                return kwargs['quantity']
             for filter in symbol.filters['lot']:
                 kwargs['quantity'] = filter.round(kwargs['quantity'])
             return kwargs['quantity']
         if kwargs.get('funds'):
-            if not symbol.filters['fund']:
-                return kwargs['funds']
             for filter in symbol.filters['fund']:
                 kwargs['funds'] = filter.round(kwargs['funds'])
             return kwargs['funds']
@@ -206,7 +203,6 @@ class BinanceMarket:
         else:
             calculated_end = start + timedelta(minutes=interval_to_minutes(interval) * limit)
         try:
-            logger.debug(f'Hitting Binance API for {symbol} at {start} -> {calculated_end} with limit {limit}')
             klines = self.client.get_historical_klines(
                         symbol=self._format_symbol(symbol), 
                         interval=self._format_interval(interval), 
@@ -214,7 +210,7 @@ class BinanceMarket:
                         end_str=self._format_datetime(calculated_end),
                         limit=limit)
         except:
-            logger.error(f'Error while fetching klines for {symbol} from {self.name}', exc_info=True)
+            logger.error(f'Error fetching klines for {symbol} from {self.name}', exc_info=True)
             if retry > 0:
                 logger.warning(f'Retrying {retry} more times')
                 time.sleep(1)
@@ -240,10 +236,10 @@ class BinanceMarket:
             if retry > 0:
                 return self.get_last_klines(symbol, interval, limit, retry-1, silent)
             if not silent:
-                raise MarketError(error)
+                raise ValueError(error)
         return klines
 
-    def get_symbols(self) -> list[ExchangeSymbol]:
+    def get_symbols(self) -> dict[str, ExchangeSymbol]:
         return { self._standardize_symbol(symbol): self._prep_symbol(symbol) for symbol in self.client.get_exchange_info()['symbols']}
 
     @authentication_required
@@ -278,6 +274,8 @@ class BinanceMarket:
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         client_oid = uuid.uuid4().hex
+        price = float_to_precision(Decimal(price), Decimal(symbol.quote_precision))
+        quantity = float_to_precision(Decimal(quantity), Decimal(symbol.base_precision))
         try:
             order = self.client.order_limit(
                 side=side, 
@@ -366,7 +364,7 @@ class BinanceMarket:
     def get_account(self):
         account = self.client.get_account()
         self.spot_trading_enabled = 'SPOT' in account.get('permissions', []) and account.get('canTrade')
-        self.assets = { asset['asset']: float(asset['free']) for asset in account.get('balances', []) }
+        self.assets = { str(asset['asset']): float(asset['free']) for asset in account.get('balances', []) }
         self.capital = self.assets.get('USDT', 0)
         self.commission = {
             'buyer': float(account.get('buyerCommission', 0)),

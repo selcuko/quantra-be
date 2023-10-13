@@ -2,9 +2,11 @@ from datetime import datetime
 from typing import Literal
 
 from models import ExchangeSymbol, Order
+
 from .binance import BinanceMarket
 from .kucoin import KucoinMarket
 from .mexc import MEXCMarket
+
 
 def get_market(market_name, config={}) -> 'Market':
     market_name = market_name.lower()
@@ -22,7 +24,7 @@ class Market:
     authenticated: bool
     testnet: bool
     name: str
-    symbols: list[ExchangeSymbol]
+    symbols: dict[str, ExchangeSymbol]
     spot_trading_enabled: bool
     capital: float
     assets: dict[str, float]

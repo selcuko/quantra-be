@@ -5,3 +5,5 @@ pandas-ta==0.3.14b0
 python-binance==1.0.19
 requests==2.31.0
 websockets==11.0.3
+sqlalchemy==2.0.21
+pytest==7.4.2
