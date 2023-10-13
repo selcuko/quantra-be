@@ -126,13 +126,12 @@ def run_livetest_in_sandbox(symbol, market:Market, strategy:Strategy, freq='15 m
             )
             if not testman.bought:
                 last_order = market.place_market_order(symbol, 'buy', funds=testman.capital)
-                last_order = market.get_order(last_order.symbol, last_order.oid)
                 db_order = add_order(
                     signal=db_signal, 
                     side='buy', 
                     price=last_order.price,
-                    quantity=last_order.quantity,
-                    size=last_order.size,
+                    quantity=last_order.deal_funds,
+                    size=last_order.deal_size,
                     order_type=last_order.type,
                     status=last_order.status,
                     timestamp=last_order.timestamp
@@ -150,18 +149,17 @@ def run_livetest_in_sandbox(symbol, market:Market, strategy:Strategy, freq='15 m
                 rawrow=last_kline.to_dict()
             )
             if testman.bought:
+                last_order = market.place_market_order(symbol, 'sell', quantity=testman.assets)
                 db_order = add_order(
                     signal=db_signal, 
                     side='sell', 
                     price=last_order.price,
-                    quantity=last_order.quantity,
-                    size=last_order.size,
+                    quantity=last_order.deal_funds,
+                    size=last_order.deal_size,
                     order_type=last_order.type,
                     status=last_order.status,
                     timestamp=last_order.timestamp
                 )
-                last_order = market.place_market_order(symbol, 'sell', quantity=testman.assets)
-                last_order = market.get_order(last_order.symbol, last_order.oid)
                 if not last_order.status in ['ACTIVE', 'FILLED']:
                     logger.error(f'Order {last_order.oid} failed to fill, status: {last_order.status}')
             testman.sell({'time': stg_ds.index[-1], **last_kline.to_dict()}, sync=last_order)
