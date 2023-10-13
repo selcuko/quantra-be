@@ -219,6 +219,8 @@ class BinanceMarket:
         return self._standardize_klines(klines)
 
     def get_klines(self, symbol:str, interval:str, start:datetime, end:datetime=None, limit=1000, retry=0) -> list[list]:
+        if not symbol in self.symbols:
+            raise ValueError(f'Symbol {symbol} is not present on {self.name}')
         return self._get_klines(symbol, interval, start, end, limit, retry=retry)
 
     def get_last_klines(self, symbol:str, interval:str, limit=100, retry=1, silent=True) -> list[list]:

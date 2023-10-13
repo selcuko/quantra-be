@@ -184,8 +184,8 @@ def download_symbol(market_name:str, symbol:str, start:datetime, end:datetime=No
 
 
 if __name__ == '__main__':
-    symbol = sys.argv[1] if len(sys.argv) > 1 else 'btc-usdt'
-    market = sys.argv[2] if len(sys.argv) > 2 else 'binance'
+    symbol = sys.argv[1] if len(sys.argv) > 1 else 'doge-usdt'
+    market = sys.argv[2] if len(sys.argv) > 2 else 'kucoin'
     download_symbol(
         market, 
         symbol, 

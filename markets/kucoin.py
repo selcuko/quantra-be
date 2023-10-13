@@ -85,6 +85,7 @@ class KucoinMarket:
         return interval.replace(' ', '')
     
     def _format_datetime(self, dt:datetime) -> int:
+        assert isinstance(dt, datetime), f'Expected datetime, got {type(dt)}'
         return int(dt.timestamp())
     
     def _get_symbol_from_name(self, symbol_name:str):
@@ -169,7 +170,7 @@ class KucoinMarket:
                 symbol=self._format_symbol(symbol),
                 kline_type=self._format_interval(interval),
                 startAt=self._format_datetime(start),
-                endAt=self._format_datetime(end),
+                endAt=self._format_datetime(calculated_end),
                 limit=limit)
         except:
             logger.error(f'Error fetching klines for {self._format_symbol(symbol)} from {self.name}', exc_info=True)
@@ -183,6 +184,8 @@ class KucoinMarket:
         return self._standardize_klines(klines)
 
     def get_klines(self, symbol:str, interval:str, start:datetime=None, end:datetime=None, limit=1000, retry=0) -> list[list]:
+        if not symbol in self.symbols:
+            raise ValueError(f'Symbol {symbol} is not present on {self.name}')
         return self._get_klines(symbol, interval, start, end, limit, retry)
  
     def get_last_klines(self, symbol:str, interval:str, limit=100, retry=1, silent=True) -> list[list]:
