@@ -119,19 +119,16 @@ Base.metadata.create_all(engine)
 from sqlalchemy.orm import sessionmaker
 session = sessionmaker(bind=engine)()
 
-if __name__ == "__main__":
-    print('Creating default markets...')
-    if not session.query(DBMarket).filter_by(name="BINANCE").first():
-        session.add(db_binance := DBMarket(name="BINANCE", config_name="BINANCE-TESTNET", testnet_enabled=True, trading_enabled=True))
-    if not session.query(DBMarket).filter_by(name="KUCOIN").first():
-        session.add(db_kucoin := DBMarket(name="KUCOIN", config_name="KUCOIN", mainnet_enabled=True, trading_enabled=True))
-    if not session.query(DBMarket).filter_by(name="MEXC").first():
-        session.add(db_mexc := DBMarket(name="MEXC", config_name="MEXC"))
-    session.commit()
-    print('Creating default symbols...')
-    if not session.query(DBSymbol).filter_by(name="BTC-USDT").first():
-        session.add(DBSymbol(name="BTC-USDT", base="BTC", quote="USDT", market=db_binance))
-    if not session.query(DBSymbol).filter_by(name="ETH-USDT").first():
-        session.add(DBSymbol(name="ETH-USDT", base="ETH", quote="USDT", market=db_binance))
-    if not session.query(DBSymbol).filter_by(name="XRP-USDT").first():
-        session.add(DBSymbol(name="XRP-USDT", base="XRP", quote="USDT", market=db_binance))
+if not session.query(DBMarket).filter_by(name="BINANCE").first():
+    session.add(db_binance := DBMarket(name="BINANCE", config_name="BINANCE-TESTNET", testnet_enabled=True, trading_enabled=True))
+if not session.query(DBMarket).filter_by(name="KUCOIN").first():
+    session.add(db_kucoin := DBMarket(name="KUCOIN", config_name="KUCOIN", mainnet_enabled=True, trading_enabled=True))
+if not session.query(DBMarket).filter_by(name="MEXC").first():
+    session.add(db_mexc := DBMarket(name="MEXC", config_name="MEXC"))
+if not session.query(DBSymbol).filter_by(name="BTC-USDT").first():
+    session.add(DBSymbol(name="BTC-USDT", base="BTC", quote="USDT", market=db_binance))
+if not session.query(DBSymbol).filter_by(name="ETH-USDT").first():
+    session.add(DBSymbol(name="ETH-USDT", base="ETH", quote="USDT", market=db_binance))
+if not session.query(DBSymbol).filter_by(name="XRP-USDT").first():
+    session.add(DBSymbol(name="XRP-USDT", base="XRP", quote="USDT", market=db_binance))
+session.commit()
