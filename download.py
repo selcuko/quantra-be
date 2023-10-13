@@ -186,4 +186,10 @@ def download_symbol(market_name:str, symbol:str, start:datetime, end:datetime=No
 if __name__ == '__main__':
     symbol = sys.argv[1] if len(sys.argv) > 1 else 'btc-usdt'
     market = sys.argv[2] if len(sys.argv) > 2 else 'binance'
-    download_symbol(market, symbol, datetime(2023, 1, 10), end=datetime(2023, 8, 25), interpolate=False, drop_duplicates=False)
+    download_symbol(
+        market, 
+        symbol, 
+        start=datetime(2023, 1, 10, tzinfo=pytz.UTC), 
+        end=datetime(2023, 9, 10, tzinfo=pytz.UTC),
+        interpolate=False, 
+        drop_duplicates=False)
