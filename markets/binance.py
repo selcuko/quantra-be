@@ -267,7 +267,6 @@ class BinanceMarket:
                 quantity=quantity, 
                 quoteOrderQty=funds, 
                 newClientOrderId=client_oid)
-            print("raw", order)
             logger.info(f'Market order placed on {self.name} for {symbol} with side {side} and funds {funds} and quantity {quantity} with order id {order["orderId"]}')
             return self._prep_order(order, symbol)
         except:

@@ -6,3 +6,6 @@
 *.log
 *.txt
 api.json
+*.db
+*.sqlite
+settings.json

@@ -7,6 +7,9 @@ from models import OHLCVDataset, interval_to_minutes
 from strategy import Strategy, get_strategy
 from testman import TestManager
 from logger import logger
+from datalayer import add_order, add_session, add_signal, db_session as sql_session
+from datalayer import get_market as get_db_market
+from datalayer import add_symbol as add_db_symbol
 
 def run_livetest(symbol, market_name, strategy:callable, freq='15 min', end:datetime=None):
     # do pre checks
@@ -60,6 +63,10 @@ def run_livetest(symbol, market_name, strategy:callable, freq='15 min', end:date
 
 def run_livetest_in_sandbox(symbol, market:Market, strategy:Strategy, freq='15 min', end:datetime=None, capital=100):
     print(f'Running live test on {symbol} from {market.name} with freq {freq.replace(" ", "").upper()}, planned shutdown at {end}')
+    db_market = get_db_market(market.name)
+    db_symbol = add_db_symbol(symbol, db_market)
+    db_session = add_session(db_symbol, db_market, test_type='live.sandbox', freq=freq)
+
     if isinstance(end, timedelta):
         end = datetime.now(tz=pytz.UTC) + end
 
@@ -85,11 +92,17 @@ def run_livetest_in_sandbox(symbol, market:Market, strategy:Strategy, freq='15 m
             return end > datetime.now(tz=pytz.UTC)
         if last_kline_ts: # calculate time to the next minute
             residue = last_kline_ts + loop_interval_s + 5 - time.time()
-            if residue > 0:
-                time.sleep(residue)
-            else:
-                # new candle is not available yet
-                time.sleep(1)
+            try:
+                if residue > 0:
+                    time.sleep(residue)
+                else:
+                    # new candle is not available yet
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                logger.info('KeyboardInterrupt detected, shutting down gracefully')
+                db_session.ended = datetime.now(tz=pytz.UTC)
+                sql_session.commit()
+                return False
         return True
 
     while break_check():        
@@ -103,14 +116,50 @@ def run_livetest_in_sandbox(symbol, market:Market, strategy:Strategy, freq='15 m
         last_order = None
         testman.update(kline={'time': stg_ds.index[-1], **last_kline.to_dict()})
         if should_buy:
+            db_signal = add_signal(
+                symbol=db_symbol, 
+                market=db_market, 
+                timestamp=stg_ds.index[-1], 
+                side='buy', 
+                price=last_kline['close'], 
+                rawrow=last_kline.to_dict()
+            )
             if not testman.bought:
                 last_order = market.place_market_order(symbol, 'buy', funds=testman.capital)
                 last_order = market.get_order(last_order.symbol, last_order.oid)
+                db_order = add_order(
+                    signal=db_signal, 
+                    side='buy', 
+                    price=last_order.price,
+                    quantity=last_order.quantity,
+                    size=last_order.size,
+                    order_type=last_order.type,
+                    status=last_order.status,
+                    timestamp=last_order.timestamp
+                )
                 if not last_order.status in ['ACTIVE', 'FILLED']:
                     logger.error(f'Order {last_order.oid} failed to fill, status: {last_order.status}')
             testman.buy({'time': stg_ds.index[-1], **last_kline.to_dict()}, sync=last_order)
         elif should_sell:
+            db_signal = add_signal(
+                symbol=db_symbol, 
+                market=db_market, 
+                timestamp=stg_ds.index[-1], 
+                side='sell', 
+                price=last_kline['close'], 
+                rawrow=last_kline.to_dict()
+            )
             if testman.bought:
+                db_order = add_order(
+                    signal=db_signal, 
+                    side='sell', 
+                    price=last_order.price,
+                    quantity=last_order.quantity,
+                    size=last_order.size,
+                    order_type=last_order.type,
+                    status=last_order.status,
+                    timestamp=last_order.timestamp
+                )
                 last_order = market.place_market_order(symbol, 'sell', quantity=testman.assets)
                 last_order = market.get_order(last_order.symbol, last_order.oid)
                 if not last_order.status in ['ACTIVE', 'FILLED']:
@@ -119,6 +168,9 @@ def run_livetest_in_sandbox(symbol, market:Market, strategy:Strategy, freq='15 m
         print(testman.summary())
         last_kline_ts = stg_ds.index[-1].timestamp()
     testman.shutdown()
+    # set session end time and save
+    db_session.ended = datetime.now(tz=pytz.UTC)
+    sql_session.commit()
 
 
 def sample_livetest():
@@ -128,7 +180,7 @@ def sample_livetest():
 def sample_livetest_sandbox():
     conf = json.load(open('api.json'))['BINANCE-TESTNET']
     strg = get_strategy('v1')()
-    run_livetest_in_sandbox('XRP-USDT', get_market('BINANCE', conf), strg, freq='3 min')
+    run_livetest_in_sandbox('XRP-USDT', get_market('BINANCE', conf), strg, freq='1 min')
 
 if __name__ == '__main__':
     sample_livetest_sandbox()
