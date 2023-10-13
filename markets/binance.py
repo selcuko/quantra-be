@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from binance.client import Client
 import pytz
 from logger import logger
+from markets import MarketError
 from markets.helper import authentication_required, float_to_precision
 from models import ExchangeSymbol, Order, interval_to_minutes
 from filters import LotFilter, PriceFilter, FundFilter
@@ -15,6 +16,10 @@ class BinanceMarket:
     def __init__(self, config={}):
         self.authenticated = bool(config.get('API_KEY') and config.get('API_SECRET'))
         self.testnet = False
+        self.spot_trading_enabled = False
+        self.capital = 0
+        self.assets = {}
+        self.commission = {}
         try:
             if self.authenticated:
                 self.testnet = config.get('TESTNET', False)
@@ -25,27 +30,23 @@ class BinanceMarket:
             else:
                 self.client = Client()
         except Exception as e:
-            logger.error(f'Error while initializing {self.name}', exc_info=True)
+            logger.fatal(f'Error while initializing {self.name}', exc_info=True)
             raise
         self.symbols = self.get_symbols()
         if self.authenticated:
             self.get_account()
-        else:
-            self.spot_trading_enabled = False
-            self.assets = {}
-            self.capital = 0
 
     def __str__(self) -> str:
         return f'{self.name} (Authenticated: {self.authenticated})'
 
-    def json(self):
+    def json(self) -> dict:
         return {
             'name': self.name,
             'authenticated': self.authenticated,
             'testnet': self.testnet,
         }
 
-    def _standardize_klines(self, klines:list[list]):
+    def _standardize_klines(self, klines:list[list]) -> list[list]:
         return [[ datetime.fromtimestamp(int(kline[0]) // 1000, tz=pytz.UTC).replace(second=0, microsecond=0),
                   float(kline[1]),
                   float(kline[2]),
@@ -54,18 +55,18 @@ class BinanceMarket:
                   float(kline[5]),
                 ] for kline in klines ]  
 
-    def _standardize_symbol(self, symbol:dict):
+    def _standardize_symbol(self, symbol:dict) -> str:
         return f'{symbol["baseAsset"]}-{symbol["quoteAsset"]}'
 
-    def _standardize_datetime(self, dtstr:str):
+    def _standardize_datetime(self, dtstr:str) -> datetime:
         return datetime.fromtimestamp(int(dtstr) // 1000, tz=pytz.UTC).replace(second=0, microsecond=0)
 
-    def _format_symbol(self, symbol:str):
+    def _format_symbol(self, symbol:str) -> str:
         assert '-' in symbol, f'Symbol must be in the format BASE-QUOTE (e.g. BTC-USDT), you provided: "{symbol}"'
         symbol = symbol.replace('-', '').upper()
         return symbol
 
-    def _format_interval(self, interval):
+    def _format_interval(self, interval) -> str:
         return {
             '1 min': Client.KLINE_INTERVAL_1MINUTE,
             '3 min': Client.KLINE_INTERVAL_3MINUTE,
@@ -84,17 +85,17 @@ class BinanceMarket:
             '1 month': Client.KLINE_INTERVAL_1MONTH,
         }[interval]
 
-    def _format_datetime(self, dt):
+    def _format_datetime(self, dt) -> str:
         return str(int(dt.replace(second=0, microsecond=0).timestamp()*1000))
 
-    def _get_symbol_from_name(self, symbol_name:str):
+    def _get_symbol_from_name(self, symbol_name:str) -> ExchangeSymbol:
         try:
             return self.symbols[symbol_name]
         except KeyError:
             logger.error(f'Symbol {symbol_name} is not present in {self.name}')
             raise ValueError(f'Symbol {symbol_name} is not present in {self.name}')
 
-    def _prep_symbol(self, symbol:dict):
+    def _prep_symbol(self, symbol:dict) -> ExchangeSymbol:
         exc_symbol = ExchangeSymbol(
                 name = symbol['symbol'],
                 base = symbol['baseAsset'],
@@ -161,7 +162,7 @@ class BinanceMarket:
                 )
         return exc_symbol
 
-    def _prep_order_values(self, symbol:ExchangeSymbol, **kwargs):
+    def _prep_order_values(self, symbol:ExchangeSymbol, **kwargs) -> float:
         if kwargs.get('price'):
             if not symbol.filters['price']:
                 return kwargs['price']
@@ -182,7 +183,7 @@ class BinanceMarket:
             return kwargs['funds']
         raise ValueError(f'Could not round values for {symbol} with kwargs {kwargs}')
 
-    def _prep_order(self, order:dict, symbol:ExchangeSymbol):
+    def _prep_order(self, order:dict, symbol:ExchangeSymbol) -> Order:
         order_time = order.get('time') or order.get('workingTime') or order.get('transactTime') or order.get('updateTime')
         return Order(
             oid=order['orderId'],
@@ -199,9 +200,8 @@ class BinanceMarket:
             funds=float(order.get('origQuoteOrderQty', 0)),
         )
 
-    def _get_klines(self, symbol, interval, start:datetime, end:datetime=None, limit=1000, retry=0):
+    def _get_klines(self, symbol:str, interval:str, start:datetime, end:datetime=None, limit=1000, retry=0) -> list[list]:
         if end:
-            logger.debug('param:end specified while fetching klines, ignoring param:limit')
             calculated_end = end
         else:
             calculated_end = start + timedelta(minutes=interval_to_minutes(interval) * limit)
@@ -212,8 +212,7 @@ class BinanceMarket:
                         interval=self._format_interval(interval), 
                         start_str=self._format_datetime(start),
                         end_str=self._format_datetime(calculated_end),
-                        limit=limit
-                    )
+                        limit=limit)
         except:
             logger.error(f'Error while fetching klines for {symbol} from {self.name}', exc_info=True)
             if retry > 0:
@@ -223,10 +222,10 @@ class BinanceMarket:
             raise
         return self._standardize_klines(klines)
 
-    def get_klines(self, symbol, interval, start:datetime, end:datetime=None, limit=1000, retry=0):
+    def get_klines(self, symbol:str, interval:str, start:datetime, end:datetime=None, limit=1000, retry=0) -> list[list]:
         return self._get_klines(symbol, interval, start, end, limit, retry=retry)
 
-    def get_last_klines(self, symbol, interval, limit=100, retry=1, silent=True):
+    def get_last_klines(self, symbol:str, interval:str, limit=100, retry=1, silent=True) -> list[list]:
         minutes = interval_to_minutes(interval)
         now = datetime.now(tz=pytz.UTC)
         start = now - timedelta(minutes=minutes*limit)
@@ -238,18 +237,17 @@ class BinanceMarket:
         if (now - last_kline_dt) > timedelta(minutes=minutes*2):
             error = f'Last kline dt {last_kline_dt} does not match current time {now}, total klines: {len(klines)}, {start} -> {now}'
             logger.warning(error)
-            # FIXME: should check len(klines) != limit?
             if retry > 0:
                 return self.get_last_klines(symbol, interval, limit, retry-1, silent)
             if not silent:
-                raise Exception(error)
+                raise MarketError(error)
         return klines
 
     def get_symbols(self) -> list[ExchangeSymbol]:
         return { self._standardize_symbol(symbol): self._prep_symbol(symbol) for symbol in self.client.get_exchange_info()['symbols']}
 
     @authentication_required
-    def place_market_order(self, symbol:ExchangeSymbol, side:Literal['buy', 'sell'], funds:float=None, quantity:float=None) -> Order:
+    def place_market_order(self, symbol:ExchangeSymbol|str, side:Literal['buy', 'sell'], funds:float=None, quantity:float=None, validate=True) -> Order:
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         client_oid = uuid.uuid4().hex
@@ -260,7 +258,6 @@ class BinanceMarket:
         if quantity:
             quantity = float_to_precision(Decimal(quantity), Decimal(symbol.base_precision))
         try:
-            logger.info(f'Placing market order on {self.name} for {symbol} with side {side} and funds {funds} and quantity {quantity}')
             order = self.client.order_market(
                 side=side, 
                 symbol=symbol.name, 
@@ -268,18 +265,20 @@ class BinanceMarket:
                 quoteOrderQty=funds, 
                 newClientOrderId=client_oid)
             logger.info(f'Market order placed on {self.name} for {symbol} with side {side} and funds {funds} and quantity {quantity} with order id {order["orderId"]}')
-            return self._prep_order(order, symbol)
+            order = self._prep_order(order, symbol)
+            if validate:
+                order = self.get_order(order.symbol, order.oid)
+            return order
         except:
-            logger.error(f'Error while placing market order on {self.name}', exc_info=True)
+            logger.error(f'Error placing market order on {self.name}', exc_info=True)
             raise
 
     @authentication_required
-    def place_limit_order(self, symbol:ExchangeSymbol, side:Literal['buy', 'sell'], price:float, quantity:float) -> Order:
+    def place_limit_order(self, symbol:ExchangeSymbol|str, side:Literal['buy', 'sell'], price:float, quantity:float, validate=True) -> Order:
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         client_oid = uuid.uuid4().hex
         try:
-            logger.info(f'Placing limit order on {self.name} for {symbol} with side {side} and price {price} and quantity {quantity}')
             order = self.client.order_limit(
                 side=side, 
                 symbol=symbol.name, 
@@ -287,31 +286,32 @@ class BinanceMarket:
                 quantity=quantity, 
                 newClientOrderId=client_oid)
             logger.info(f'Limit order placed on {self.name} for {symbol} with side {side} and price {price} and quantity {quantity} with order id {order["orderId"]}')
-            return self._prep_order(order, symbol)
+            order = self._prep_order(order, symbol)
+            if validate:
+                order = self.get_order(order.symbol, order.oid)
+            return order
         except:
-            logger.error(f'Error while placing limit order on {self.name}', exc_info=True)
+            logger.error(f'Error placing limit order on {self.name}', exc_info=True)
             raise
 
     @authentication_required
-    def get_order(self, symbol:ExchangeSymbol, order_id:int) -> Order:
+    def get_order(self, symbol:ExchangeSymbol|str, order:Order|int) -> Order:
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
-        if isinstance(order_id, Order):
-            order_id = order_id.oid
+        if isinstance(order, Order):
+            order = order.oid
         try:
-            logger.info(f'Getting order {order_id} on {self.name} for {symbol}')
-            order = self.client.get_order(symbol=symbol.name, orderId=order_id)
+            order = self.client.get_order(symbol=symbol.name, orderId=order)
             return self._prep_order(order, symbol)
         except:
             logger.error(f'Error while getting order on {self.name}', exc_info=True)
             raise
 
     @authentication_required
-    def get_orders(self, symbol:ExchangeSymbol) -> list[Order]:
+    def get_orders(self, symbol:ExchangeSymbol|str) -> list[Order]:
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         try:
-            logger.info(f'Getting orders on {self.name} for {symbol}')
             orders = self.client.get_all_orders(symbol=symbol.name)
             return [self._prep_order(order, symbol) for order in orders]
         except:
@@ -319,15 +319,13 @@ class BinanceMarket:
             raise
 
     @authentication_required
-    def get_open_orders(self, symbol:ExchangeSymbol=None) -> list[Order]:
-        if isinstance(symbol, str):
+    def get_open_orders(self, symbol:ExchangeSymbol|str=None) -> list[Order]:
+        if symbol and isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         try:
             if symbol:
-                logger.info(f'Getting open orders on {self.name} for {symbol}')
                 orders = self.client.get_open_orders(symbol=symbol.name)
             else:
-                logger.info(f'Getting open orders on {self.name}')
                 orders = self.client.get_open_orders()
             return [self._prep_order(order, symbol) for order in orders]
         except:
@@ -335,32 +333,29 @@ class BinanceMarket:
             raise
 
     @authentication_required
-    def cancel_order(self, symbol:ExchangeSymbol, order_id:int) -> Order:
+    def cancel_order(self, symbol:ExchangeSymbol|str, order:Order|int) -> Order:
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
-        if isinstance(order_id, Order):
-            order_id = order_id.oid
+        if isinstance(order, Order):
+            order = order.oid
         try:
-            logger.info(f'Canceling order {order_id} on {self.name} for {symbol}')
-            order = self.client.cancel_order(symbol=symbol.name, orderId=order_id)
+            order = self.client.cancel_order(symbol=symbol.name, orderId=order)
             return self._prep_order(order, symbol)
         except Exception as e:
             if 'Unknown order sent' in str(e):
-                logger.warning(f'Order {order_id} not found on {self.name}')
+                logger.warning(f'Order {order} not found on {self.name}')
                 return
             logger.error(f'Error while canceling order on {self.name}', exc_info=True)
             raise
 
     @authentication_required
-    def cancel_all_orders(self, symbol:ExchangeSymbol=None) -> list[Order]:
+    def cancel_all_orders(self, symbol:ExchangeSymbol|str=None) -> list[Order]:
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         try:
             if symbol:
-                logger.info(f'Canceling all orders on {self.name} for {symbol}')
                 orders = self.client.cancel_open_orders(symbol=symbol.name)
             else:
-                logger.info(f'Canceling all orders on {self.name}')
                 orders = self.client.cancel_open_orders()
             return [self._prep_order(order, symbol) for order in orders]
         except:
@@ -379,10 +374,8 @@ class BinanceMarket:
             'maker': float(account.get('makerCommission', 0)),
             'taker': float(account.get('takerCommission', 0)),
         }
-        
         if not account.get('balances'):
             logger.error('`balances` key not found in account data, revise Binance interface')
         if not self.spot_trading_enabled:
             logger.error('Spot trading is not enabled on Binance account')
-
 

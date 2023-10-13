@@ -119,12 +119,12 @@ Base.metadata.create_all(engine)
 from sqlalchemy.orm import sessionmaker
 session = sessionmaker(bind=engine)()
 
-if not session.query(DBMarket).filter_by(name="BINANCE").first():
+if not (db_binance := session.query(DBMarket).filter_by(name="BINANCE").first()):
     session.add(db_binance := DBMarket(name="BINANCE", config_name="BINANCE-TESTNET", testnet_enabled=True, trading_enabled=True))
 if not session.query(DBMarket).filter_by(name="KUCOIN").first():
-    session.add(db_kucoin := DBMarket(name="KUCOIN", config_name="KUCOIN", mainnet_enabled=True, trading_enabled=True))
+    session.add(DBMarket(name="KUCOIN", config_name="KUCOIN", mainnet_enabled=True, trading_enabled=True))
 if not session.query(DBMarket).filter_by(name="MEXC").first():
-    session.add(db_mexc := DBMarket(name="MEXC", config_name="MEXC"))
+    session.add(DBMarket(name="MEXC", config_name="MEXC"))
 if not session.query(DBSymbol).filter_by(name="BTC-USDT").first():
     session.add(DBSymbol(name="BTC-USDT", base="BTC", quote="USDT", market=db_binance))
 if not session.query(DBSymbol).filter_by(name="ETH-USDT").first():
