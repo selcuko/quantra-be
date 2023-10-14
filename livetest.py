@@ -178,7 +178,7 @@ def sample_livetest():
 def sample_livetest_sandbox():
     conf = json.load(open('api.json'))['BINANCE-TESTNET']
     strg = get_strategy('v1')()
-    run_livetest_in_sandbox('XRP-USDT', get_market('BINANCE', conf), strg, freq='1 min')
+    run_livetest_in_sandbox('SOL-USDT', get_market('BINANCE', conf), strg, freq='1 min')
 
 if __name__ == '__main__':
     sample_livetest_sandbox()

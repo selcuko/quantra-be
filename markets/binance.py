@@ -6,6 +6,7 @@ from typing import Literal
 
 import pytz
 from binance.client import Client
+import requests
 
 from filters import FundFilter, LotFilter, PriceFilter
 from logger import logger
@@ -221,7 +222,10 @@ class BinanceMarket:
     def get_klines(self, symbol:str, interval:str, start:datetime, end:datetime=None, limit=1000, retry=0) -> list[list]:
         if not symbol in self.symbols:
             raise ValueError(f'Symbol {symbol} is not present on {self.name}')
-        return self._get_klines(symbol, interval, start, end, limit, retry=retry)
+        try:
+            return self._get_klines(symbol, interval, start, end, limit, retry=retry)
+        except requests.exceptions.ConnectionError:
+            return []
 
     def get_last_klines(self, symbol:str, interval:str, limit=100, retry=1, silent=True) -> list[list]:
         minutes = interval_to_minutes(interval)
