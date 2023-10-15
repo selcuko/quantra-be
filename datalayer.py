@@ -2,7 +2,7 @@ import json
 from datetime import datetime
 from typing import Literal
 from markets import Market
-from dbops import DBOrder, DBSignal, session as db_session
+from dbops import DBOrder, DBSignal, DBSubscription, DBUser, session as db_session
 from dbops import DBMarket, DBSymbol, DBSession
 from models import interval_to_minutes
 
@@ -88,7 +88,7 @@ def add_symbol(symbol:str, market:"str|DBMarket", check_exists=True) -> DBSymbol
     return symbol
 
 
-def add_session(symbol:"str|DBSymbol", market:"str|DBMarket", test_type='live.basic', freq='15 min') -> DBSession:
+def add_session(symbol:"str|DBSymbol", market:"str|DBMarket", strategy:str, strategy_parameters:dict, status='ongoing', test_type='live.basic', freq='15 min', planned_shutdown:datetime=None) -> DBSession:
     """Adds a Session record to database, returns the DBSession object
 
     Args:
@@ -108,13 +108,17 @@ def add_session(symbol:"str|DBSymbol", market:"str|DBMarket", test_type='live.ba
         session_type=test_type,
         freq=freq,
         symbol=symbol,
+        strategy=strategy,
+        strategy_parameters=json.dumps(strategy_parameters),
+        status=status,
+        planned_shutdown=planned_shutdown
     )
     db_session.add(session)
     db_session.commit()
     return session
 
 
-def add_signal(symbol:"str|DBSymbol", market:"str|DBMarket", timestamp:datetime, side:Literal["buy", "sell"], price:float, rawrow:dict) -> DBSession:
+def add_signal(session:int|DBSession, timestamp:datetime, side:Literal["buy", "sell"], price:float, rawrow:dict) -> DBSession:
     """Adds a Signal record to database, returns the DBSignal object
     
     Args:
@@ -127,10 +131,10 @@ def add_signal(symbol:"str|DBSymbol", market:"str|DBMarket", timestamp:datetime,
     Returns:
         DBSignal: the database signal record
     """
-    if not is_db_model(symbol):
-        symbol = get_symbol(symbol, market)
+    if not is_db_model(session):
+        session = db_session.query(DBSession).filter_by(id=session).one()
     signal = DBSignal(
-        symbol=symbol,
+        session=session,
         timestamp=timestamp,
         side=side,
         price=price,
@@ -163,3 +167,45 @@ def add_order(signal:DBSignal, side:Literal['buy', 'sell'], size:float, quantity
     db_session.add(order)
     db_session.commit()
     return order
+
+
+def add_user(name:str) -> DBUser:
+    """Adds a User record to database, returns the DBUser object
+
+    Args:
+        name (str): name of user
+
+    Returns:
+        DBUser: the database user record
+    """    
+    user = DBUser(
+        name=name
+    )
+    db_session.add(user)
+    db_session.commit()
+    return user
+
+
+def add_subscription(user:int|DBUser, session:int|DBSession) -> DBSubscription:
+    """Adds a Subscription record to database, returns the DBSubscription object
+
+    Args:
+        name (str): friendly name of subscription
+        user (int | DBUser): user id or DBUser object
+        session (int | DBSession): session id or DBSession object
+        external_id (str): external id of subscription (e.g. telegram chat id)
+
+    Returns:
+        DBSubscription: the database subscription record
+    """
+    if not is_db_model(user):
+        user = db_session.query(DBUser).filter_by(id=user).one()
+    if not is_db_model(session):
+        session = db_session.query(DBSession).filter_by(id=session).one()
+    subscription = DBSubscription(
+        user=user,
+        session=session,
+    )
+    db_session.add(subscription)
+    db_session.commit()
+    return subscription

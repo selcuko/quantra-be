@@ -2,12 +2,13 @@ from datetime import datetime, timedelta
 import json
 import time
 import pytz
+from dbops import DBUser
 from markets import Market, MarketError, get_market
 from models import OHLCVDataset, interval_to_minutes
 from strategy import Strategy, get_strategy
 from testman import TestManager
 from logger import logger
-from datalayer import add_order, add_session, add_signal, db_session as sql_session
+from datalayer import add_order, add_session, add_signal, add_subscription, db_session as sql_session
 from datalayer import get_market as get_db_market
 from datalayer import add_symbol as add_db_symbol
 
@@ -65,7 +66,16 @@ def run_livetest_in_sandbox(symbol, market:Market, strategy:Strategy, freq='15 m
     print(f'Running live test on {symbol} from {market.name} with freq {freq.replace(" ", "").upper()}, planned shutdown at {end}')
     db_market = get_db_market(market.name)
     db_symbol = add_db_symbol(symbol, db_market)
-    db_session = add_session(db_symbol, db_market, test_type='live.sandbox', freq=freq)
+    db_session = add_session(
+        symbol=db_symbol,
+        market=db_market,
+        strategy=strategy.name,
+        strategy_parameters=strategy.params,
+        test_type='live.sandbox',
+        freq=freq,
+        planned_shutdown=end)
+    db_user = sql_session.query(DBUser).filter(DBUser.id == 1).first()
+    add_subscription(db_user, db_session)
 
     if isinstance(end, timedelta):
         end = datetime.now(tz=pytz.UTC) + end
@@ -105,6 +115,8 @@ def run_livetest_in_sandbox(symbol, market:Market, strategy:Strategy, freq='15 m
                 return False
         return True
 
+    db_session.notify(f'Initiating live test - hope the core is stable 🤞')
+
     while break_check():        
         last_klines = market.get_last_klines(symbol, freq)
         raw_ds = OHLCVDataset(last_klines)
@@ -117,13 +129,13 @@ def run_livetest_in_sandbox(symbol, market:Market, strategy:Strategy, freq='15 m
         testman.update(kline={'time': stg_ds.index[-1], **last_kline.to_dict()})
         if should_buy:
             db_signal = add_signal(
-                symbol=db_symbol, 
-                market=db_market, 
+                session=db_session,
                 timestamp=stg_ds.index[-1], 
                 side='buy', 
                 price=last_kline['close'], 
                 rawrow=last_kline.to_dict()
             )
+            db_session.notify(f'[SIGNAL] BUY {symbol}@{last_kline["close"]} in {market} ({stg_ds.index[-1]} UTC)')
             if not testman.bought:
                 last_order = market.place_market_order(symbol, 'buy', funds=testman.capital)
                 db_order = add_order(
@@ -138,16 +150,17 @@ def run_livetest_in_sandbox(symbol, market:Market, strategy:Strategy, freq='15 m
                 )
                 if not last_order.status in ['ACTIVE', 'FILLED']:
                     logger.error(f'Order {last_order.oid} failed to fill, status: {last_order.status}')
+                db_session.notify(f'[ORDER] BUY {symbol}@{last_kline["close"]} in {market} ({stg_ds.index[-1]} UTC)')
             testman.buy({'time': stg_ds.index[-1], **last_kline.to_dict()}, sync=last_order)
         elif should_sell:
             db_signal = add_signal(
-                symbol=db_symbol, 
-                market=db_market, 
+                session=db_session,
                 timestamp=stg_ds.index[-1], 
                 side='sell', 
                 price=last_kline['close'], 
                 rawrow=last_kline.to_dict()
             )
+            db_session.notify(f'[SIGNAL] SELL {symbol}@{last_kline["close"]} in {market} ({stg_ds.index[-1]} UTC)')
             if testman.bought:
                 last_order = market.place_market_order(symbol, 'sell', quantity=testman.assets)
                 db_order = add_order(
@@ -162,8 +175,10 @@ def run_livetest_in_sandbox(symbol, market:Market, strategy:Strategy, freq='15 m
                 )
                 if not last_order.status in ['ACTIVE', 'FILLED']:
                     logger.error(f'Order {last_order.oid} failed to fill, status: {last_order.status}')
+                db_session.notify(f'[ORDER] SELL {symbol}@{last_kline["close"]} in {market} ({stg_ds.index[-1]} UTC)')
             testman.sell({'time': stg_ds.index[-1], **last_kline.to_dict()}, sync=last_order)
         print(testman.summary())
+        db_session.heartbeat()
         last_kline_ts = stg_ds.index[-1].timestamp()
     testman.shutdown()
     # set session end time and save
@@ -178,7 +193,7 @@ def sample_livetest():
 def sample_livetest_sandbox():
     conf = json.load(open('api.json'))['BINANCE-TESTNET']
     strg = get_strategy('v1')()
-    run_livetest_in_sandbox('SOL-USDT', get_market('BINANCE', conf), strg, freq='1 min')
+    run_livetest_in_sandbox('DOGE-USDT', get_market('BINANCE', conf), strg, freq='3 min')
 
 if __name__ == '__main__':
     sample_livetest_sandbox()
