@@ -209,3 +209,24 @@ def add_subscription(user:int|DBUser, session:int|DBSession) -> DBSubscription:
     db_session.add(subscription)
     db_session.commit()
     return subscription
+
+
+def get_user(name:str) -> DBUser:
+    """Returns a DBUser object from the database given it's name, raises ValueError if not found or multiple found
+
+    Args:
+        name (str): name of user
+
+    Raises:
+        ValueError: if no such user is found
+        ValueError: if multiple users are found
+
+    Returns:
+        DBUser: the database user record
+    """
+    returned_users = db_session.query(DBUser).filter_by(name=name).all()
+    if len(returned_users) == 1:
+        return returned_users[0]
+    elif len(returned_users) > 1:
+        raise ValueError(f'Multiple users found for {name}')
+    raise ValueError(f'No such user found: {name}')
