@@ -12,18 +12,19 @@ from datalayer import add_order, add_session, add_signal, add_subscription, db_s
 from datalayer import get_market as get_db_market
 from datalayer import add_symbol as add_db_symbol
 
-def run_livetest(symbol, market_name, strategy:callable, freq='15 min', end:datetime=None):
-    # do pre checks
-    try:
-        klines = get_market(market_name).get_last_klines(symbol, freq)
-        ds = OHLCVDataset(klines)
-        ds = strategy(ds)
-    except:
-        # calling the strategy is required to set it's name and params from inside..
-        pass
-    market = get_market(market_name)
+def run_livetest(symbol, market:Market, strategy:callable, freq='15 min', end:datetime=None):
+    db_market = get_db_market(market.name)
+    db_symbol = add_db_symbol(symbol, db_market)
+    db_session = add_session(
+        symbol=db_symbol,
+        market=db_market,
+        strategy=strategy.name,
+        strategy_parameters=strategy.params,
+        test_type='live.basic',
+        freq=freq,
+        planned_shutdown=end)
     symbol = symbol.upper()
-    testman = TestManager(symbol=symbol, market=market.name, live=True, strategy=strategy) # params are optional
+    testman = TestManager(symbol=symbol, market=market, live=True, strategy=strategy) # params are optional
     if isinstance(end, timedelta):
         end = datetime.now(tz=pytz.UTC) + end
     
@@ -51,9 +52,45 @@ def run_livetest(symbol, market_name, strategy:callable, freq='15 min', end:date
         should_sell = ds.iloc[-1]['sell']
         kline = ds.iloc[-1]
         if should_buy:
-            testman.buy({'time': ds.index[-1], **kline.to_dict()})
+            db_signal = add_signal(
+                session=db_session,
+                timestamp=ds.index[-1], 
+                side='buy', 
+                price=kline['close'], 
+                rawrow=kline.to_dict()
+            )
+            if not testman.bought:
+                testman.buy({'time': ds.index[-1], **kline.to_dict()})
+                last_order = testman.trades[-1]
+                db_order = add_order(
+                    signal=db_signal, 
+                    side='buy', 
+                    quantity=last_order.capital,
+                    size=last_order.assets,
+                    order_type='MARKET',
+                    status='FILLED',
+                    timestamp=last_order.datetime
+                )
         elif should_sell:
-            testman.sell({'time': ds.index[-1], **kline.to_dict()})
+            db_signal = add_signal(
+                session=db_session,
+                timestamp=ds.index[-1], 
+                side='sell', 
+                price=kline['close'], 
+                rawrow=kline.to_dict()
+            )
+            if not testman.bought:
+                testman.sell({'time': ds.index[-1], **kline.to_dict()})
+                last_order = testman.trades[-1]
+                db_order = add_order(
+                    signal=db_signal, 
+                    side='sell', 
+                    quantity=last_order.assets,
+                    size=last_order.capital,
+                    order_type='MARKET',
+                    status='FILLED',
+                    timestamp=last_order.datetime
+                )
         print(testman.summary())
         try:
             time.sleep(loop_interval)
@@ -180,9 +217,10 @@ def run_livetest_in_sandbox(symbol, market:Market, strategy:Strategy, freq='15 m
         print(testman.summary())
         db_session.heartbeat()
         last_kline_ts = stg_ds.index[-1].timestamp()
-    testman.shutdown()
+    testman.shutdown(save=True)
     # set session end time and save
     db_session.ended = datetime.now(tz=pytz.UTC)
+    db_session.testman_dir = testman.file
     sql_session.commit()
 
 

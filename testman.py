@@ -159,7 +159,7 @@ class TestManager:
         self.type = type
         self.strategy = strategy
 
-        self.trades = []
+        self.trades:list['Trade'] = []
         self.assets = 0
         self.commissions = commission
         if isinstance(self.commissions, float):
@@ -255,8 +255,10 @@ class TestManager:
         self.trades.append(trade)
         return True
     
-    def shutdown(self):
-        self.save_to_disk()
+    def shutdown(self, save=True):
+        if save:
+            return self.save_to_disk()
+        return
     
     @property
     def equity(self):
@@ -315,7 +317,7 @@ Capital: {self.capital:>3.2f} USDT '''
                 filedir = f'testman/testman-{datetime.now()}-{self.symbol.upper()}-{self.market.name.upper()}-{self.strategy.name}.json'
             else:
                 filedir = f'testman/testman-{datetime.now()}.json'
-        filedir = filedir.replace(' ', '_').replace(':', '-')
+        filedir = str(filedir.replace(' ', '_').replace(':', '-'))
         os.makedirs(os.path.dirname(filedir), exist_ok=True)
         if os.path.exists(filedir):
             logger.error(f'File {filedir} already exists, failed to save')
