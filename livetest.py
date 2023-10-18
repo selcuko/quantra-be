@@ -80,6 +80,7 @@ class LiveLoop:
 
     def __run(self):
         logger.info(f'Starting live loop for {self.symbol} on {self.market.name} with freq {self.freq.replace(" ", "").upper()}')
+        last_order = None
         while not self.should_stop() and self.wait_next_candle():
             self.handle_manual_overrides()
 
@@ -150,7 +151,7 @@ class LiveLoop:
         self.running = False
         report = self.testman.shutdown(save=True)
         self.db_session.ended = datetime.now(tz=pytz.UTC)
-        self.db_session.testman_dir = self.testman
+        self.db_session.testman_dir = report
         self.db_session.status = 'completed'
         self.db_session.notify(f'Live loop completed, summary: {summary}')
         sql_session.commit()
@@ -205,7 +206,7 @@ class LiveLoop:
         """Idle indefinitely (for development purposes)"""
         while True:
             if not self.thread.is_alive():
-                logger.error('Thread died, exiting')
+                logger.error(f'Thread ({self.thread.name}) died, exiting')
                 break
             try:
                 time.sleep(1)
