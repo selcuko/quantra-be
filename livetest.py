@@ -418,10 +418,10 @@ def run_livetest_in_sandbox(symbol, market:Market, strategy:Strategy, freq='15 m
         print(testman.summary())
         db_session.heartbeat()
         last_kline_ts = stg_ds.index[-1].timestamp()
-    testman.shutdown(save=True)
+    testman_dir = testman.shutdown(save=True)
     # set session end time and save
     db_session.ended = datetime.now(tz=pytz.UTC)
-    db_session.testman_dir = testman.file
+    db_session.testman_dir = testman_dir
     sql_session.commit()
 
 
