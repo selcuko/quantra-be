@@ -6,7 +6,7 @@ from typing import Literal
 
 import pytz
 from logger import logger
-from markets import Market
+from markets import IMarket
 from models import Order
 
 class Performance:
@@ -140,7 +140,7 @@ class Trade:
 class TestManager:
     def __init__(self, 
                  symbol:str, 
-                 market:Market, 
+                 market:IMarket, 
                  type:Literal['live.basic', 'live.sandbox', 'live.mainnet', 'backtest'],
                  strategy:callable,
                  capital:float,

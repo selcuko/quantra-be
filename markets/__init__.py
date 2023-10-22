@@ -1,14 +1,16 @@
 from datetime import datetime
 from typing import Literal
 
-from models import ExchangeSymbol, Order
-
+from models import ExchangeSymbol
 from .binance import BinanceMarket
 from .kucoin import KucoinMarket
 from .mexc import MEXCMarket
+import typing
+if typing.TYPE_CHECKING:
+    from quantapi.models import Order
 
 
-def get_market(market_name, config={}) -> 'Market':
+def get_market(market_name, config={}) -> 'IMarket':
     market_name = market_name.lower()
     if market_name == 'binance':
         return BinanceMarket(config)
@@ -20,7 +22,7 @@ def get_market(market_name, config={}) -> 'Market':
         raise ValueError(f'Unknown market: {market_name}')
 
 
-class Market:
+class IMarket:
     authenticated: bool
     testnet: bool
     name: str
@@ -71,7 +73,7 @@ class Market:
             Order: Order object
         """
     
-    def get_order(self, symbol:ExchangeSymbol|str, order:Order|int) -> 'Order':
+    def get_order(self, symbol:ExchangeSymbol|str, order:'Order|int') -> 'Order':
         """Get order from market
 
         Args:
@@ -102,7 +104,7 @@ class Market:
             list[Order]: list of Order objects
         """
         
-    def cancel_order(self, symbol:ExchangeSymbol|str, order:Order|int) -> 'Order':
+    def cancel_order(self, symbol:ExchangeSymbol|str, order:'Order|int') -> 'Order':
         """Cancel an order given symbol
 
         Args:
