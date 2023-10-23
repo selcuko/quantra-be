@@ -8,8 +8,8 @@ class Market(models.Model):
         KUCOIN = 'KUCOIN', 'KuCoin'
         MEXC = 'MEXC', 'MEXC'
     exchange_name = models.CharField(max_length=30)
-    friendly_name = models.CharField(max_length=30, null=True, blank=True, verbose_name='Descriptive name for the config-exchange pair for this market.')
-    config_name = models.CharField(max_length=30, null=True, blank=True, verbose_name='Name of key in config file for this market.')
+    friendly_name = models.CharField(max_length=30, null=True, blank=True, help_text='Descriptive name for the config-exchange pair for this market.')
+    config_name = models.CharField(max_length=30, null=True, blank=True, help_text='Name of key in config file for this market.')
     trading_enabled = models.BooleanField(default=False)
     testnet_enabled = models.BooleanField(default=False)
     mainnet_enabled = models.BooleanField(default=False)
@@ -25,10 +25,10 @@ class Symbol(models.Model):
     base = models.CharField(max_length=10)
     quote = models.CharField(max_length=10)
     name = models.CharField(max_length=30)
-    base_precision = models.IntegerField(null=True, blank=True, verbose_name='Number of decimal places for base currency')
-    quote_precision = models.IntegerField(null=True, blank=True, verbose_name='Number of decimal places for quote currency')
-    spot_trading_enabled = models.BooleanField(default=True, verbose_name='Spot trading enabled for this symbol in related market')
-    margin_trading_enabled = models.BooleanField(default=False, verbose_name='Margin trading enabled for this symbol in related market')
+    base_precision = models.IntegerField(null=True, blank=True, help_text='Number of decimal places for base currency')
+    quote_precision = models.IntegerField(null=True, blank=True, help_text='Number of decimal places for quote currency')
+    spot_trading_enabled = models.BooleanField(default=True, help_text='Spot trading enabled for this symbol in related market')
+    margin_trading_enabled = models.BooleanField(default=False, help_text='Margin trading enabled for this symbol in related market')
     sessions: models.QuerySet['Session']
 
     def save(self, *args, **kwargs):
@@ -49,7 +49,10 @@ class Symbol(models.Model):
         }
 
     def __str__(self):
-        return self.name
+        try:
+            return f'{self.name}@{self.market.exchange_name}'
+        except:
+            return f'{self.name}@Unbound'
 
 
 class Session(models.Model):
@@ -86,7 +89,7 @@ class Session(models.Model):
     strategy_parameters = models.CharField(max_length=256)
     planned_shutdown = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=30, choices=Status.choices)
-    report = models.CharField(max_length=256, null=True, blank=True, verbose_name='Report file name')
+    report = models.CharField(max_length=256, null=True, blank=True, help_text='Report file name')
     last_heartbeat = models.DateTimeField(auto_now=True)
     signals: models.QuerySet['Signal']
     subscriptions: models.QuerySet['Subscription']
@@ -105,6 +108,15 @@ class Session(models.Model):
 
     def notify_complete(self, summary):
         return self.notify(str(summary))
+    
+    def profit(self):
+        total = 0
+        for signal in self.signals.all():
+            try:
+                total += signal.order.deal_funds
+            except:
+                continue
+        return total
 
 class Signal(models.Model):
     class Side(models.TextChoices):
@@ -119,6 +131,13 @@ class Signal(models.Model):
 
     def __str__(self) -> str:
         return f'{self.side} {self.session.symbol.name} {self.price}'
+    
+    @property
+    def symbol(self):
+        try:
+            return self.session.symbol
+        except:
+            return None
 
 
 class Order(models.Model):
@@ -132,14 +151,15 @@ class Order(models.Model):
         REJECTED = 'REJECTED'
     oid = models.CharField(max_length=256, unique=True, null=True, blank=True)
     client_oid = models.CharField(max_length=256, unique=True, null=True, blank=True)
-    deal_size = models.FloatField(verbose_name='Amount of quote currency in this order (e.g. BTC)')
-    price = models.FloatField(verbose_name='Price represented as (price of base)/(price of quote)')     # price of order in quote currency (e.g. USDT)
-    deal_funds = models.FloatField(verbose_name='Amount of base currency in this order (e.g. USDT)')
-    funds = models.FloatField(verbose_name='Amount of base currency of this order initially placed with')
+    deal_size = models.FloatField(help_text='Amount of quote currency in this order (e.g. BTC)')
+    price = models.FloatField(help_text='Price represented as (price of base)/(price of quote)')
+    deal_funds = models.FloatField(help_text='Amount of base currency in this order (e.g. USDT)')
+    funds = models.FloatField(help_text='Amount of base currency of this order initially placed with')
     order_type = models.CharField(max_length=30, choices=Type.choices)
     signal = models.OneToOneField(Signal, on_delete=models.PROTECT, related_name='order')
     timestamp = models.DateTimeField()
     status = models.CharField(max_length=30, choices=Status.choices)
+    force = models.BooleanField(default=False)
 
     def __str__(self) -> str:
         return f'{self.status} {self.signal.side} {self.signal.session.symbol.name} {self.signal.price}'
@@ -162,6 +182,13 @@ class Order(models.Model):
         if self.funds < self.deal_funds:
             raise ValueError('Cannot save order with funds < size')
         super().save(*args, **kwargs)
+    
+    @property
+    def symbol(self):
+        try:
+            return self.signal.symbol
+        except:
+            return None
 
 
 class User(models.Model):

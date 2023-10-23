@@ -14,7 +14,7 @@ from testman import TestManager
 def analyze(ds:OHLCVDataset, symbol:str, market:IMarket, strategy:Strategy, freq:str='15 min', start:Optional[datetime]=None, end:Optional[datetime]=None, verbose=False, capital:float=1000):
     """Analyze the dataset and return a report."""
     print(f'Starting backtest for {symbol}@{market.name} from {start} to {end}')
-    _market = Market.objects.get(exchange_name=market.name)
+    _market = Market.objects.get_or_create(exchange_name=market.name)[0]
     _symbol = Symbol.objects.get_or_create(name=symbol, market=_market)[0]
     
     ds = ds.change(freq)

@@ -202,6 +202,8 @@ class LiveLoop:
 
     def stop(self):
         self.will_stop = True
+        self.session.status = Session.Status.COMPLETED
+        self.session.save()
     
     def force_buy(self):
         if self.testman.bought:
@@ -347,7 +349,7 @@ if __name__ == '__main__':
         capital_limit=100,
         asset_limit=100,
         freq='1 min')
-    o = ll.force_sell()
+    o = ll.force_buy()
     print(o)
     try:
         while True:
