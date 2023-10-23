@@ -1,11 +1,12 @@
-from datetime import datetime, timedelta
 import json
 import time
+from datetime import datetime, timedelta
+
 import pytz
+
+from livetest import LiveLoop
 from markets import get_market
 from strategy import get_strategy
-from livetest import LiveLoop
-from datalayer import get_user
 
 """
 config = json.load(open('api.json'))['KUCOIN']
@@ -13,7 +14,6 @@ market = get_market('KUCOIN', config)
 response = market.user.get_base_fee()
 pprint(response)
 """
-user = get_user('master')
 mc = json.load(open('api.json', 'r'))['BINANCE-TESTNET']
 ll = LiveLoop(
     symbol='SOL-USDT',
@@ -21,7 +21,6 @@ ll = LiveLoop(
     strategy=get_strategy('v1')(),
     capital_limit=100.,
     asset_limit=1000.,
-    initiating_user=user,
     freq='1 min',
     end=datetime.now(tz=pytz.UTC) + timedelta(days=1), 
 )
@@ -33,7 +32,6 @@ ll2 = LiveLoop(
     strategy=get_strategy('v1')(),
     capital_limit=100.,
     asset_limit=1000.,
-    initiating_user=user,
     freq='1 min',
     end=datetime.now(tz=pytz.UTC) + timedelta(days=1), 
 )

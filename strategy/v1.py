@@ -1,11 +1,15 @@
-from models import OHLCVDataset
-import pandas_ta
+import pandas as pd
+import pandas_ta  # required to use pandas_ta indicators
 
-class StrategyV1:
+from models import OHLCVDataset
+from strategy.interface import Strategy
+
+
+class StrategyV1(Strategy):
     def __init__(self, params={}):
         self.params = {**self.default_params(), **params}
         self.name = 'StrategyV1.Lisa.PandasTA'
-        self.ds = None
+        self.ds = OHLCVDataset(pd.DataFrame())
     
     def __call__(self, ds:OHLCVDataset):
         return self.calculate(ds)
@@ -37,6 +41,8 @@ class StrategyV1:
         return self.ds
 
     def indicators(self):
+        if self.ds.empty or not self.ds.ta:
+            return
         self.ds.ta.macd(
             fast=self.params['macd']['fast'], 
             slow=self.params['macd']['slow'], 
@@ -57,6 +63,8 @@ class StrategyV1:
             append=True)
 
     def indicator_signals(self):
+        if self.ds.empty:
+            return
         self.ds['macd_buy']  = (self.ds['macd_diff'] > self.ds['macd_diff'].shift()) & (self.ds['macd_diff'] <= 0)
         self.ds['macd_sell'] = (self.ds['macd_diff'] < self.ds['macd_diff'].shift()) & (self.ds['macd_diff'] >= 0)
 
@@ -67,6 +75,8 @@ class StrategyV1:
         self.ds['t3_sell'] = (self.ds['t3'] < self.ds['t3'].shift()) & (self.ds['t3'] >= 0)
     
     def signals(self):
+        if self.ds.empty:
+            return
         self.ds['buy']  = self.ds['macd_buy'] & self.ds['stochrsi_buy'] & self.ds['t3_buy']
         self.ds['sell'] = self.ds['macd_sell'] & self.ds['stochrsi_sell'] & self.ds['t3_sell']
     

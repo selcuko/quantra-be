@@ -1,11 +1,15 @@
-from datetime import datetime, timedelta
 import time
+from datetime import datetime, timedelta
+
 import pytz
 import requests
+
 from logger import logger
+from markets import IMarket
 from models import interval_to_minutes
 
-class MEXCMarket:
+
+class MEXCMarket(IMarket):
     name = 'MEXC'
     def __init__(self, config) -> None:
         self.authenticated = False
@@ -62,11 +66,11 @@ class MEXCMarket:
             logger.warning(f'MEXC only allows a maximum of 1000 klines per request, you requested {limit}')
             limit = 1000
         calculated_timerange = timedelta(minutes=interval_to_minutes(interval) * limit)
-        if not start:
+        if not start and end:
             start = end - calculated_timerange
-        elif not end:
+        elif not end and start:
             end = start + calculated_timerange
-        else:
+        elif end and start:
             if end - start > calculated_timerange:
                 # calculate how many candles are in the timerange
                 candles_in_timerange = (end - start) // timedelta(minutes=interval_to_minutes(interval))

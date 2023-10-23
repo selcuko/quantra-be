@@ -1,12 +1,9 @@
-from dataclasses import dataclass
-from datetime import datetime
 import os
-from typing import Literal
+
 import pandas as pd
+
 from logger import logger
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from markets import Market
+
 
 def interval_to_minutes(interval):
     try:
@@ -62,15 +59,16 @@ class OHLCVDataset(pd.DataFrame):
             '1 month': '1M',
         }[freq]
     
-    def change(self, freq):
+    def change(self, freq) -> "OHLCVDataset":
         freq = self._standardize_freq(freq)
-        return self.resample(freq).agg({
+        new_ds = self.resample(freq).agg({
             'open': 'first',
             'high': 'max',
             'low': 'min',
             'close': 'last',
             'volume': 'sum'
         })
+        return OHLCVDataset(new_ds, pass_thru=True)
 
     @classmethod
     def from_csv(cls, filename):
@@ -86,7 +84,7 @@ class OHLCVDataset(pd.DataFrame):
         ds['low'] = ds['low'].astype(float)
         ds['close'] = ds['close'].astype(float)
         ds['volume'] = ds['volume'].astype(float)
-        return cls(ds, pass_thru=True)
+        return OHLCVDataset(ds, pass_thru=True)
     
     # modify [] operator to return a OHLCVDataset
     def __getitem__(self, key):
@@ -100,88 +98,3 @@ class OHLCVDataset(pd.DataFrame):
 
     def copy(self, *args, **kwargs) -> "OHLCVDataset":
         return OHLCVDataset(super().copy(*args, **kwargs), pass_thru=True)
-
-
-class Order:
-    def __init__(self, oid, symbol, market, side, price, created, deal_funds, deal_size, funds, **kwargs) -> None:
-        self.oid: str = oid
-        self.symbol: ExchangeSymbol = symbol
-        self.market: Market = market
-        self.side: Literal['BUY', 'SELL'] = side
-        self.price: float = price
-        self.created: datetime = created
-        self.deal_funds: float = deal_funds
-        self.deal_size: float = deal_size
-        self.funds: float = funds
-        
-        self.client_oid: str = kwargs.get('client_oid')
-        self.type: Literal['LIMIT', 'MARKET'] = kwargs.get('type', 'MARKET')
-        self.status: Literal['ACTIVE', 'FILLED', 'CANCELLED', 'CLOSED'] = kwargs.get('status', 'ACTIVE')
-
-    def json(self):
-        return {
-            'oid': self.oid,
-            'symbol': self.symbol.json(),
-            'market': str(self.market),
-            'side': self.side,
-            'price': self.price,
-            'type': self.type,
-            'created': self.created,
-            'status': self.status,
-            'deal_funds': self.deal_funds,
-            'deal_size': self.deal_size,
-            'funds': self.funds,
-            'client_oid': self.client_oid,
-        }
-
-    def __str__(self) -> str:
-        return f'Order@{self.market!s}:{self.oid} {self.status} {self.type} {self.side} {self.symbol}'
-    
-    def refresh(self):
-        """Update this order with the latest information from the exchange"""
-        order = self.market.get_order(self.symbol, self.oid)
-        self.status = order.status
-        self.deal_funds = order.deal_funds
-        self.deal_size = order.deal_size
-        self.funds = order.funds
-        self.price = order.price
-        self.side = order.side
-        self.type = order.type
-        self.created = order.created
-        self.client_oid = order.client_oid
-        return self
-
-
-class ExchangeSymbol:
-    def __init__(self, name, base, quote, **kwargs) -> None:
-        self.name = name
-        self.base = base
-        self.quote = quote
-        self.base_precision = kwargs.get('base_precision')
-        self.quote_precision = kwargs.get('quote_precision')
-        self.spot_trading_enabled = kwargs.get('spot_trading_enabled', True)
-        self.margin_trading_enabled = kwargs.get('margin_trading_enabled', False)
-        self.filters = kwargs.get('filters', {
-            'price': [],
-            'lot': [],
-            'fund': [],
-        })
-    
-    def json(self):
-        return {
-            'name': self.name,
-            'base': self.base,
-            'quote': self.quote,
-            'base_precision': self.base_precision,
-            'quote_precision': self.quote_precision,
-            'spot_trading_enabled': self.spot_trading_enabled,
-            'margin_trading_enabled': self.margin_trading_enabled,
-        }
-
-    def __str__(self) -> str:
-        return self.std_name
-    
-    @property
-    def std_name(self):
-        return f'{self.base}-{self.quote}'
-

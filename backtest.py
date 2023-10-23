@@ -1,29 +1,35 @@
-from datetime import datetime
-from markets import Market
-from models import OHLCVDataset
-from testman import TestManager
-from datalayer import add_session, db_session as sql_session
-from datalayer import get_market as get_db_market
-from datalayer import add_symbol as add_db_symbol
+import django
+django.setup()
 
-def analyze(ds:OHLCVDataset, strategy:callable, freq:str='15 min', start:datetime=None, end:datetime=None, symbol:str=None, market:Market=None, verbose=False, capital:float=1000):
+from datetime import datetime
+from typing import Optional
+
+from markets import IMarket
+from models import OHLCVDataset
+from quantapi.models import Market, Session, Symbol
+from strategy.interface import Strategy
+from testman import TestManager
+
+
+def analyze(ds:OHLCVDataset, symbol:str, market:IMarket, strategy:Strategy, freq:str='15 min', start:Optional[datetime]=None, end:Optional[datetime]=None, verbose=False, capital:float=1000):
     """Analyze the dataset and return a report."""
     print(f'Starting backtest for {symbol}@{market.name} from {start} to {end}')
-    db_market = get_db_market(market.name)
-    db_symbol = add_db_symbol(symbol, db_market)
-    db_session = add_session(
-        symbol=db_symbol,
-        market=db_market,
-        strategy=strategy.name,
-        strategy_parameters=strategy.params,
-        test_type='backtest',
-        freq=freq,
-        planned_shutdown=end)
+    _market = Market.objects.get(exchange_name=market.name)
+    _symbol = Symbol.objects.get_or_create(name=symbol, market=_market)[0]
     
     ds = ds.change(freq)
     ds = ds[start:end]
     ds = strategy(ds)
-
+    session = Session.objects.create(
+            session_type=Session.Type.BACKTEST,
+            symbol=_symbol,
+            freq=freq,
+            started=ds.index[0],
+            ended=ds.index[-1],
+            strategy_name=strategy.name,
+            strategy_parameters=strategy.params,
+            status=Session.Status.ONGOING,
+        )
     testman = TestManager(
         symbol=symbol, 
         market=market, 
@@ -46,19 +52,25 @@ def analyze(ds:OHLCVDataset, strategy:callable, freq:str='15 min', start:datetim
                 print(testman.summary())
     
     testman_dir = testman.shutdown()
-    db_session.status = 'completed'
-    db_session.end = datetime.utcnow()
-    db_session.testman_dir = testman_dir
-    sql_session.commit()
+    session.status = Session.Status.COMPLETED
+    session.report = testman_dir
+    session.save()
     return testman
 
 
 if __name__ == '__main__':
-    from strategy import get_strategy
     from markets import get_market
+    from strategy import get_strategy
     symbol = 'XRP-USDT'
     market = get_market('KUCOIN')
     ds = OHLCVDataset.from_csv(f'./data/{symbol}-{market.name}.csv')
     strategy = get_strategy('v2')()
-    tm = analyze(ds, strategy, freq='15 min', symbol=symbol, market=market, verbose=True, start=datetime(2023, 7, 1), end=datetime(2023, 9, 13))
-    
+    tm = analyze(
+        ds=ds, 
+        strategy=strategy, 
+        freq='15 min', 
+        symbol=symbol, 
+        market=market, 
+        verbose=True, 
+        start=datetime(2023, 7, 1), 
+        end=datetime(2023, 9, 13))

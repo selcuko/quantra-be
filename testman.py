@@ -1,13 +1,15 @@
-from dataclasses import dataclass
-from datetime import datetime, timedelta
 import json
 import os
-from typing import Literal
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from typing import Callable, Literal, Optional
 
 import pytz
+
 from logger import logger
 from markets import IMarket
-from models import Order
+from quantapi.models import Order
+
 
 class Performance:
     def __init__(self, trades:list["Trade"], initial_capital:float=1000.):
@@ -142,12 +144,12 @@ class TestManager:
                  symbol:str, 
                  market:IMarket, 
                  type:Literal['live.basic', 'live.sandbox', 'live.mainnet', 'backtest'],
-                 strategy:callable,
+                 strategy:Callable,
                  capital:float,
                  interval:str,
                  commission:dict={},
-                 start:datetime=None,
-                 end:datetime=None,
+                 start:Optional[datetime]=None,
+                 end:Optional[datetime]=None,
                  verbose:bool=False,):
         """Manager class to hold testing data, analyze results, and keep track of trades."""
         self.symbol = symbol
@@ -161,9 +163,11 @@ class TestManager:
 
         self.trades:list['Trade'] = []
         self.assets = 0
-        self.commissions = commission
-        if isinstance(self.commissions, float):
-            self.commissions = {'buyer': self.commission, 'seller': self.commission}
+        
+        if isinstance(commission, float):
+            self.commissions = {'buyer': commission, 'seller': commission}
+        else:
+            self.commissions = commission
         self.buyer_commission = self.commissions.get('buyer', 0)
         self.seller_commission = self.commissions.get('seller', 0)
         self.wins = 0
@@ -179,12 +183,12 @@ class TestManager:
         self.capital = capital   
         self.last_kline = None
 
-    def buy(self, kline, sync:Order=None):
+    def buy(self, kline:dict, sync:Optional[Order]=None):
         self.buy_signals += 1
         if self.bought:
             return
         self.update(kline)
-        price = self.last_kline['close']
+        price = kline.get('close', -1)
         self.bought = True
         self.bought_price = price
         if sync:
@@ -203,27 +207,27 @@ class TestManager:
             price=price,
             assets=self.assets,
             capital=self.capital,
-            datetime=kline['time'],
+            datetime=kline.get('time', datetime.now(tz=pytz.UTC)),
             position='buy',
             equity=self.equity,
-            profit=None,
-            profit_pct=None,
-            hold_time=None,
+            profit=0,
+            profit_pct=0,
+            hold_time=timedelta(seconds=0),
             rawrow=kline
         )
         self.trades.append(trade)
         return True
 
-    def sell(self, kline, sync:Order=None):
+    def sell(self, kline, sync:Optional[Order]=None):
         self.sell_signals += 1
         if not self.bought:
             return
         self.update(kline)
-        price = self.last_kline['close']
+        price = kline['close']
         self.bought = False
         if sync:
-            self.capital += sync.deal_funds
-            self.assets -= sync.deal_size
+            self.capital += sync.quantity
+            self.assets -= sync.size
             if self.assets < 0:
                 logger.error('Assets is less than 0, TestMan went out of sync with market data. (setting to 0)')
                 self.assets = 0
@@ -263,7 +267,8 @@ class TestManager:
     @property
     def equity(self):
         """Total equity in USD."""
-        return self.capital + self.assets * self.last_kline['close']
+        in_assets = self.assets * self.last_kline['close'] if self.last_kline else 0
+        return self.capital + in_assets
 
     @property
     def profit(self):
@@ -277,10 +282,11 @@ class TestManager:
         elif self.last_kline_dt:
             dtime = self.last_kline_dt.strftime("%d-%m-%Y %H:%M:%S")
         number = self.trades[-1].number if self.trades else 0
+        price = self.last_kline["close"] if self.last_kline else 'N/A'
         txt = f'''\
 [{dtime}][{number:>3d}:{" IN" if self.bought else "OUT"}] \
 Equity: {self.equity:>3.2f} USDT | \
-Price: {self.last_kline["close"]:>3.4f} USDT | \
+Price: {price:>3.4f} USDT | \
 Profit: {self.profit:>4.2f}% | \
 Last trade: {self.last_profit_pct:>3.2f}% | \
 Assets: {self.assets:>3.2f} | \
@@ -328,5 +334,7 @@ Capital: {self.capital:>3.2f} USDT '''
         return filedir
 
     def update(self, kline):
+        if not kline:
+            return
         self.last_kline = kline
         self.last_kline_dt = kline['time']

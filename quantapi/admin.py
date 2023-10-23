@@ -1,4 +1,5 @@
 from django.contrib import admin
+
 from quantapi.models import *
 
 admin.site.register(Market)

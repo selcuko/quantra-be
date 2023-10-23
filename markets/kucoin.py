@@ -2,18 +2,19 @@ import time
 import uuid
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Literal
+from typing import Literal, Optional
 
 import pytz
 from kucoin.client import Market, Trade, User
 
-from filters import FundFilter, LotFilter, PriceFilter
 from logger import logger
+from markets import IMarket
 from markets.helper import authentication_required, float_to_precision
-from models import ExchangeSymbol, Order, interval_to_minutes
+from models import interval_to_minutes
+from quantapi.models import Order, Symbol
 
 
-class KucoinMarket:
+class KucoinMarket(IMarket):
     name = 'KUCOIN'
     def __init__(self, config={}) -> None:
         self.authenticated = bool(config.get('API_KEY') and config.get('API_SECRET') and config.get('API_PASSPHRASE'))
@@ -75,8 +76,11 @@ class KucoinMarket:
     def _standardize_symbol(self, symbol:str) -> str:
         return symbol
     
-    def _standardize_datetime(self, dt:int) -> datetime:
-        return datetime.fromtimestamp(int(dt), tz=pytz.UTC)
+    def _standardize_datetime(self, dt:int|str) -> "datetime|None":
+        try:
+            return datetime.fromtimestamp(int(dt), tz=pytz.UTC)
+        except:
+            logger.error(f'Error while standardizing datetime for {self.name}: {dt}', exc_info=True)
 
     def _format_symbol(self, symbol:str) -> str:
         return symbol.upper()
@@ -95,55 +99,18 @@ class KucoinMarket:
             logger.error(f'Symbol {symbol_name} is not present in {self.name}')
             raise ValueError(f'Symbol {symbol_name} is not present in {self.name}')
 
-    def _prep_symbol(self, symbol:dict) -> ExchangeSymbol:
-        exc_symbol = ExchangeSymbol(
+    def _prep_symbol(self, symbol:dict) -> Symbol:
+        return Symbol(
             name = symbol['symbol'],
             base = symbol['baseCurrency'],
             quote = symbol['quoteCurrency'],
             base_precision = symbol['baseIncrement'],
             quote_precision = symbol['quoteIncrement'],
             spot_trading_enabled = symbol['enableTrading'],
-            margin_trading_enabled = symbol['isMarginEnabled'],
-        )
-        price_filter = PriceFilter(
-            ask_multiplier_down = symbol['priceLimitRate'],
-            ask_multiplier_up = symbol['priceLimitRate'],
-            bid_multiplier_down = symbol['priceLimitRate'],
-            bid_multiplier_up = symbol['priceLimitRate'],
-            tick_size = symbol['priceIncrement'],
-        )
-        lot_filter = LotFilter(
-            minimum_quantity = symbol['baseMinSize'],
-            maximum_quantity = symbol['baseMaxSize'],
-            step_size = symbol['baseIncrement'],
-        )
-        fund_filter = FundFilter(
-            minimum_notional = symbol['minFunds'],
-            maximum_notional = symbol['quoteMaxSize'],
-        )
-        exc_symbol.filters = {
-            'price': [price_filter], 
-            'lot': [lot_filter], 
-            'fund': [fund_filter]
-        }
-        return exc_symbol
+            margin_trading_enabled = symbol['isMarginEnabled'])
 
-    def _prep_order_values(self, symbol:ExchangeSymbol, **kwargs) -> float:
-        if price := kwargs.get('price'):
-            for price_filter in symbol.filters['price']:
-                price = price_filter.round(price)
-            return price
-        if quantity := kwargs.get('quantity'):
-            for lot_filter in symbol.filters['lot']:
-                quantity = lot_filter.round(quantity)
-            return quantity
-        if funds := kwargs.get('funds'):
-            for fund_filter in symbol.filters['fund']:
-                funds = fund_filter.round(funds)
-            return funds
-        raise ValueError(f'Could not round values for {symbol} with kwargs {kwargs}')
 
-    def _prep_order(self, order:dict, symbol:ExchangeSymbol) -> Order:
+    def _prep_order(self, order:dict, symbol:Symbol) -> Order:
         oid = order.get('orderId') or order.get('id')
         return Order(
             oid=oid,
@@ -160,7 +127,7 @@ class KucoinMarket:
             client_oid=order.get('clientOid'),
         )
     
-    def _get_klines(self, symbol:str, interval:str, start:datetime, end:datetime=None, limit=1000, retry=0) -> list[list]:
+    def _get_klines(self, symbol:str, interval:str, start:datetime, end:"datetime|None"=None, limit=1000, retry=0) -> list[list]:
         if end:
             calculated_end = end
         else:
@@ -178,14 +145,14 @@ class KucoinMarket:
                 logger.warning(f'Retrying {retry} more times')
                 time.sleep(1)
                 return self._get_klines(symbol, interval, start, end, limit, retry-1)
-            raise
+            return []
         if not klines or not isinstance(klines, list) or not isinstance(klines[0], list):
             return []
         return self._standardize_klines(klines)
 
-    def get_klines(self, symbol:str, interval:str, start:datetime=None, end:datetime=None, limit=1000, retry=0) -> list[list]:
+    def get_klines(self, symbol:str, interval:str, start:"datetime", end:"datetime|None"=None, limit=1000, retry=0) -> list[list]:
         if not symbol in self.symbols:
-            raise ValueError(f'Symbol {symbol} is not present on {self.name}')
+            raise ValueError(f'Symbol {symbol} is not present on {self.name}: {self.symbols}')
         return self._get_klines(symbol, interval, start, end, limit, retry)
  
     def get_last_klines(self, symbol:str, interval:str, limit=100, retry=1, silent=True) -> list[list]:
@@ -206,29 +173,39 @@ class KucoinMarket:
                 raise ValueError(error)
         return klines
     
-    def get_symbols(self) -> dict[str, ExchangeSymbol]:
-        return { self._standardize_symbol(symbol['symbol']): self._prep_symbol(symbol) for symbol in self.market.get_symbol_list_v2()}
+    def get_symbols(self) -> dict[str, Symbol]:
+        symbol_list = self.market.get_symbol_list_v2()
+        if not symbol_list:
+            logger.error(f'No symbols found on {self.name}')
+            return {}
+        return { self._standardize_symbol(symbol['symbol']): self._prep_symbol(symbol) for symbol in symbol_list }
     
     @authentication_required
-    def place_market_order(self, symbol:ExchangeSymbol|str, side:Literal['buy', 'sell'], funds:float=None, quantity:float=None, validate=True) -> Order:
+    def place_market_order(self, symbol:Symbol|str, side:Literal['buy', 'sell'], funds:"float|None"=None, quantity:"float|None"=None, validate=True) -> Order:
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         client_oid = uuid.uuid4().hex
         if (not funds and not quantity) or (funds and quantity):
             raise ValueError(f'You must provide either funds or quantity to place a market order on {self.name}')
-        if funds:
+        if funds and symbol.quote_precision:
             funds = float_to_precision(Decimal(funds), Decimal(symbol.quote_precision))
-        if quantity:
+        if quantity and symbol.base_precision:
             quantity = float_to_precision(quantity, symbol.base_precision)
         try:
+            if not self.trade:
+                raise ValueError(f'Cannot place market order on {self.name} without authenticated API config')
             order = self.trade.create_market_order(
                 symbol=symbol.name,
                 side=side,
                 funds=funds,
                 size=quantity,
                 client_oid=client_oid)
+            if not order:
+                raise ValueError(f'Error while placing market order on {self.name}')
             logger.info(f'Market order placed on {self.name} for {symbol} with side {side} and funds {funds} and quantity {quantity} with order id {order["orderId"]}')
             order = self._prep_order(order, symbol)
+            if not order.oid:
+                raise ValueError(f'Error while placing market order on {self.name}')
             if validate:
                 order = self.get_order(symbol, order.oid)
             return order
@@ -237,22 +214,30 @@ class KucoinMarket:
             raise
 
     @authentication_required
-    def place_limit_order(self, symbol:ExchangeSymbol|str, side:Literal['buy', 'sell'], price:float, quantity:float, validate=True) -> Order:
+    def place_limit_order(self, symbol:Symbol|str, side:Literal['buy', 'sell'], price:float, quantity:float, validate=True) -> Order:
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         client_oid = uuid.uuid4().hex
-        price = float_to_precision(Decimal(price), Decimal(symbol.quote_precision))
-        quantity = float_to_precision(Decimal(quantity), Decimal(symbol.base_precision))
+        if symbol.quote_precision:
+            price = float_to_precision(Decimal(price), symbol.quote_precision)
+        if symbol.base_precision:
+            quantity = float_to_precision(Decimal(quantity), symbol.base_precision)
         try:
+            if not self.trade:
+                raise ValueError(f'Cannot place limit order on {self.name} without authenticated API config')
             order = self.trade.create_limit_order(
                 symbol=symbol.name,
                 side=side,
-                price=self._round_price(symbol, price),
+                price=price,
                 size=quantity,
                 client_oid=client_oid,
             )
+            if not order:
+                raise ValueError(f'Error while placing limit order on {self.name}')
             logger.info(f'Limit order placed on {self.name} for {symbol} with side {side} and price {price} and size {quantity} with order id {order["orderId"]}')
             order = self._prep_order(order, symbol)
+            if not order.oid:
+                raise ValueError(f'Error while placing limit order on {self.name}')
             if validate:
                 order = self.get_order(symbol, order.oid)
             return order
@@ -261,65 +246,89 @@ class KucoinMarket:
             raise
 
     @authentication_required
-    def get_order(self, symbol:ExchangeSymbol|str, order:Order|int) -> Order:
+    def get_order(self, symbol:Symbol|str, order:Order|str) -> Order:
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         if isinstance(order, Order):
+            if not order.oid:
+                raise ValueError('Cannot get order without oid')
             order = order.oid
         try:
-            order = self.trade.get_order_details(orderId=order)
-            return self._prep_order(order, symbol)
+            if not self.trade:
+                raise ValueError(f'Cannot get order on {self.name} without authenticated API config')
+            _order = self.trade.get_order_details(orderId=order)
+            if not _order:
+                raise ValueError(f'Error while getting order {order} on {self.name}')
+            return self._prep_order(_order, symbol)
         except:
             logger.error(f'Error while getting order {order} on {self.name}', exc_info=True)
             raise
     
     @authentication_required
-    def get_orders(self, symbol=ExchangeSymbol|str) -> list[Order]:
+    def get_orders(self, symbol:Symbol|str) -> list[Order]:
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         try:
+            if not self.trade:
+                raise ValueError(f'Cannot get orders on {self.name} without authenticated API config')
             orders = self.trade.get_order_list(symbol=symbol.name)
+            if not orders:
+                raise ValueError(f'Error while getting orders on {self.name}')
             return [self._prep_order(order, symbol) for order in orders['items']]
         except:
             logger.error(f'Error while getting orders on {self.name}', exc_info=True)
             raise
     
     @authentication_required
-    def get_open_orders(self, symbol:ExchangeSymbol|str=None) -> list[Order]:
+    def get_open_orders(self, symbol:Symbol|str) -> list[Order]:
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         try:
+            if not self.trade:
+                raise ValueError(f'Cannot get open orders on {self.name} without authenticated API config')
             if symbol:
                 orders = self.trade.get_order_list(symbol=symbol.name, status='active')
             else:
                 orders = self.trade.get_order_list(status='active')
+            if not orders:
+                raise ValueError(f'Error while getting open orders on {self.name}')
             return [self._prep_order(order, symbol) for order in orders['items']]
         except:
             logger.error(f'Error while getting open orders on {self.name}', exc_info=True)
             raise
 
     @authentication_required
-    def cancel_order(self, symbol:ExchangeSymbol|str, order:Order|int) -> Order:
+    def cancel_order(self, symbol:Symbol|str, order:Order|str) -> Order:
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         if isinstance(order, Order):
-            order = order.oid
+            _order_oid = order.oid
+        else:
+            _order_oid = order
         try:
-            order = self.trade.cancel_order(orderOid=order)
-            return self._prep_order(order, symbol)
+            if not self.trade:
+                raise ValueError(f'Cannot cancel order on {self.name} without authenticated API config')
+            _order_payload = self.trade.cancel_order(orderId=_order_oid)
+            if not _order_payload:
+                raise ValueError(f'Error while cancelling order {order} on {self.name}')
+            return self._prep_order(_order_payload, symbol)
         except:
             logger.error(f'Error while cancelling order {order} on {self.name}', exc_info=True)
             raise
     
     @authentication_required
-    def cancel_all_orders(self, symbol:ExchangeSymbol|str=None) -> list[Order]:
+    def cancel_all_orders(self, symbol:Symbol|str) -> list[Order]:
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         try:
+            if not self.trade:
+                raise ValueError(f'Cannot cancel all orders on {self.name} without authenticated API config')
             if symbol:
                 orders = self.trade.cancel_all_orders(symbol=symbol.name)
             else:
                 orders = self.trade.cancel_all_orders()
+            if not orders:
+                raise ValueError(f'Error while cancelling all orders on {self.name}')
             return [self._prep_order(order, symbol) for order in orders['cancelledOrderIds']]
         except:
             logger.error(f'Error while cancelling all orders on {self.name}', exc_info=True)
@@ -327,18 +336,25 @@ class KucoinMarket:
     
     @authentication_required
     def get_account(self):
+        if not self.user:
+            raise ValueError(f'Cannot get account on {self.name} without authenticated API config')
         account = self.user.get_account_list(account_type='trade')
+        if not account:
+            logger.error(f'No account found on {self.name}')
+            return
         self.spot_trading_enabled = len(account) > 0
         self.assets = { str(asset['currency']): float(asset['available']) for asset in account }
         self.capital = self.assets.get('USDT', 0)
         fees = self.user.get_base_fee()
-        self.commission = {
-            'maker': float(fees['makerFeeRate']),
-            'taker': float(fees['takerFeeRate']),
-            'buyer': float(fees['takerFeeRate']),  # market orders count as taker
-            'seller': float(fees['takerFeeRate']), # market orders count as taker
-        }
-
+        if not fees:
+            logger.error(f'No fees found for account on {self.name}')
+        else:
+            self.commission = {
+                'maker': float(fees['makerFeeRate']),
+                'taker': float(fees['takerFeeRate']),
+                'buyer': float(fees['takerFeeRate']),  # market orders count as taker
+                'seller': float(fees['takerFeeRate']), # market orders count as taker
+            }
         if not self.spot_trading_enabled:
             logger.error(f'No assets found for account, spot trading disabled on {self.name}')
         if not self.capital:

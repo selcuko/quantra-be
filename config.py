@@ -1,4 +1,6 @@
-import os, json
+import json
+import os
+
 
 def get_market_config(config_name):
     if not os.path.exists('api.json'):

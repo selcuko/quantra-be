@@ -1,6 +1,5 @@
+from typing import Optional
 from django.db import models
-from markets import get_market
-from config import get_market_config
 
 
 class Market(models.Model):
@@ -15,12 +14,10 @@ class Market(models.Model):
     testnet_enabled = models.BooleanField(default=False)
     mainnet_enabled = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
+    symbols: models.QuerySet['Symbol']
 
     def __str__(self):
-        return self.friendly_name
-
-    def get_market_interface(self):
-        return get_market(self.exchange_name, get_market_config(self.config_name))
+        return str(self.friendly_name or self.exchange_name)
 
 
 class Symbol(models.Model):
@@ -28,6 +25,11 @@ class Symbol(models.Model):
     base = models.CharField(max_length=10)
     quote = models.CharField(max_length=10)
     name = models.CharField(max_length=30)
+    base_precision = models.IntegerField(null=True, blank=True, verbose_name='Number of decimal places for base currency')
+    quote_precision = models.IntegerField(null=True, blank=True, verbose_name='Number of decimal places for quote currency')
+    spot_trading_enabled = models.BooleanField(default=True, verbose_name='Spot trading enabled for this symbol in related market')
+    margin_trading_enabled = models.BooleanField(default=False, verbose_name='Margin trading enabled for this symbol in related market')
+    sessions: models.QuerySet['Session']
 
     def save(self, *args, **kwargs):
         if not self.name and self.base and self.quote:
@@ -35,6 +37,16 @@ class Symbol(models.Model):
         if not self.base and not self.quote and self.name:
             self.base, self.quote = self.name.split('-')
         super().save(*args, **kwargs)
+
+    def to_dict(self):
+        return {
+            'name': self.name,
+            'base': self.base,
+            'quote': self.quote,
+            'base_precision': self.base_precision,
+            'quote_precision': self.quote_precision,
+            'spot_trading_enabled': self.spot_trading_enabled,
+        }
 
     def __str__(self):
         return self.name
@@ -76,6 +88,8 @@ class Session(models.Model):
     status = models.CharField(max_length=30, choices=Status.choices)
     report = models.CharField(max_length=256, null=True, blank=True, verbose_name='Report file name')
     last_heartbeat = models.DateTimeField(auto_now=True)
+    signals: models.QuerySet['Signal']
+    subscriptions: models.QuerySet['Subscription']
 
     def __str__(self):
         return f'{self.strategy_name} - {self.symbol} - {self.status}'
@@ -85,10 +99,10 @@ class Session(models.Model):
 
     def notify_signal(self, signal):
         return self.notify(str(signal))
-    
+
     def notify_order(self, order):
         return self.notify(str(order))
-    
+
     def notify_complete(self, summary):
         return self.notify(str(summary))
 
@@ -101,6 +115,7 @@ class Signal(models.Model):
     side = models.CharField(max_length=30, choices=Side.choices)
     price = models.FloatField()
     raw = models.CharField(max_length=512)
+    order: Optional[models.OneToOneField['Order']]
 
     def __str__(self) -> str:
         return f'{self.side} {self.session.symbol.name} {self.price}'
@@ -117,10 +132,10 @@ class Order(models.Model):
         REJECTED = 'REJECTED'
     oid = models.CharField(max_length=256, unique=True, null=True, blank=True)
     client_oid = models.CharField(max_length=256, unique=True, null=True, blank=True)
-    size = models.FloatField()
-    price = models.FloatField()
-    quantity = models.FloatField()
-    funds = models.FloatField()
+    deal_size = models.FloatField(verbose_name='Amount of quote currency in this order (e.g. BTC)')
+    price = models.FloatField(verbose_name='Price represented as (price of base)/(price of quote)')     # price of order in quote currency (e.g. USDT)
+    deal_funds = models.FloatField(verbose_name='Amount of base currency in this order (e.g. USDT)')
+    funds = models.FloatField(verbose_name='Amount of base currency of this order initially placed with')
     order_type = models.CharField(max_length=30, choices=Type.choices)
     signal = models.OneToOneField(Signal, on_delete=models.PROTECT, related_name='order')
     timestamp = models.DateTimeField()
@@ -128,25 +143,23 @@ class Order(models.Model):
 
     def __str__(self) -> str:
         return f'{self.status} {self.signal.side} {self.signal.session.symbol.name} {self.signal.price}'
-    
-    def refresh_from_market(self, market_interface=None):
+
+    def refresh_from_market(self, market_interface):
         if not self.oid:
             raise ValueError('Cannot refresh order without oid')
-        if not market_interface:
-            market_interface = self.signal.session.symbol.market.get_market_interface()
-        order = market_interface.get_order(self.signal.session.symbol, self.signal.oid)
+        order = market_interface.get_order(self.signal.session.symbol, self.oid)
         self.status = order.status
-        self.size = order.size
+        self.deal_funds = order.deal_funds
         self.price = order.price
-        self.quantity = order.quantity
+        self.deal_size = order.deal_size
         self.funds = order.funds
         self.order_type = order.order_type
         self.timestamp = order.timestamp
         self.client_oid = order.client_oid
         self.save()
-    
+
     def save(self, *args, **kwargs):
-        if self.funds < self.size:
+        if self.funds < self.deal_funds:
             raise ValueError('Cannot save order with funds < size')
         super().save(*args, **kwargs)
 
@@ -166,7 +179,7 @@ class Subscription(models.Model):
 
     def __str__(self) -> str:
         return f'SUB {self.user.name} - {self.session.strategy_name} - {self.session.symbol.name}'
-    
+
 
 class Endpoint(models.Model):
     class Type(models.TextChoices):
@@ -177,4 +190,3 @@ class Endpoint(models.Model):
 
     def __str__(self) -> str:
         return f'{self.endpoint_type} {self.external_id}'
-

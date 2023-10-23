@@ -1,22 +1,29 @@
+import django
+django.setup()
+
 import time
 import uuid
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Literal
+from typing import Literal, Optional
 
 import pytz
-from binance.client import Client
 import requests
+from binance.client import Client
 
-from filters import FundFilter, LotFilter, PriceFilter
 from logger import logger
 from markets.helper import authentication_required, float_to_precision
-from models import ExchangeSymbol, Order, interval_to_minutes
+from markets.interface import IMarket
+from models import interval_to_minutes
+from quantapi.models import Order, Symbol
 
 
-class BinanceMarket:
+class BinanceMarket(IMarket):
     name = 'BINANCE'
-    def __init__(self, config={}):
+
+    def __init__(self, config=None):
+        if config is None:
+            config = {}
         self.authenticated = bool(config.get('API_KEY') and config.get('API_SECRET'))
         self.testnet = False
         self.spot_trading_enabled = False
@@ -32,7 +39,7 @@ class BinanceMarket:
                     testnet=self.testnet)
             else:
                 self.client = Client()
-        except Exception as e:
+        except:
             logger.fatal(f'Error while initializing {self.name}', exc_info=True)
             raise
         self.symbols = self.get_symbols()
@@ -57,7 +64,7 @@ class BinanceMarket:
                   float(kline[3]),
                   float(kline[4]),
                   float(kline[5]),
-                ] for kline in klines ]  
+                ] for kline in klines ]
 
     def _standardize_symbol(self, symbol:dict) -> str:
         return f'{symbol["baseAsset"]}-{symbol["quoteAsset"]}'
@@ -89,18 +96,21 @@ class BinanceMarket:
             '1 month': Client.KLINE_INTERVAL_1MONTH,
         }[interval]
 
-    def _format_datetime(self, dt) -> str:
+    @staticmethod
+    def _format_datetime(dt) -> str:
         return str(int(dt.replace(second=0, microsecond=0).timestamp()*1000))
 
-    def _get_symbol_from_name(self, symbol_name:str) -> ExchangeSymbol:
+    def _get_symbol_from_name(self, symbol_name:str) -> 'Symbol':
         try:
-            return self.symbols[symbol_name]
+            _symbol = symbol_name
+            return self.symbols[_symbol]
         except KeyError:
-            logger.error(f'Symbol {symbol_name} is not present in {self.name}')
+            logger.error(f'Symbol {symbol_name} is not present in {self.name}: {self.symbols.keys()}')
             raise ValueError(f'Symbol {symbol_name} is not present in {self.name}')
 
-    def _prep_symbol(self, symbol:dict) -> ExchangeSymbol:
-        exc_symbol = ExchangeSymbol(
+    @staticmethod
+    def _prep_symbol(symbol:dict) -> 'Symbol':
+        exc_symbol = Symbol(
                 name = symbol['symbol'],
                 base = symbol['baseAsset'],
                 quote = symbol['quoteAsset'],
@@ -108,105 +118,31 @@ class BinanceMarket:
                 quote_precision = symbol['quotePrecision'],
                 spot_trading_enabled = symbol['isSpotTradingAllowed'],
                 margin_trading_enabled = symbol['isMarginTradingAllowed'])
-        if raw_price_filter := [filter for filter in symbol['filters'] if filter['filterType'] == 'PRICE_FILTER']:
-            raw_price_filter = raw_price_filter[0]
-            exc_symbol.filters['price'].append(
-                PriceFilter(
-                    max_price=raw_price_filter.get('maxPrice'),
-                    min_price=raw_price_filter.get('minPrice'),
-                    tick_size=raw_price_filter.get('tickSize'),
-                    ask_multiplier_up=raw_price_filter.get('askMultiplierUp'),
-                    ask_multiplier_down=raw_price_filter.get('askMultiplierDown'),
-                    bid_multiplier_up=raw_price_filter.get('bidMultiplierUp'),
-                    bid_multiplier_down=raw_price_filter.get('bidMultiplierDown')
-                    )
-                )
-        if raw_pct_price_filter := [filter for filter in symbol['filters'] if filter['filterType'] == 'PERCENT_PRICE_BY_SIDE']:
-            raw_pct_price_filter = raw_pct_price_filter[0]
-            exc_symbol.filters['price'].append(
-                PriceFilter(
-                    max_price=raw_pct_price_filter.get('maxPrice'),
-                    min_price=raw_pct_price_filter.get('minPrice'),
-                    tick_size=raw_pct_price_filter.get('tickSize'),
-                    ask_multiplier_up=raw_pct_price_filter.get('askMultiplierUp'),
-                    ask_multiplier_down=raw_pct_price_filter.get('askMultiplierDown'),
-                    bid_multiplier_up=raw_pct_price_filter.get('bidMultiplierUp'),
-                    bid_multiplier_down=raw_pct_price_filter.get('bidMultiplierDown')
-                    )
-                )
-        if raw_lot_filter := [filter for filter in symbol['filters'] if filter['filterType'] == 'LOT_SIZE']:
-            raw_lot_filter = raw_lot_filter[0]
-            exc_symbol.filters['lot'].append(
-                LotFilter(
-                    minimum_quantity=raw_lot_filter.get('minQty'),
-                    maximum_quantity=raw_lot_filter.get('maxQty'),
-                    step_size=raw_lot_filter.get('stepSize'),
-                    applies_to_market=False
-                    )
-                )
-        if raw_market_lot_filter := [filter for filter in symbol['filters'] if filter['filterType'] == 'MARKET_LOT_SIZE']:
-            raw_market_lot_filter = raw_market_lot_filter[0]
-            exc_symbol.filters['lot'].append(
-                LotFilter(
-                    minimum_quantity=raw_market_lot_filter.get('minQty'),
-                    maximum_quantity=raw_market_lot_filter.get('maxQty'),
-                    step_size=raw_market_lot_filter.get('stepSize'),
-                    applies_to_market=True
-                    )
-                )
-        if raw_notional_filter := [filter for filter in symbol['filters'] if filter['filterType'] == 'NOTIONAL']:
-            raw_notional_filter = raw_notional_filter[0]
-            exc_symbol.filters['fund'].append(
-                FundFilter(
-                    minimum_notional=raw_notional_filter.get('minNotional'),
-                    maximum_notional=raw_notional_filter.get('maxNotional'),
-                    apply_max_to_market=raw_notional_filter.get('applyMaxToMarket'),
-                    apply_min_to_market=raw_notional_filter.get('applyMinToMarket'),
-                    )
-                )
         return exc_symbol
 
-    def _prep_order_values(self, symbol:ExchangeSymbol, **kwargs) -> float:
-        if kwargs.get('price'):
-            for filter in symbol.filters['price']:
-                kwargs['price'] = filter.round(kwargs['price'])
-            return kwargs['price']
-        if kwargs.get('quantity'):
-            for filter in symbol.filters['lot']:
-                kwargs['quantity'] = filter.round(kwargs['quantity'])
-            return kwargs['quantity']
-        if kwargs.get('funds'):
-            for filter in symbol.filters['fund']:
-                kwargs['funds'] = filter.round(kwargs['funds'])
-            return kwargs['funds']
-        raise ValueError(f'Could not round values for {symbol} with kwargs {kwargs}')
-
-    def _prep_order(self, order:dict, symbol:ExchangeSymbol) -> Order:
-        order_time = order.get('time') or order.get('workingTime') or order.get('transactTime') or order.get('updateTime')
+    def _prep_order(self, order:dict, symbol:'Symbol') -> Order:
+        order_time = order.get('time') or order.get('workingTime') or order.get('transactTime') or order.get('updateTime') or 0
         return Order(
             oid=order['orderId'],
             client_oid=order['clientOrderId'],
-            symbol=symbol,
-            market=self,
-            type=order['type'].upper(),
-            side=order['side'].upper(),
+            order_type=order['type'].upper(),
             price=float(order['price']),
-            created=datetime.fromtimestamp(int(order_time // 1000), tz=pytz.UTC),
+            timestamp=datetime.fromtimestamp(int(order_time // 1000), tz=pytz.UTC),
             deal_funds=float(order.get('cummulativeQuoteQty', 0)),
             deal_size=float(order.get('origQty', 0)),
             status=order['status'].upper(),
             funds=float(order.get('origQuoteOrderQty', 0)),
         )
 
-    def _get_klines(self, symbol:str, interval:str, start:datetime, end:datetime=None, limit=1000, retry=0) -> list[list]:
+    def _get_klines(self, symbol:str, interval:str, start:datetime, end:Optional[datetime]=None, limit=1000, retry=0) -> list[list]:
         if end:
             calculated_end = end
         else:
             calculated_end = start + timedelta(minutes=interval_to_minutes(interval) * limit)
         try:
             klines = self.client.get_historical_klines(
-                        symbol=self._format_symbol(symbol), 
-                        interval=self._format_interval(interval), 
+                        symbol=self._format_symbol(symbol),
+                        interval=self._format_interval(interval),
                         start_str=self._format_datetime(start),
                         end_str=self._format_datetime(calculated_end),
                         limit=limit)
@@ -219,7 +155,7 @@ class BinanceMarket:
             raise
         return self._standardize_klines(klines)
 
-    def get_klines(self, symbol:str, interval:str, start:datetime, end:datetime=None, limit=1000, retry=0) -> list[list]:
+    def get_klines(self, symbol:str, interval:str, start:datetime, end:Optional[datetime]=None, limit=1000, retry=0) -> list[list]:
         if not symbol in self.symbols:
             raise ValueError(f'Symbol {symbol} is not present on {self.name}')
         try:
@@ -245,74 +181,78 @@ class BinanceMarket:
                 raise ValueError(error)
         return klines
 
-    def get_symbols(self) -> dict[str, ExchangeSymbol]:
+    def get_symbols(self) -> dict[str, 'Symbol']:
         return { self._standardize_symbol(symbol): self._prep_symbol(symbol) for symbol in self.client.get_exchange_info()['symbols']}
 
     @authentication_required
-    def place_market_order(self, symbol:ExchangeSymbol|str, side:Literal['buy', 'sell'], funds:float=None, quantity:float=None, validate=True) -> Order:
+    def place_market_order(self, symbol:'Symbol|str', side:Literal['buy', 'sell'], funds:Optional[float]=None, quantity:Optional[float]=None, validate=True) -> Order:
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         client_oid = uuid.uuid4().hex
         if (not funds and not quantity) or (funds and quantity):
             raise ValueError(f'You must provide either funds or quantity to place a market order on {self.name}')
-        if funds:
+        if funds and symbol.quote_precision:
             funds = float_to_precision(Decimal(funds), Decimal(symbol.quote_precision))
-        if quantity:
+        if quantity and symbol.base_precision:
             quantity = float_to_precision(Decimal(quantity), Decimal(symbol.base_precision))
-        try:
-            order = self.client.order_market(
-                side=side, 
-                symbol=symbol.name, 
-                quantity=quantity, 
-                quoteOrderQty=funds, 
-                newClientOrderId=client_oid)
-            logger.info(f'Market order placed on {self.name} for {symbol} with side {side} and funds {funds} and quantity {quantity} with order id {order["orderId"]}')
-            order = self._prep_order(order, symbol)
-            if validate:
-                order = self.get_order(order.symbol, order.oid)
-            return order
-        except:
-            logger.error(f'Error placing market order on {self.name}', exc_info=True)
-            raise
+        _order_payload = self.client.order_market(
+            side=side,
+            symbol=symbol.name,
+            quantity=quantity,
+            quoteOrderQty=funds,
+            newClientOrderId=client_oid)
+        order = self._prep_order(_order_payload, symbol)
+        logger.info(f'Market order placed on {self.name} for {symbol} with side {side} and funds {funds} and quantity {quantity} with order id {_order_payload["orderId"]}')
+        if not order.oid:
+            raise ValueError(f'Error while placing market order on {self.name}')
+        if validate:
+            order = self.get_order(symbol, order.oid)
+        return order
 
     @authentication_required
-    def place_limit_order(self, symbol:ExchangeSymbol|str, side:Literal['buy', 'sell'], price:float, quantity:float, validate=True) -> Order:
+    def place_limit_order(self, symbol:Symbol|str, side:Literal['buy', 'sell'], price:float, quantity:float, validate=True) -> Order:
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         client_oid = uuid.uuid4().hex
-        price = float_to_precision(Decimal(price), Decimal(symbol.quote_precision))
-        quantity = float_to_precision(Decimal(quantity), Decimal(symbol.base_precision))
+        if symbol.base_precision:
+            float_to_precision(Decimal(quantity), Decimal(symbol.base_precision))
+        if symbol.quote_precision:
+            price = float_to_precision(Decimal(price), Decimal(symbol.quote_precision))
         try:
             order = self.client.order_limit(
-                side=side, 
-                symbol=symbol.name, 
-                price=price, 
-                quantity=quantity, 
+                side=side,
+                symbol=symbol.name,
+                price=price,
+                quantity=quantity,
                 newClientOrderId=client_oid)
             logger.info(f'Limit order placed on {self.name} for {symbol} with side {side} and price {price} and quantity {quantity} with order id {order["orderId"]}')
             order = self._prep_order(order, symbol)
+            if not order.oid:
+                raise ValueError(f'Error while placing market order on {self.name}')
             if validate:
-                order = self.get_order(order.symbol, order.oid)
+                order = self.get_order(order.signal.session.symbol, order.oid)
             return order
         except:
             logger.error(f'Error placing limit order on {self.name}', exc_info=True)
             raise
 
     @authentication_required
-    def get_order(self, symbol:ExchangeSymbol|str, order:Order|int) -> Order:
+    def get_order(self, symbol:Symbol|str, order:Order|str) -> Order:
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         if isinstance(order, Order):
-            order = order.oid
+            _order_oid = order.oid
+        else:
+            _order_oid = order
         try:
-            order = self.client.get_order(symbol=symbol.name, orderId=order)
-            return self._prep_order(order, symbol)
+            _order_payload = self.client.get_order(symbol=symbol.name, orderId=_order_oid)
+            return self._prep_order(_order_payload, symbol)
         except:
             logger.error(f'Error while getting order on {self.name}', exc_info=True)
             raise
 
     @authentication_required
-    def get_orders(self, symbol:ExchangeSymbol|str) -> list[Order]:
+    def get_orders(self, symbol:Symbol|str) -> list[Order]:
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         try:
@@ -323,44 +263,44 @@ class BinanceMarket:
             raise
 
     @authentication_required
-    def get_open_orders(self, symbol:ExchangeSymbol|str=None) -> list[Order]:
-        if symbol and isinstance(symbol, str):
+    def get_open_orders(self, symbol:'Symbol|str') -> list['Order']:
+        if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         try:
-            if symbol:
-                orders = self.client.get_open_orders(symbol=symbol.name)
-            else:
-                orders = self.client.get_open_orders()
+            orders = self.client.get_open_orders(symbol=symbol.name)
             return [self._prep_order(order, symbol) for order in orders]
         except:
             logger.error(f'Error while getting open orders on {self.name}', exc_info=True)
             raise
 
     @authentication_required
-    def cancel_order(self, symbol:ExchangeSymbol|str, order:Order|int) -> Order:
+    def cancel_order(self, symbol:Symbol|str, order:Order|int) -> Order:
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         if isinstance(order, Order):
-            order = order.oid
+            _order_oid = order.oid
+        else:
+            _order_oid = order
         try:
-            order = self.client.cancel_order(symbol=symbol.name, orderId=order)
-            return self._prep_order(order, symbol)
+            _order_payload = self.client.cancel_order(symbol=symbol.name, orderId=_order_oid)
+            return self._prep_order(_order_payload, symbol)
         except Exception as e:
             if 'Unknown order sent' in str(e):
-                logger.warning(f'Order {order} not found on {self.name}')
-                return
+                logger.error(f'Order {_order_oid} not found on {self.name}')
             logger.error(f'Error while canceling order on {self.name}', exc_info=True)
             raise
 
     @authentication_required
-    def cancel_all_orders(self, symbol:ExchangeSymbol|str=None) -> list[Order]:
+    def cancel_all_orders(self, symbol:Symbol|str) -> list[Order]:
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         try:
+            if not self.client:
+                raise ValueError('You must provide an API config to use this method')
             if symbol:
-                orders = self.client.cancel_open_orders(symbol=symbol.name)
+                orders = self.client._delete('openOrders', True, data={'symbol': self._format_symbol(symbol.name)})
             else:
-                orders = self.client.cancel_open_orders()
+                orders = self.client._delete('openOrders', True)
             return [self._prep_order(order, symbol) for order in orders]
         except:
             logger.error(f'Error while canceling all orders on {self.name}', exc_info=True)
@@ -382,4 +322,3 @@ class BinanceMarket:
             logger.error('`balances` key not found in account data, revise Binance interface')
         if not self.spot_trading_enabled:
             logger.error('Spot trading is not enabled on Binance account')
-

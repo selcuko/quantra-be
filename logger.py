@@ -1,6 +1,7 @@
-import os
 import json
 import logging
+import os
+
 from logtail import LogtailHandler
 
 
@@ -12,15 +13,15 @@ class ColoredFormatter(logging.Formatter):
     red = "\x1b[31;21m"
     bold_red = "\x1b[31;1m"
     reset = "\x1b[0m"
-    format = "%(threadName)s::%(asctime)s %(levelname)s %(filename)s:%(lineno)d >> %(message)s"
+    log_format = "%(threadName)s::%(asctime)s %(levelname)s %(filename)s:%(lineno)d >> %(message)s"
 
     FORMATS = {
-        logging.DEBUG: grey + format + reset,
-        logging.INFO: grey + format + reset,
-        logging.WARNING: yellow + format + reset,
-        logging.ERROR: red + format + reset,
-        logging.CRITICAL: bold_red + format + reset,
-        logging.FATAL: bold_red + format + reset
+        logging.DEBUG: grey + log_format + reset,
+        logging.INFO: grey + log_format + reset,
+        logging.WARNING: yellow + log_format + reset,
+        logging.ERROR: red + log_format + reset,
+        logging.CRITICAL: bold_red + log_format + reset,
+        logging.FATAL: bold_red + log_format + reset
     }
 
     def format(self, record):
@@ -30,10 +31,10 @@ class ColoredFormatter(logging.Formatter):
 
 
 class LogTailFormatter(logging.Formatter):
-    format = "%(processName)s %(asctime)s %(levelname)s %(filename)s:%(lineno)d >> %(message)s"
+    log_format = "%(processName)s %(asctime)s %(levelname)s %(filename)s:%(lineno)d >> %(message)s"
 
     def format(self, record):
-        formatter = logging.Formatter(self.format)
+        formatter = logging.Formatter(self.log_format)
         return formatter.format(record)
 
 
