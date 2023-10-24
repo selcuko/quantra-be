@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 
 import pytz
 
+from logger import logger
 from livetest import LiveLoop
 from markets import get_market
 from strategy import get_strategy
@@ -24,7 +25,6 @@ ll = LiveLoop(
     freq='1 min',
     end=datetime.now(tz=pytz.UTC) + timedelta(days=1), 
 )
-ll.run()
 
 ll2 = LiveLoop(
     symbol='DOGE-USDT',
@@ -36,11 +36,14 @@ ll2 = LiveLoop(
     end=datetime.now(tz=pytz.UTC) + timedelta(days=1), 
 )
 ll2.run()
-time.sleep(15)
-ll.stop()
-time.sleep(100)
-ll2.stop()
+ll.run()
 
-ll.idle()
-ll2.idle()
+try:
+    while True:
+        time.sleep(1)
+except KeyboardInterrupt:
+    ll.stop()
+    ll2.stop()
+    logger.info('KeyboardInterrupt detected, shutting down gracefully')
+
 
