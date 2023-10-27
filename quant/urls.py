@@ -14,11 +14,20 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
+from django.conf import settings
 from django.contrib import admin
 from django.urls import path
-from quantapi.views import HomeView
+from django.conf.urls.static import static
+from quantapi.views import HomeView, MarketListView, SessionInitView, SessionListView, SessionTerminateView, SessionView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', HomeView.as_view(), name='home'),
+    path('sessions/', SessionListView.as_view(), name='session-list'),
+    path('session/<int:pk>/', SessionView.as_view(), name='session-detail'),
+    path('session/init/', SessionInitView.as_view(), name='session-init'),
+    path('session/<int:pk>/terminate/', SessionTerminateView.as_view(), name='session-terminate'),
+    path('markets', MarketListView.as_view(), name='market-list'),
 ]
+if settings.DEBUG:
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

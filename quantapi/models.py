@@ -1,4 +1,5 @@
-from typing import Optional
+import json
+from typing import List, Optional
 from django.db import models
 
 
@@ -108,15 +109,46 @@ class Session(models.Model):
 
     def notify_complete(self, summary):
         return self.notify(str(summary))
-    
+
     def profit(self):
-        total = 0
+        orders:List[Order] = []
         for signal in self.signals.all():
             try:
-                total += signal.order.deal_funds
+                if signal.order:
+                    orders.append(signal.order)
             except:
-                continue
-        return total
+                pass
+        if not orders:
+            return 0.
+        if orders[-1].signal.side == 'SELL':
+            return orders[-1].deal_funds - orders[0].deal_funds
+        elif len(orders) > 1:
+            return orders[-2].deal_funds - orders[0].deal_funds
+        return 0.
+
+    def equity(self):
+        orders:List[Order] = []
+        for signal in self.signals.all():
+            try:
+                if signal.order:
+                    orders.append(signal.order)
+            except:
+                pass
+        if not orders:
+            return 0.
+        else:
+            price = orders[-1].price or orders[-1].signal.price
+            return orders[-1].deal_funds + orders[-1].deal_size * price
+
+    def orders(self):
+        orders:List[Order] = []
+        for signal in self.signals.all():
+            try:
+                if signal.order:
+                    orders.append(signal.order)
+            except:
+                pass
+        return orders
 
 class Signal(models.Model):
     class Side(models.TextChoices):
@@ -138,6 +170,19 @@ class Signal(models.Model):
             return self.session.symbol
         except:
             return None
+    
+    @property
+    def display_price(self):
+        if self.price > 0:
+            return self.price
+        if self.raw and self.raw.startswith('{'):
+            try:
+                price = json.loads(self.raw).get('close')
+                if price:
+                    return price
+            except:
+                pass
+        return 0.
 
 
 class Order(models.Model):
@@ -149,6 +194,7 @@ class Order(models.Model):
         FILLED = 'FILLED'
         CANCELLED = 'CANCELLED'
         REJECTED = 'REJECTED'
+        EXPIRED = 'EXPIRED'
     oid = models.CharField(max_length=256, unique=True, null=True, blank=True)
     client_oid = models.CharField(max_length=256, unique=True, null=True, blank=True)
     deal_size = models.FloatField(help_text='Amount of quote currency in this order (e.g. BTC)')
@@ -177,11 +223,6 @@ class Order(models.Model):
         self.timestamp = order.timestamp
         self.client_oid = order.client_oid
         self.save()
-
-    def save(self, *args, **kwargs):
-        if self.funds < self.deal_funds:
-            raise ValueError('Cannot save order with funds < size')
-        super().save(*args, **kwargs)
     
     @property
     def symbol(self):
@@ -189,6 +230,12 @@ class Order(models.Model):
             return self.signal.symbol
         except:
             return None
+    
+    @property
+    def display_price(self):
+        if self.price > 0:
+            return self.price
+        return self.deal_funds / self.deal_size
 
 
 class User(models.Model):

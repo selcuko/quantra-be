@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+{% block content %}
+{% if error %}
+<p style="color:red;">{{ error }}</p>
+{% endif %}
+{{ session }}
+
+<form action="terminate/" method="post">
+    <input type="submit" value="Terminate session">
+    {% csrf_token %}
+</form>
+{% endblock %}

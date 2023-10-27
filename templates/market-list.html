@@ -1,0 +1,9 @@
+{% extends 'base.html' %}
+{% block content %}
+{% for market in markets %}
+    <article>
+        <a href="{% url 'market' market.id }">{{ market }}</a>
+        <p>Trading enabled?  {{ market.trading_enabled }}</p>
+    </article>
+{% endfor %}
+{% endblock %}
