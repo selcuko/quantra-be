@@ -55,6 +55,7 @@ try:
 except KeyboardInterrupt:
     ll.stop()
     ll2.stop()
+    ll3.stop()
     logger.info('KeyboardInterrupt detected, shutting down gracefully')
 
 

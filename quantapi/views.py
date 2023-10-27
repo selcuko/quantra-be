@@ -12,11 +12,9 @@ from quantapi.models import Market, Order, Session, Signal
 class HomeView(View):
     def get(self, request):
         sessions = Session.objects.order_by('-started')[:12]
-        active_sessions = Session.objects.filter(status='ONGOING').all()
         orders = Order.objects.all()[:5]
         signals = Signal.objects.all()[:5]
         total_profit = sum([session.profit() for session in sessions])
-        request.session['message'] = {'type': 'success', 'text': 'Hello World!'}
         return render(request, 'index.html', {
             'sessions': sessions, 
             'orders': orders, 
@@ -24,11 +22,14 @@ class HomeView(View):
             'total_profit': total_profit,})
 
 
-class SessionView(View):
+class SessionDetailView(View):
     def get(self, request, pk):
         session = Session.objects.get(pk=pk)
+        signals = Signal.objects.filter(session=session)
+        orders = Order.objects.filter(signal__in=signals)
         error = request.session.pop('error', None)
-        return render(request, 'session.html', {'session': session, 'error': error})
+        market = session.symbol.market
+        return render(request, 'session-detail.html', {'session': session, 'error': error, 'orders': orders, 'signals': signals, 'market': market})
 
 
 class SessionListView(View):

@@ -11,10 +11,10 @@
                         data-dropdown-toggle="dropdownRadio"
                         class="inline-flex items-center text-gray-500 bg-white border border-gray-300 focus:outline-none hover:bg-gray-100 focus:ring-4 focus:ring-gray-200 font-medium rounded-lg text-sm px-3 py-1.5 dark:bg-gray-800 dark:text-white dark:border-gray-600 dark:hover:bg-gray-700 dark:hover:border-gray-600 dark:focus:ring-gray-700"
                         type="button">
-                        <option value="7d" {% if selected_time=='7d' %} selected{% endif %}>Last 7 days</option>
-                        <option value="30d" {% if selected_time=='30d' %} selected{% endif %}>Last 30 days</option>
-                        <option value="1y" {% if selected_time=='1y' %} selected{% endif %}>Last year</option>
-                        <option value="all" {% if selected_time=='all' %} selected{% endif %}>All time</option>
+                        <option value="7d" {% if selected_time == '7d' %} selected{% endif %}>Last 7 days</option>
+                        <option value="30d" {% if selected_time == '30d' %} selected{% endif %}>Last 30 days</option>
+                        <option value="1y" {% if selected_time == '1y' %} selected{% endif %}>Last year</option>
+                        <option value="all" {% if selected_time == 'all' %} selected{% endif %}>All time</option>
                     </select>
                     {% csrf_token %}
                 </form>
@@ -32,7 +32,7 @@
                         <option value="{{ market.id }}">{{ market }}</option>
                         {% endif %}
                         {% endfor %}
-                        <option value="all" {% if selected_market=='all' %} selected{% endif %}>All markets</option>
+                        <option value="all" {% if selected_market == 'all' %} selected{% endif %}>All markets</option>
                     </select>
                     {% csrf_token %}
                 </form>
@@ -43,13 +43,13 @@
                         data-dropdown-toggle="dropdownRadio"
                         class="inline-flex items-center text-gray-500 bg-white border border-gray-300 focus:outline-none hover:bg-gray-100 focus:ring-4 focus:ring-gray-200 font-medium rounded-lg text-sm px-3 py-1.5 dark:bg-gray-800 dark:text-white dark:border-gray-600 dark:hover:bg-gray-700 dark:hover:border-gray-600 dark:focus:ring-gray-700"
                         type="button">
-                        <option value="all" {% if selected_status=='all' %} selected{% endif %}>All status</option>
-                        <option value="CANCELLED" {% if selected_status=='CANCELLED' %} selected{% endif %}>Cancelled
+                        <option value="all" {% if selected_status == 'all' %} selected{% endif %}>All status</option>
+                        <option value="CANCELLED" {% if selected_status == 'CANCELLED' %} selected{% endif %}>Cancelled
                         </option>
-                        <option value="ERROR" {% if selected_status=='ERROR' %} selected{% endif %}>Error</option>
-                        <option value="COMPLETED" {% if selected_status=='COMPLETED' %} selected{% endif %}>Completed
+                        <option value="ERROR" {% if selected_status == 'ERROR' %} selected{% endif %}>Error</option>
+                        <option value="COMPLETED" {% if selected_status == 'COMPLETED' %} selected{% endif %}>Completed
                         </option>
-                        <option value="ONGOING" {% if selected_status=='ONGOING' %} selected{% endif %}>Ongoing</option>
+                        <option value="ONGOING" {% if selected_status == 'ONGOING' %} selected{% endif %}>Ongoing</option>
                     </select>
                     {% csrf_token %}
                 </form>
@@ -221,8 +221,8 @@
 
             <li>
                 <a href="#" aria-current="page"
-                    class="flex items-center justify-center px-3 h-8 text-blue-600 border border-gray-300 bg-blue-50 hover:bg-blue-100 hover:text-blue-700 dark:border-gray-700 dark:bg-gray-700 dark:text-white">{{
-                    sessions.number }}</a>
+                    class="flex items-center justify-center px-3 h-8 text-blue-600 border border-gray-300 bg-blue-50 hover:bg-blue-100 hover:text-blue-700 dark:border-gray-700 dark:bg-gray-700 dark:text-white">
+                    {{ sessions.number }}</a>
             </li>
 
             {% if sessions.has_next %}

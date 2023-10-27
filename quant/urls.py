@@ -18,13 +18,13 @@ from django.conf import settings
 from django.contrib import admin
 from django.urls import path
 from django.conf.urls.static import static
-from quantapi.views import HomeView, MarketListView, SessionInitView, SessionListView, SessionTerminateView, SessionView
+from quantapi.views import HomeView, MarketListView, SessionInitView, SessionListView, SessionTerminateView, SessionDetailView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', HomeView.as_view(), name='home'),
     path('sessions/', SessionListView.as_view(), name='session-list'),
-    path('session/<int:pk>/', SessionView.as_view(), name='session-detail'),
+    path('session/<int:pk>/', SessionDetailView.as_view(), name='session-detail'),
     path('session/init/', SessionInitView.as_view(), name='session-init'),
     path('session/<int:pk>/terminate/', SessionTerminateView.as_view(), name='session-terminate'),
     path('markets', MarketListView.as_view(), name='market-list'),
