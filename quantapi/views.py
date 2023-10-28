@@ -69,9 +69,8 @@ class SessionListView(View):
             query = query.filter(status=request.session['session-list-status'])
         if request.session['session-list-market'] != 'all':
             query = query.filter(symbol__market__id=request.session['session-list-market'])
-        if request.session['session-list-time'] in time_map:
-            sessions_from = datetime.now(pytz.UTC) - time_map.get(request.session['session-list-time'])
-            query = query.filter(started__gte=datetime.now(pytz.UTC) - time_map.get(request.session['session-list-time']))
+        if end_at := time_map.get(request.session['session-list-time']) :
+            query = query.filter(started__gte=datetime.now(pytz.UTC) - end_at)
         else:
             request.session['message'] = {
                 'type': 'error',
@@ -118,6 +117,7 @@ class SessionInitView(View):
             asset_limit=asset_limit,
             freq=freq,
             end=planned_shutdown,
+            market_id_for_symbol=market.pk,
         )
         ll.run()
         cache = LiveLoopCache(
@@ -125,7 +125,7 @@ class SessionInitView(View):
             status='INIT',
             created=datetime.now(pytz.UTC),
             last_started=datetime.now(pytz.UTC),
-            thread_id=ll.thread.ident,
+            thread_id=ll.thread.ident if ll.thread else None,
         )
         cache.save()
         return redirect('session-detail', pk=ll.session.pk)

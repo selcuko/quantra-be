@@ -5,6 +5,8 @@ import pytz
 from typing import List, Optional
 from django.db import models
 
+from strategy import get_strategy
+
 
 class Market(models.Model):
     class Exchange(models.TextChoices):
@@ -106,6 +108,7 @@ class Session(models.Model):
     last_heartbeat = models.DateTimeField(null=True, blank=True)
     signals: models.QuerySet['Signal']
     subscriptions: models.QuerySet['Subscription']
+    live_loop_cache: Optional['LiveLoopCache']
     initial_capital = models.FloatField()
     initial_assets = models.FloatField()
     capital = models.FloatField()
@@ -176,7 +179,7 @@ class Session(models.Model):
         """Resume a session that was interrupted by a shutdown or error."""
         if not self.status == Session.Status.ONGOING:
             raise ValueError('Cannot resume non-ongoing session')
-        if not self.id:
+        if not self.pk:
             raise ValueError('Cannot resume session without id')
         from livetest import LiveLoop
         ll = LiveLoop(
@@ -188,6 +191,7 @@ class Session(models.Model):
             freq=self.freq,
             end=self.planned_shutdown,
             session=self,
+            market_id_for_symbol=self.symbol.market.pk,
         )
         ll.run()
         if not self.cache:
@@ -196,13 +200,13 @@ class Session(models.Model):
                 status='RESUME',
                 created=datetime.now(pytz.UTC),
                 last_started=datetime.now(pytz.UTC),
-                thread_id=ll.thread.ident,
+                thread_id=ll.thread.ident if ll.thread else None,
             )
         else:
             cache = self.cache
             cache.status = 'RESUME'
             cache.last_started = datetime.now(pytz.UTC)
-            cache.thread_id = ll.thread.ident
+            cache.thread_id=ll.thread.ident if ll.thread else None
             cache.save()
         return ll
             

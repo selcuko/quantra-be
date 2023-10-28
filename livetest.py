@@ -25,7 +25,8 @@ class LiveLoop:
             initiating_user:Optional[User]=None,
             freq:str='15 min',
             end:Optional[datetime]=None,
-            session=None
+            session=None,
+            market_id_for_symbol:Optional[int]=None,
         ) -> None:
         self.will_stop = False
         self.market = market
@@ -36,8 +37,11 @@ class LiveLoop:
         self.asset_limit = asset_limit
         self.thread = None
         self.running = False
-        _market = Market.objects.get_or_create(exchange_name=market.name)[0]
-        self.symbol = Symbol.objects.get_or_create(name=symbol, market=_market)[0]
+        
+        if market_id_for_symbol:
+            self.symbol = Symbol.objects.get_or_create(name=symbol, market_id=market_id_for_symbol)[0]
+        else:
+            self.symbol = Symbol.objects.get_or_create(name=symbol, market__exchange_name=market.name)[0]
         self.session = session or Session.objects.create(
             symbol=self.symbol,
             session_type=Session.Type.LIVE_SANDBOX,
@@ -260,6 +264,7 @@ def run_livetest(symbol:str, market:IMarket, strategy:Callable, freq='15 min', e
         type='live.basic', 
         strategy=strategy,
         capital=100,
+        assets=100,
         interval=freq)
     if isinstance(end, timedelta):
         end = datetime.now(tz=pytz.UTC) + end
