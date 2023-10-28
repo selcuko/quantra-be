@@ -1,8 +1,67 @@
 {% extends 'base.html' %}
 {% block content %}
-<form method="post">
-    {{ form }}
-    <input type="submit">
-    {% csrf_token %}
-</form>
+<section class="p-4">
+  <h1 class="mb-4 text-4xl font-extrabold leading-none tracking-tight text-gray-900 md:text-5xl lg:text-6xl dark:text-white">
+    Start a new
+    <span class="underline underline-offset-3 decoration-8 decoration-blue-400 dark:decoration-blue-600">
+      session
+    </span>
+  </h1>
+  <form method="POST" action="">
+        {% csrf_token %}
+        <label for="market">Market</label>
+          <select
+          id="market"
+          name="market"
+          class="mb-6 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" 
+          required>
+          <option value="" disabled selected>Select a market</option>
+          {% for market in markets %}
+            <option value="{{ market.id }}">{{ market.friendly_name }}</option>
+          {% endfor %}
+        </select>
+        <div>
+          <label for="symbol">Symbol</label>
+          <input type="text" placeholder="Symbol (BASE-QUOTE)" name="symbol" id="" class="mb-6 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500">
+        </div>
+        <div>
+          <label for="type">Candle freq</label>
+          <select name="freq" id="freq" class="mb-6 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" 
+          >
+            <option value="" disabled selected>Select a frequency</option>
+            <option value="1 min">1 minute</option>
+            <option value="5 min">5 minute</option>
+            <option value="15 min" selected>15 minute</option>
+            <option value="1 hour">1 hour</option>
+            <option value="4 hour">4 hours</option>
+          </select>
+        </div>
+        <div>
+          <label for="type">Session type</label>
+          <select name="type" id="type" class="mb-6 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" 
+          >
+            <option value="" disabled selected>Select session type</option>
+            <option value="1 min">Testnet</option>
+            <option value="5 min">Mainnet</option>
+            <option value="15 min" selected>Basic</option>
+          </select>
+        </div>
+        <div>
+          <label for="capital">Capital limit</label>
+          <input type="number" placeholder="Capital limit" name="capital" id="" class="mb-6 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" >
+        </div>
+        <div>
+          <label for="assets">Asset limit</label>
+          <input type="number" placeholder="Asset limit" name="assets" id="" class="mb-6 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" >
+        </div>
+        <div>
+          <label for="shutdown">Shutdown time</label>
+          <input type="date" placeholder="Optional shutdown date" name="shutdown" id="" class="mb-6 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" >
+        </div>
+        {% if form_error %}
+        <p class="m-2 text-sm text-red-600 dark:text-red-500"><span class="font-medium">Oops!</span>{{ form_error }}</p>
+        {% endif %}
+        <button type="submit" class="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm w-full sm:w-auto px-5 py-2.5 text-center dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800">Submit</button>
+      </form>
+</section>
 {% endblock %}

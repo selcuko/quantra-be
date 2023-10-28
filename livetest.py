@@ -3,10 +3,7 @@ import time
 from datetime import datetime, timedelta
 from typing import Callable, Optional
 
-import django
 import pytz
-
-django.setup()
 
 from logger import logger
 from markets import IMarket, MarketError, get_market
@@ -28,6 +25,7 @@ class LiveLoop:
             initiating_user:Optional[User]=None,
             freq:str='15 min',
             end:Optional[datetime]=None,
+            session=None
         ) -> None:
         self.will_stop = False
         self.market = market
@@ -40,7 +38,7 @@ class LiveLoop:
         self.running = False
         _market = Market.objects.get_or_create(exchange_name=market.name)[0]
         self.symbol = Symbol.objects.get_or_create(name=symbol, market=_market)[0]
-        self.session = Session.objects.create(
+        self.session = session or Session.objects.create(
             symbol=self.symbol,
             session_type=Session.Type.LIVE_SANDBOX,
             freq=freq,
@@ -48,6 +46,10 @@ class LiveLoop:
             strategy_parameters=strategy.params,
             planned_shutdown=end,
             status=Session.Status.ONGOING,
+            capital=capital_limit,
+            assets=asset_limit,
+            initial_capital=capital_limit,
+            initial_assets=asset_limit,
         )
         self.user = initiating_user
         if self.user:
@@ -62,11 +64,13 @@ class LiveLoop:
             strategy=strategy,
             interval=freq,
             capital=capital_limit,
+            assets=asset_limit,
             commission=self.market.commission
         )
         self.loop_interval_s = interval_to_minutes(freq) * 60
         self.last_kline_dt = None
         self.session.notify('Initiating live test - hope the core is stable 🤞')
+        # signal.signal(signal.SIGINT, self.handle_sigint)
         
 
     def run(self):
@@ -129,7 +133,7 @@ class LiveLoop:
                 side=Signal.Side.BUY,
                 price=-1,
                 raw='FORCED')
-        if not self.testman.bought:
+        if self.testman.can_buy() or force:
             try:
                 last_order = self.market.place_market_order(self.symbol.name, 'buy', funds=self.testman.capital)
             except:
@@ -138,8 +142,6 @@ class LiveLoop:
             last_order.signal = signal
             last_order.save()
             self.session.notify_order(last_order)
-        elif force:
-            logger.error('Already bought, skipping')
         self.testman.buy(last_kline, sync=last_order)
         return last_order
 
@@ -156,15 +158,12 @@ class LiveLoop:
                 price=last_kline.get('close', -1),
                 raw=last_kline)
             self.session.notify_signal(signal)
-        if self.testman.bought:
+        if self.testman.can_sell() or force:
             last_order = self.market.place_market_order(self.symbol.name, 'sell', quantity=self.testman.assets)
             if signal:
                 last_order.signal = signal
             last_order.save()
             self.session.notify_order(last_order)
-        elif force:
-            # manual forced sell
-            logger.error('Already sold, skipping')
         self.testman.sell(last_kline, sync=last_order)
         return last_order
 
@@ -200,10 +199,11 @@ class LiveLoop:
             time.sleep(1)
         return True
 
-    def stop(self):
+    def stop(self, set_completed=True):
         self.will_stop = True
-        self.session.status = Session.Status.COMPLETED
-        self.session.save()
+        if set_completed:
+            self.session.status = Session.Status.COMPLETED
+            self.session.save()
     
     def force_buy(self):
         if self.testman.bought:
@@ -236,6 +236,11 @@ class LiveLoop:
                 time.sleep(1)
             except KeyboardInterrupt:
                 break
+
+    def handle_sigint(self, sig, frame):
+        logger.info('SIGINT detected, shutting down gracefully')
+        self.stop(False)
+        logger.info('Shutdown complete')
 
 
 def run_livetest(symbol:str, market:IMarket, strategy:Callable, freq='15 min', end:Optional[datetime]=None):

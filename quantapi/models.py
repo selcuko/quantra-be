@@ -1,4 +1,7 @@
+from datetime import datetime
 import json
+
+import pytz
 from typing import List, Optional
 from django.db import models
 
@@ -19,6 +22,10 @@ class Market(models.Model):
 
     def __str__(self):
         return str(self.friendly_name or self.exchange_name)
+    
+    def get_interface(self):
+        from markets import get_market
+        return get_market(self.exchange_name, self.config_name)
 
 
 class Symbol(models.Model):
@@ -81,19 +88,28 @@ class Session(models.Model):
         HOUR8 = '8 hour', '8 hours'
         HOUR12 = '12 hour', '12 hours'
         DAY1  = '1 day',  '1 day'
+
+    class Strategy(models.TextChoices):
+        V1 = 'v1', 'Strategy v1: Lisa (PandasTA)'
+        V2 = 'v2', 'Strategy v2: Lisa (NumPy)'
+
     session_type = models.CharField(max_length=30, choices=Type.choices)
     freq = models.CharField(max_length=30)
     started = models.DateTimeField(auto_now_add=True)
     ended = models.DateTimeField(null=True, blank=True)
     symbol = models.ForeignKey(Symbol, on_delete=models.PROTECT, related_name='sessions')
-    strategy_name = models.CharField(max_length=30)
+    strategy_name = models.CharField(max_length=30, choices=Strategy.choices)
     strategy_parameters = models.CharField(max_length=256)
     planned_shutdown = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=30, choices=Status.choices)
     report = models.CharField(max_length=256, null=True, blank=True, help_text='Report file name')
-    last_heartbeat = models.DateTimeField(auto_now=True)
+    last_heartbeat = models.DateTimeField(null=True, blank=True)
     signals: models.QuerySet['Signal']
     subscriptions: models.QuerySet['Subscription']
+    initial_capital = models.FloatField()
+    initial_assets = models.FloatField()
+    capital = models.FloatField()
+    assets = models.FloatField()
 
     def __str__(self):
         return f'{self.strategy_name} - {self.symbol} - {self.status}'
@@ -149,6 +165,47 @@ class Session(models.Model):
             except:
                 pass
         return orders
+
+    @property
+    def cache(self):
+        if hasattr(self, 'live_loop_cache') and self.live_loop_cache is not None:
+            return self.live_loop_cache
+        return None
+
+    def resume(self):
+        """Resume a session that was interrupted by a shutdown or error."""
+        if not self.status == Session.Status.ONGOING:
+            raise ValueError('Cannot resume non-ongoing session')
+        if not self.id:
+            raise ValueError('Cannot resume session without id')
+        from livetest import LiveLoop
+        ll = LiveLoop(
+            symbol=self.symbol.name,
+            market=self.symbol.market.get_interface(),
+            strategy=get_strategy(self.strategy_name)(),
+            capital_limit=self.initial_capital,
+            asset_limit=self.initial_assets,
+            freq=self.freq,
+            end=self.planned_shutdown,
+            session=self,
+        )
+        ll.run()
+        if not self.cache:
+            cache = LiveLoopCache.objects.create(
+                session=self,
+                status='RESUME',
+                created=datetime.now(pytz.UTC),
+                last_started=datetime.now(pytz.UTC),
+                thread_id=ll.thread.ident,
+            )
+        else:
+            cache = self.cache
+            cache.status = 'RESUME'
+            cache.last_started = datetime.now(pytz.UTC)
+            cache.thread_id = ll.thread.ident
+            cache.save()
+        return ll
+            
 
 class Signal(models.Model):
     class Side(models.TextChoices):
@@ -264,3 +321,18 @@ class Endpoint(models.Model):
 
     def __str__(self) -> str:
         return f'{self.endpoint_type} {self.external_id}'
+
+
+class LiveLoopCache(models.Model):
+    class Meta:
+        verbose_name = 'Live Loop Cache'
+        verbose_name_plural = 'Live Loop Cache'
+    session = models.OneToOneField(Session, on_delete=models.PROTECT, related_name='live_loop_cache', null=True, blank=True)
+    created = models.DateTimeField()
+    last_started = models.DateTimeField()
+    last_ended = models.DateTimeField(null=True, blank=True)
+    thread_id = models.IntegerField()
+    status = models.CharField(max_length=30)
+
+    def __str__(self) -> str:
+        return f'LLC {self.session}'

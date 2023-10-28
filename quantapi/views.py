@@ -1,12 +1,16 @@
+import threading
 from datetime import datetime, timedelta
 
 import pytz
 from django.core.paginator import Paginator
+from django.db.models import Q
 from django.shortcuts import redirect, render
 from django.views import View
 
-from quantapi.forms import SessionInitForm
-from quantapi.models import Market, Order, Session, Signal
+from livetest import LiveLoop
+from quantapi.models import (LiveLoopCache, Market, Order, Session, Signal,
+                             Symbol)
+from strategy import get_strategy
 
 
 class HomeView(View):
@@ -79,26 +83,62 @@ class SessionListView(View):
 
 class SessionInitView(View):
     def get(self, request):
-        form = SessionInitForm()
-        return render(request, 'session-init.html', {'form': form})
+        markets = Market.objects.all()
+        return render(request, 'session-init.html', {'markets': markets})
+
     def post(self, request, *args, **kwargs):
-        form = SessionInitForm(request.POST)
-        if form.is_valid():
-            session = form.save()
-            return redirect('session-detail', pk=session.pk)
-        else:
-            return render(request, 'session-init.html', {'form': form})
+        form_data = request.POST
+        markets = Market.objects.all()
+        try:
+            market = Market.objects.get(pk=form_data['market'])
+            symbol = Symbol.objects.get_or_create(name=form_data['symbol'], market=market)[0]
+            freq = form_data['freq']
+            session_type = form_data['type']
+            capital_limit = float(form_data['capital'])
+            asset_limit = float(form_data['assets'])
+            planned_shutdown = form_data.get('planned_shutdown', None)
+
+            assert capital_limit > 1
+            assert asset_limit > 0.000001
+        except Market.DoesNotExist:
+            return render(request, 'session-init.html', {'markets': markets, 'form_error': f'Market with id={form_data["market"]} does not exist.'})
+        except Symbol.DoesNotExist:
+            return render(request, 'session-init.html', {'markets': markets, 'form_error': f'Symbol with id={form_data["symbol"]} does not exist.'})
+        except KeyError as e:
+            return render(request, 'session-init.html', {'markets': markets, 'form_error': f'Missing field: {e}'})
+        except ValueError as e:
+            return render(request, 'session-init.html', {'markets': markets, 'form_error': f'Invalid value: {e}'})
+        except AssertionError:
+            return render(request, 'session-init.html', {'markets': markets, 'form_error': f'Capital limit must be greater than 1 and asset limit must be greater than 0.000001.'})
+        ll = LiveLoop(
+            symbol=symbol.name,
+            market=market.get_interface(),
+            strategy=get_strategy('v1')(),
+            capital_limit=capital_limit,
+            asset_limit=asset_limit,
+            freq=freq,
+            end=planned_shutdown,
+        )
+        ll.run()
+        cache = LiveLoopCache(
+            session=ll.session,
+            status='INIT',
+            created=datetime.now(pytz.UTC),
+            last_started=datetime.now(pytz.UTC),
+            thread_id=ll.thread.ident,
+        )
+        cache.save()
+        return redirect('session-detail', pk=ll.session.pk)
 
 
 class SessionTerminateView(View):
-    def post(self, request, pk):
+    def get(self, request, pk):
         session = Session.objects.get(pk=pk)
         if not session.status == Session.Status.ONGOING:
-            request.session['message'] = {
+            return render(request, 'session-detail.html', {'session': session, 'error': {
                 'type': 'error',
                 'text': 'Session is not ongoing.'
-            }
-            return redirect('session-detail', pk=session.pk)
+            }})
         session.status = Session.Status.CANCELLED
         session.save()
         return redirect('session-detail', pk=session.pk)
@@ -108,3 +148,16 @@ class MarketListView(View):
     def get(self, request):
         markets = Market.objects.all()
         return render(request, 'market-list.html', {'markets': markets})
+
+
+class SearchSymbolView(View):
+    def post(self, request):
+        symbol = request.POST.get('symbol')
+        query = Symbol.objects.filter(Q(name__icontains=symbol) | Q(market__name__icontains=symbol))
+        return [symbol.name for symbol in query]
+
+
+class RunningThreadsView(View):
+    def get(self, request):
+        threads = threading.enumerate()
+        return render(request, 'threads.html', {'threads': threads})

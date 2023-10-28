@@ -146,6 +146,7 @@ class TestManager:
                  type:Literal['live.basic', 'live.sandbox', 'live.mainnet', 'backtest'],
                  strategy:Callable,
                  capital:float,
+                 assets:float,
                  interval:str,
                  commission:dict={},
                  start:Optional[datetime]=None,
@@ -162,7 +163,7 @@ class TestManager:
         self.strategy = strategy
 
         self.trades:list['Trade'] = []
-        self.assets = 0
+        self.assets = assets
         
         if isinstance(commission, float):
             self.commissions = {'buyer': commission, 'seller': commission}
@@ -183,9 +184,15 @@ class TestManager:
         self.capital = capital   
         self.last_kline = None
 
+    def can_buy(self):
+        return self.capital > 0.01
+    
+    def can_sell(self):
+        return self.assets > 0.000001
+    
     def buy(self, kline:dict, sync:Optional[Order]=None):
         self.buy_signals += 1
-        if self.bought:
+        if not self.can_buy():
             return
         self.update(kline)
         price = kline.get('close', -1)
@@ -220,7 +227,7 @@ class TestManager:
 
     def sell(self, kline, sync:Optional[Order]=None):
         self.sell_signals += 1
-        if not self.bought:
+        if not self.can_sell():
             return
         self.update(kline)
         price = kline['close']

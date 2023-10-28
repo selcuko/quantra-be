@@ -1,6 +1,3 @@
-import django
-django.setup()
-
 import time
 import uuid
 from datetime import datetime, timedelta

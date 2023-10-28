@@ -17,7 +17,7 @@ class SymbolAdmin(admin.ModelAdmin):
 
 
 class SessionAdmin(admin.ModelAdmin):
-    list_display = ('__str__', 'freq', 'session_type', 'started', 'ended', 'strategy_name', 'status')
+    list_display = ('__str__', 'freq', 'session_type', 'started', 'ended', 'strategy_name', 'status', 'last_heartbeat')
     search_fields = ('symbol__name', 'strategy_name')
     list_filter = ('symbol__name', 'freq', 'status', 'session_type', 'strategy_name')
 
@@ -42,3 +42,4 @@ admin.site.register(Order, OrderAdmin)
 admin.site.register(Subscription)
 admin.site.register(User)
 admin.site.register(Endpoint)
+admin.site.register(LiveLoopCache)
