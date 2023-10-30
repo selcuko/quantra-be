@@ -97,6 +97,11 @@ class BinanceMarket(IMarket):
     def _format_datetime(dt) -> str:
         return str(int(dt.replace(second=0, microsecond=0).timestamp()*1000))
 
+    def has_symbol(self, symbol_name:str) -> bool:
+        if not self.symbols:
+            self.symbols = self.get_symbols()
+        return (symbol_name) in self.symbols
+
     def _get_symbol_from_name(self, symbol_name:str) -> 'Symbol':
         try:
             _symbol = symbol_name

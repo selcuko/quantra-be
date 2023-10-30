@@ -4,6 +4,7 @@ import json
 import pytz
 from typing import List, Optional
 from django.db import models
+from django.contrib.auth.models import User
 
 from strategy import get_strategy
 
@@ -28,6 +29,17 @@ class Market(models.Model):
     def get_interface(self):
         from markets import get_market
         return get_market(self.exchange_name, self.config_name)
+
+    def is_valid_session_type(self, session_type):
+        match session_type:
+            case Session.Type.BACKTEST, Session.Type.LIVE_BASIC:
+                return True
+            case Session.Type.LIVE_SANDBOX:
+                return self.testnet_enabled and self.trading_enabled
+            case Session.Type.LIVE_MAINNET:
+                return self.mainnet_enabled and self.trading_enabled
+            case _:
+                return False
 
 
 class Symbol(models.Model):
@@ -206,10 +218,14 @@ class Session(models.Model):
             cache = self.cache
             cache.status = 'RESUME'
             cache.last_started = datetime.now(pytz.UTC)
-            cache.thread_id=ll.thread.ident if ll.thread else None
+            cache.thread_id = (ll.thread.ident if ll.thread else None)
             cache.save()
         return ll
-            
+
+    @classmethod
+    def is_valid_freq(cls, f):
+        return f in cls.Freq.values
+
 
 class Signal(models.Model):
     class Side(models.TextChoices):
@@ -299,21 +315,12 @@ class Order(models.Model):
         return self.deal_funds / self.deal_size
 
 
-class User(models.Model):
-    name = models.CharField(max_length=30)
-    email = models.EmailField()
-    password = models.CharField(max_length=256)
-
-    def __str__(self) -> str:
-        return self.name
-
-
 class Subscription(models.Model):
     user = models.ForeignKey(User, on_delete=models.PROTECT, related_name='subscriptions')
     session = models.ForeignKey(Session, on_delete=models.PROTECT, related_name='subscriptions')
 
     def __str__(self) -> str:
-        return f'SUB {self.user.name} - {self.session.strategy_name} - {self.session.symbol.name}'
+        return f'SUB {self.user.username} - {self.session.strategy_name} - {self.session.symbol.name}'
 
 
 class Endpoint(models.Model):

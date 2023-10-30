@@ -9,6 +9,7 @@ from kucoin.client import Market, Trade, User
 
 from logger import logger
 from markets import IMarket
+from markets.errors import SymbolNotInMarket
 from markets.helper import authentication_required, float_to_precision
 from models import interval_to_minutes
 from quantapi.models import Order, Symbol
@@ -16,7 +17,9 @@ from quantapi.models import Order, Symbol
 
 class KucoinMarket(IMarket):
     name = 'KUCOIN'
-    def __init__(self, config={}) -> None:
+    def __init__(self, config=None) -> None:
+        if not config:
+            config = {}
         self.authenticated = bool(config.get('API_KEY') and config.get('API_SECRET') and config.get('API_PASSPHRASE'))
         self.testnet = False # KuCoin does not offer a TestNet at the moment (2023-09-22)
         self.spot_trading_enabled = False
@@ -50,7 +53,12 @@ class KucoinMarket(IMarket):
     
     def __str__(self) -> str:
         return f'{self.name} (Authenticated: {self.authenticated})'
-    
+
+    def has_symbol(self, symbol:str) -> bool:
+        if not self.symbols:
+            self.symbols = self.get_symbols()
+        return symbol in self.symbols
+
     def json(self) -> dict:
         return {
             'name': self.name,
@@ -125,6 +133,8 @@ class KucoinMarket(IMarket):
         )
     
     def _get_klines(self, symbol:str, interval:str, start:datetime, end:"datetime|None"=None, limit=1000, retry=0) -> list[list]:
+        if not self.has_symbol(symbol):
+            raise SymbolNotInMarket(f'Symbol {symbol} is not available in {self.name}')
         if end:
             calculated_end = end
         else:
@@ -148,8 +158,6 @@ class KucoinMarket(IMarket):
         return self._standardize_klines(klines)
 
     def get_klines(self, symbol:str, interval:str, start:"datetime", end:"datetime|None"=None, limit=1000, retry=0) -> list[list]:
-        if not symbol in self.symbols:
-            raise ValueError(f'Symbol {symbol} is not present on {self.name}: {self.symbols}')
         return self._get_klines(symbol, interval, start, end, limit, retry)
  
     def get_last_klines(self, symbol:str, interval:str, limit=100, retry=1, silent=True) -> list[list]:

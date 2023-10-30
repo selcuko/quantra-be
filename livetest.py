@@ -6,7 +6,8 @@ from typing import Callable, Optional
 import pytz
 
 from logger import logger
-from markets import IMarket, MarketError, get_market
+from markets import IMarket, get_market
+from markets.errors import MarketError
 from models import OHLCVDataset, interval_to_minutes
 from quantapi.models import (Market, Order, Session, Signal, Subscription,
                              Symbol, User)
@@ -83,7 +84,7 @@ class LiveLoop:
             raise RuntimeError('Already running')
         self.will_stop = False
         self.running = True
-        self.thread = threading.Thread(target=self.__run, name=f'LL:{self.symbol.base}@{self.market.name}')
+        self.thread = threading.Thread(target=self.__run, name=f'LL:{self.symbol.base}:{self.freq.replace(" ", "")}@{self.market.name}')
         self.thread.start()
 
     def __run(self):

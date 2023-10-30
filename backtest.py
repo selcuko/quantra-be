@@ -39,7 +39,8 @@ def analyze(ds:OHLCVDataset, symbol:str, market:IMarket, strategy:Strategy, freq
         interval=freq, 
         capital=capital, 
         type='backtest',
-        commission={'buyer': 0.002, 'seller': 0.002})
+        commission={'buyer': 0.002, 'seller': 0.002},
+        assets=0)
 
     for i, row in ds.iterrows():
         if row['buy']:

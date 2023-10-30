@@ -13,21 +13,19 @@ def load_config(config_name) -> dict:
 
 
 def get_market(market_name, config={}) -> 'IMarket':
+    market_map = {
+        'binance': BinanceMarket,
+        'kucoin': KucoinMarket,
+        'mexc': MEXCMarket,
+    }
     if isinstance(config, str):
         config = load_config(config)
     if not isinstance(config, dict):
         logger.warning(f'Invalid config: {config}')
         config = {}
     market_name = market_name.lower()
-    if market_name == 'binance':
-        return BinanceMarket(config)
-    elif market_name == 'kucoin':
-        return KucoinMarket(config)
-    elif market_name == 'mexc':
-        return MEXCMarket(config)
+    if market_name in market_map:
+        return market_map[market_name](config)
     else:
-        raise ValueError(f'Unknown market: {market_name}')
+        raise ValueError(f'Unknown market: {market_name}, valid markets: {market_map.keys()}')
 
-
-class MarketError(Exception):
-    pass

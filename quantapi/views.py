@@ -8,6 +8,7 @@ from django.shortcuts import redirect, render
 from django.views import View
 
 from livetest import LiveLoop
+from markets.errors import InsufficientBalance, MarketDisabledTrading, SymbolNotInMarket
 from quantapi.models import (LiveLoopCache, Market, Order, Session, Signal,
                              Symbol)
 from strategy import get_strategy
@@ -90,44 +91,53 @@ class SessionInitView(View):
         markets = Market.objects.all()
         try:
             market = Market.objects.get(pk=form_data['market'])
+            imarket = market.get_interface()
+            if not imarket.has_symbol(form_data['symbol']):
+                raise SymbolNotInMarket(f'Symbol {form_data["symbol"]} not found in market {market.exchange_name}')
             symbol = Symbol.objects.get_or_create(name=form_data['symbol'], market=market)[0]
-            freq = form_data['freq']
-            session_type = form_data['type']
-            capital_limit = float(form_data['capital'])
-            asset_limit = float(form_data['assets'])
+            if not Session.is_valid_freq((freq := form_data['freq'])):
+                raise ValueError(f'Invalid frequency {freq}')
+            if not market.is_valid_session_type((session_type := form_data['type'])):
+                raise MarketDisabledTrading(f'Market {market.exchange_name} does not support session type {session_type}')
+            if (capital_limit := float(form_data['capital'])) > imarket.capital:
+                raise InsufficientBalance(f'Capital limit {capital_limit} is more than market capital {imarket.capital}')
+            if (asset_limit := float(form_data['assets'])) > imarket.assets.get(symbol.name, 0):
+                raise InsufficientBalance(f'Asset limit {asset_limit} is more than market assets {imarket.assets}')
             planned_shutdown = form_data.get('planned_shutdown', None)
-
-            assert capital_limit > 1
-            assert asset_limit > 0.000001
+            if not planned_shutdown > datetime.now(pytz.UTC):
+                raise ValueError('Planned shutdown must be in the future')
         except Market.DoesNotExist:
             return render(request, 'session-init.html', {'markets': markets, 'form_error': f'Market with id={form_data["market"]} does not exist.'})
-        except Symbol.DoesNotExist:
-            return render(request, 'session-init.html', {'markets': markets, 'form_error': f'Symbol with id={form_data["symbol"]} does not exist.'})
-        except KeyError as e:
-            return render(request, 'session-init.html', {'markets': markets, 'form_error': f'Missing field: {e}'})
+        except InsufficientBalance as e:
+            return render(request, 'session-init.html', {'markets': markets, 'form_error': repr(e)})
+        except SymbolNotInMarket as e:
+            return render(request, 'session-init.html', {'markets': markets, 'form_error': repr(e)})
+        except MarketDisabledTrading as e:
+            return render(request, 'session-init.html', {'markets': markets, 'form_error': repr(e)})
         except ValueError as e:
-            return render(request, 'session-init.html', {'markets': markets, 'form_error': f'Invalid value: {e}'})
-        except AssertionError:
-            return render(request, 'session-init.html', {'markets': markets, 'form_error': f'Capital limit must be greater than 1 and asset limit must be greater than 0.000001.'})
-        ll = LiveLoop(
-            symbol=symbol.name,
-            market=market.get_interface(),
-            strategy=get_strategy('v1')(),
-            capital_limit=capital_limit,
-            asset_limit=asset_limit,
-            freq=freq,
-            end=planned_shutdown,
-            market_id_for_symbol=market.pk,
-        )
-        ll.run()
-        cache = LiveLoopCache(
-            session=ll.session,
-            status='INIT',
-            created=datetime.now(pytz.UTC),
-            last_started=datetime.now(pytz.UTC),
-            thread_id=ll.thread.ident if ll.thread else None,
-        )
-        cache.save()
+            return render(request, 'session-init.html', {'markets': markets, 'form_error': repr(e)})
+        try:
+            ll = LiveLoop(
+                symbol=symbol.name,
+                market=market.get_interface(),
+                strategy=get_strategy('v1')(),
+                capital_limit=capital_limit,
+                asset_limit=asset_limit,
+                freq=freq,
+                end=planned_shutdown,
+                market_id_for_symbol=market.pk,
+            )
+            ll.run()
+            cache = LiveLoopCache(
+                session=ll.session,
+                status='INIT',
+                created=datetime.now(pytz.UTC),
+                last_started=datetime.now(pytz.UTC),
+                thread_id=ll.thread.ident if ll.thread else None,
+            )
+            cache.save()
+        except Exception as e:
+            return render(request, 'session-init.html', {'markets': markets, 'form_error': f'Cannot initiate session: {e!r}'})
         return redirect('session-detail', pk=ll.session.pk)
 
 

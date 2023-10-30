@@ -32,6 +32,17 @@ class IMarket:
         """Sets capital, assets etc. on market instance."""
         raise NotImplementedError
 
+    def has_symbol(self, symbol:str) -> bool:
+        """Check if symbol is present in this market
+
+        Args:
+            symbol (str): symbol name
+
+        Returns:
+            bool: True if symbol is present
+        """
+        raise NotImplementedError
+
     def place_market_order(self, symbol:'Symbol|str', side:Literal['buy', 'sell'], funds:Optional[float]=None, quantity:Optional[float]=None, validate=True) -> 'Order':
         """Place a market order, fetch the order back from market
 
