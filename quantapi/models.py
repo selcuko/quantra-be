@@ -1,10 +1,13 @@
 from datetime import datetime
 import json
+import os
+from django.conf import settings
 
 import pytz
 from typing import List, Optional
 from django.db import models
 from django.contrib.auth.models import User
+from cryptography.fernet import Fernet
 
 from strategy import get_strategy
 
@@ -16,7 +19,7 @@ class Market(models.Model):
         MEXC = 'MEXC', 'MEXC'
     exchange_name = models.CharField(max_length=30)
     friendly_name = models.CharField(max_length=30, null=True, blank=True, help_text='Descriptive name for the config-exchange pair for this market.')
-    config_name = models.CharField(max_length=30, null=True, blank=True, help_text='Name of key in config file for this market.')
+    config_enc = models.TextField(null=True, blank=True, help_text='Config for this market (encrypted).')
     trading_enabled = models.BooleanField(default=False)
     testnet_enabled = models.BooleanField(default=False)
     mainnet_enabled = models.BooleanField(default=False)
@@ -28,11 +31,11 @@ class Market(models.Model):
     
     def get_interface(self):
         from markets import get_market
-        return get_market(self.exchange_name, self.config_name)
+        return get_market(self.exchange_name, self.config)
 
     def is_valid_session_type(self, session_type):
         match session_type:
-            case Session.Type.BACKTEST, Session.Type.LIVE_BASIC:
+            case Session.Type.BACKTEST | Session.Type.LIVE_BASIC:
                 return True
             case Session.Type.LIVE_SANDBOX:
                 return self.testnet_enabled and self.trading_enabled
@@ -40,7 +43,25 @@ class Market(models.Model):
                 return self.mainnet_enabled and self.trading_enabled
             case _:
                 return False
-
+    @property
+    def config(self):
+        """Decrypt config_enc and return dict"""
+        if not self.config_enc:
+            return {}
+        key = os.environ.get('SYMKEY', settings.SYMKEY)
+        if not key:
+            raise ValueError('No SYMKEY set')
+        f = Fernet(key)
+        return json.loads(f.decrypt(self.config_enc.encode()).decode())
+    
+    @config.setter
+    def config(self, value):
+        """Encrypt config and set config_enc"""
+        key = os.environ.get('SYMKEY', settings.SYMKEY)
+        if not key:
+            raise ValueError('No SYMKEY set')
+        f = Fernet(key)
+        self.config_enc = f.encrypt(json.dumps(value).encode()).decode()
 
 class Symbol(models.Model):
     market = models.ForeignKey(Market, on_delete=models.PROTECT, related_name='symbols')
@@ -129,6 +150,10 @@ class Session(models.Model):
     def __str__(self):
         return f'{self.strategy_name} - {self.symbol} - {self.status}'
 
+    def heartbeat(self):
+        self.last_heartbeat = datetime.now(pytz.UTC)
+        self.save()
+
     def notify(self, message):
         print(f'Notifying {self.subscriptions.count()} subscribers: {message}')
 
@@ -198,8 +223,8 @@ class Session(models.Model):
             symbol=self.symbol.name,
             market=self.symbol.market.get_interface(),
             strategy=get_strategy(self.strategy_name)(),
-            capital_limit=self.initial_capital,
-            asset_limit=self.initial_assets,
+            capital_limit=self.capital,
+            asset_limit=self.assets,
             freq=self.freq,
             end=self.planned_shutdown,
             session=self,
@@ -225,6 +250,18 @@ class Session(models.Model):
     @classmethod
     def is_valid_freq(cls, f):
         return f in cls.Freq.values
+
+    def has_open_position(self):
+        return self.open_position() is not None
+
+    def open_position(self) -> "Order":
+        "Returns the last order if that order is a BUY"
+        orders = self.orders()
+        if not orders:
+            return None
+        if orders[-1].signal.side == 'BUY':
+            return orders[-1]
+        return None
 
 
 class Signal(models.Model):

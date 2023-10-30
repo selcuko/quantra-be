@@ -40,15 +40,17 @@ class LogTailFormatter(logging.Formatter):
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-formatter = ColoredFormatter()
+colored_formatter = ColoredFormatter()
+plain_formatter = logging.Formatter("%(threadName)s::%(asctime)s %(levelname)s %(filename)s:%(lineno)d >> %(message)s")
 
 console_handler = logging.StreamHandler()
-console_handler.setFormatter(formatter)
-console_handler.setLevel(logging.DEBUG)
+console_handler.setFormatter(colored_formatter)
+console_handler.setLevel(logging.WARNING)
 logger.addHandler(console_handler)
 
 file_handler = logging.FileHandler('quant-be.log')
-file_handler.setFormatter(formatter)
+file_handler.setFormatter(plain_formatter)
+file_handler.setLevel(logging.WARNING)
 logger.addHandler(file_handler)
 
 LOGTAIL_TOKEN = os.getenv('LOGTAIL_TOKEN')
@@ -57,7 +59,7 @@ if not LOGTAIL_TOKEN and os.path.exists('api.json'):
 
 if LOGTAIL_TOKEN:
     logtail_handler = LogtailHandler(LOGTAIL_TOKEN)
-    logtail_handler.setFormatter(formatter)
+    logtail_handler.setFormatter(colored_formatter)
     logger.addHandler(logtail_handler)
 else:
     logger.warning('LOGTAIL_TOKEN not set, logging locally.')

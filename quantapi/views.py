@@ -17,8 +17,8 @@ from strategy import get_strategy
 class HomeView(View):
     def get(self, request):
         sessions = Session.objects.order_by('-started')[:12]
-        orders = Order.objects.all()[:5]
-        signals = Signal.objects.all()[:5]
+        orders = Order.objects.all().order_by('-timestamp')[:5]
+        signals = Signal.objects.all().order_by('-timestamp')[:5]
         total_profit = sum([session.profit() for session in sessions])
         return render(request, 'index.html', {
             'sessions': sessions, 
@@ -93,29 +93,22 @@ class SessionInitView(View):
         try:
             market = Market.objects.get(pk=form_data['market'])
             imarket = market.get_interface()
-            if not imarket.has_symbol(form_data['symbol']):
-                raise SymbolNotInMarket(f'Symbol {form_data["symbol"]} not found in market {market.exchange_name}')
-            symbol = Symbol.objects.get_or_create(name=form_data['symbol'], market=market)[0]
+            symbol_name = form_data['symbol'].upper()
+            if not imarket.has_symbol(symbol_name):
+                raise SymbolNotInMarket(f'Symbol {symbol_name} not found in market {market.exchange_name}')
+            symbol = Symbol.objects.get_or_create(name=symbol_name, market=market)[0]
             if not Session.is_valid_freq((freq := form_data['freq'])):
                 raise ValueError(f'Invalid frequency {freq}')
             if not market.is_valid_session_type((session_type := form_data['type'])):
                 raise MarketDisabledTrading(f'Market {market.exchange_name} does not support session type {session_type}')
-            if (capital_limit := float(form_data['capital'])) > imarket.capital:
+            if (capital_limit := float(form_data['capital'])) > imarket.capital and session_type in [Session.Type.LIVE_SANDBOX, Session.Type.LIVE_MAINNET]:
                 raise InsufficientBalance(f'Capital limit {capital_limit} is more than market capital {imarket.capital}')
-            if (asset_limit := float(form_data['assets'])) > imarket.assets.get(symbol.name, 0):
+            if (asset_limit := float(form_data['assets'])) > imarket.assets.get(symbol.base, 0) and session_type in [Session.Type.LIVE_SANDBOX, Session.Type.LIVE_MAINNET]:
                 raise InsufficientBalance(f'Asset limit {asset_limit} is more than market assets {imarket.assets}')
             planned_shutdown = form_data.get('planned_shutdown', None)
-            if not planned_shutdown > datetime.now(pytz.UTC):
+            if planned_shutdown and not planned_shutdown > datetime.now(pytz.UTC):
                 raise ValueError('Planned shutdown must be in the future')
-        except Market.DoesNotExist:
-            return render(request, 'session-init.html', {'markets': markets, 'form_error': f'Market with id={form_data["market"]} does not exist.'})
-        except InsufficientBalance as e:
-            return render(request, 'session-init.html', {'markets': markets, 'form_error': repr(e)})
-        except SymbolNotInMarket as e:
-            return render(request, 'session-init.html', {'markets': markets, 'form_error': repr(e)})
-        except MarketDisabledTrading as e:
-            return render(request, 'session-init.html', {'markets': markets, 'form_error': repr(e)})
-        except ValueError as e:
+        except Exception as e:
             return render(request, 'session-init.html', {'markets': markets, 'form_error': repr(e)})
         try:
             ll = LiveLoop(
@@ -179,6 +172,14 @@ class MarketListView(View):
     def get(self, request):
         markets = Market.objects.all()
         return render(request, 'market-list.html', {'markets': markets})
+
+
+class MarketDetailView(View):
+    def get(self, request, pk):
+        market = Market.objects.get(pk=pk)
+        interface = market.get_interface()
+        symbols = Symbol.objects.filter(market=market)
+        return render(request, 'market-detail.html', {'market': market, 'symbols': symbols, 'interface': interface})
 
 
 class SearchSymbolView(View):

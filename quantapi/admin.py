@@ -5,7 +5,7 @@ from quantapi.models import *
 
 # generate admin models for each model to have list display, filters and search fields
 class MarketAdmin(admin.ModelAdmin):
-    list_display = ('exchange_name', 'friendly_name', 'config_name', 'testnet_enabled', 'trading_enabled', 'mainnet_enabled')
+    list_display = ('exchange_name', 'friendly_name', 'testnet_enabled', 'trading_enabled', 'mainnet_enabled')
     search_fields = ('exchange_name', 'name', 'description')
     list_filter = ('exchange_name', 'testnet_enabled', 'trading_enabled', 'mainnet_enabled')
 

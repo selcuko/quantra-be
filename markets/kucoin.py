@@ -2,14 +2,14 @@ import time
 import uuid
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Literal, Optional
+from typing import Literal
 
 import pytz
 from kucoin.client import Market, Trade, User
 
 from logger import logger
 from markets import IMarket
-from markets.errors import SymbolNotInMarket
+from markets.errors import InsufficientBalance, SymbolNotInMarket
 from markets.helper import authentication_required, float_to_precision
 from models import interval_to_minutes
 from quantapi.models import Order, Symbol
@@ -214,7 +214,9 @@ class KucoinMarket(IMarket):
             if validate:
                 order = self.get_order(symbol, order.oid)
             return order
-        except:
+        except Exception as e:
+            if "Balance insufficient!" in str(e):
+                raise InsufficientBalance(f'Balance insufficient for market order on {self.name}') from e
             logger.error(f'Error while placing market order on {self.name}', exc_info=True)
             raise
 

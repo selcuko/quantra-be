@@ -41,7 +41,7 @@
                         <a href="{% url 'session-detail' pk=session.id %}">{{ session.symbol.market }}</a>
                     </td>
                     <td class="px-6 py-4">
-                        <a href="{% url 'session-detail' pk=session.id %}">$ {{ session.profit }}</a>
+                        <a href="{% url 'session-detail' pk=session.id %}">$ {{ session.profit|floatformat:2 }}</a>
                     </td>
                     <td class="px-6 py-4">
                         <a href="{% url 'session-detail' pk=session.id %}">{{ session.started|timesince }}</a>

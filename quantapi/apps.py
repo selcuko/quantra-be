@@ -1,6 +1,9 @@
+from datetime import datetime, timedelta
 import threading
 from django.apps import AppConfig
+import pytz
 from logger import logger
+from models import interval_to_minutes
 
 
 def continue_sessions():
@@ -11,6 +14,12 @@ def continue_sessions():
             try:
                 if not session.cache:
                     logger.warning(f'Purging session {session} on startup because it has no cache.')
+                    session.status = Session.Status.PURGED
+                    session.save()
+                    continue
+                hundred_candles_m = interval_to_minutes(session.freq) * 100
+                if session.last_heartbeat and datetime.now(pytz.UTC) - session.last_heartbeat > timedelta(minutes=hundred_candles_m):
+                    logger.critical(f'Purging session {session} on startup because it has not been updated for a hundred candles ({hundred_candles_m} minutes.)')
                     session.status = Session.Status.PURGED
                     session.save()
                     continue

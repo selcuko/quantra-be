@@ -10,6 +10,8 @@ def authentication_required(func):
 
 
 def float_to_precision(value:Decimal|float, precision:Decimal|float|int):
+    if isinstance(precision, str):
+        precision = Decimal(precision)
     if precision > 1:
         return round(float(str(value)), int(str(precision)))
     else:
