@@ -237,5 +237,12 @@
             </tbody>
         </table>
     </div>
+    <div class="p-4 col-span-1 row-span-1 overflow-x-auto">
+        <form action="manage/" method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" id="" value="force_buy"></input>
+            <input class="text-lg font-semibold underline decoration-red-500" type="submit" name="force_buy" id="" value="Force Buy"></input>
+        </form>
+    </div>
 </div>
 {% endblock %}

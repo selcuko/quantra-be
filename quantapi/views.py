@@ -34,7 +34,8 @@ class SessionDetailView(View):
         orders = Order.objects.filter(signal__in=signals)
         error = request.session.pop('error', None)
         market = session.symbol.market
-        return render(request, 'session-detail.html', {'session': session, 'error': error, 'orders': orders, 'signals': signals, 'market': market})
+        message = request.session.pop('message', None)
+        return render(request, 'session-detail.html', {'session': session, 'error': error, 'orders': orders, 'signals': signals, 'market': market, 'message': message   })
 
 
 class SessionListView(View):
@@ -139,6 +140,26 @@ class SessionInitView(View):
         except Exception as e:
             return render(request, 'session-init.html', {'markets': markets, 'form_error': f'Cannot initiate session: {e!r}'})
         return redirect('session-detail', pk=ll.session.pk)
+
+
+
+class SessionManageView(View):
+    def post(self, request, pk):
+        payload = request.POST
+        session = Session.objects.get(pk=pk)
+        action = payload['action']
+        match action:
+            case 'force_buy':
+                pass
+            case 'force_sell':
+                pass
+            case _:
+                pass
+        request.session['message'] = {
+            'type': 'warning',
+            'text': 'Action not implemented.'
+        }
+        return redirect('session-detail', pk=session.pk)
 
 
 class SessionTerminateView(View):
