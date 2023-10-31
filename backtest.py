@@ -1,67 +1,94 @@
-import django
-django.setup()
-
 from datetime import datetime
 from typing import Optional
+import threading
 
+from download import download_symbol
 from markets import IMarket
 from models import OHLCVDataset
-from quantapi.models import Market, Session, Symbol
+from strategy import get_strategy
 from strategy.interface import Strategy
 from testman import TestManager
+from quantapi.models import Backtest
 
+from logger import logger
 
-def analyze(ds:OHLCVDataset, symbol:str, market:IMarket, strategy:Strategy, freq:str='15 min', start:Optional[datetime]=None, end:Optional[datetime]=None, verbose=False, capital:float=1000):
+def analyze(ds:OHLCVDataset, symbol:str, market:IMarket, strategy:Strategy, freq:str='15 min', start:Optional[datetime]=None, end:Optional[datetime]=None, verbose=False, capital:float=1000, backtest=None):
     """Analyze the dataset and return a report."""
-    print(f'Starting backtest for {symbol}@{market.name} from {start} to {end}')
-    _market = Market.objects.get_or_create(exchange_name=market.name)[0]
-    _symbol = Symbol.objects.get_or_create(name=symbol, market=_market)[0]
-    
-    ds = ds.change(freq)
-    ds = ds[start:end]
-    ds = strategy(ds)
-    session = Session.objects.create(
-            session_type=Session.Type.BACKTEST,
-            symbol=_symbol,
+    print(f'Starting backtest for {symbol}@{market} from {start} to {end}')
+    if backtest is None:
+        backtest = Backtest.objects.create(
+            start=start,
+            end=end,
             freq=freq,
-            started=ds.index[0],
-            ended=ds.index[-1],
-            strategy_name=strategy.name,
-            strategy_parameters=strategy.params,
-            status=Session.Status.ONGOING,
+            symbol=symbol,
+            market=str(market),
+            status='INIT'
         )
-    testman = TestManager(
-        symbol=symbol, 
-        market=market, 
-        strategy=strategy, 
-        start=start, 
-        end=end, 
-        interval=freq, 
-        capital=capital, 
-        type='backtest',
-        commission={'buyer': 0.002, 'seller': 0.002},
-        assets=0)
+    if end is None:
+        end = datetime.now(tz=None)
+    else:
+        end = end.replace(tzinfo=None)
+    start = start.replace(tzinfo=None)
+    try:
+        ds = ds.change(freq)
+        ds = ds[start:end]
+        ds = strategy(ds)
 
-    for i, row in ds.iterrows():
-        if row['buy']:
-            ok = testman.buy({'time': i, **row.to_dict()})
-            if ok and verbose:
-                print(testman.summary())
-        elif row['sell']:
-            ok = testman.sell({'time': i, **row.to_dict()})
-            if ok and verbose:
-                print(testman.summary())
-    
-    testman_dir = testman.shutdown()
-    session.status = Session.Status.COMPLETED
-    session.report = testman_dir
-    session.save()
-    return testman
+        testman = TestManager(
+            symbol=symbol, 
+            market=market, 
+            strategy=strategy, 
+            start=start, 
+            end=end, 
+            interval=freq, 
+            capital=capital, 
+            type='backtest',
+            commission={'buyer': 0.002, 'seller': 0.002},
+            assets=0)
+        backtest.status = Backtest.Status.ONGOING
+        backtest.save()
+        for i, row in ds.iterrows():
+            if row['buy']:
+                ok = testman.buy({'time': i, **row.to_dict()})
+                if ok and verbose:
+                    print(testman.summary())
+            elif row['sell']:
+                ok = testman.sell({'time': i, **row.to_dict()})
+                if ok and verbose:
+                    print(testman.summary())
+        
+        report = testman.shutdown()
+        backtest.status = Backtest.Status.COMPLETED
+        backtest.report = report
+        backtest.save()
+    except Exception as e:
+        logger.error(f'Error while backtesting {symbol}@{market}', exc_info=True)
+        backtest.status = Backtest.Status.ERROR
+        backtest.report = repr(e)
+        backtest.save()
+    return backtest
+
+
+def async_analyze(**kwargs):
+    backtest = Backtest.objects.create(
+            start=kwargs['start'],
+            end=kwargs.get('end') or None,
+            freq=kwargs['freq'],
+            symbol=kwargs['symbol'],
+            market=kwargs['market'],
+            status='INIT' )
+    def download_and_analyze():
+        download_symbol(kwargs['market'], kwargs['symbol'], kwargs['start'], kwargs.get('end'))
+        ds = OHLCVDataset.from_csv(f'./data/{kwargs["symbol"]}-{kwargs["market"]}.csv')
+        strategy = get_strategy(kwargs.get('strategy_name', 'v1'))()
+        analyze(ds, symbol=kwargs['symbol'], market=kwargs['market'], strategy=strategy, freq=kwargs['freq'], start=kwargs['start'], end=kwargs.get('end'), backtest=backtest)
+    analyze_thread = threading.Thread(target=download_and_analyze)
+    analyze_thread.start()
+    return backtest
 
 
 if __name__ == '__main__':
     from markets import get_market
-    from strategy import get_strategy
     symbol = 'XRP-USDT'
     market = get_market('KUCOIN')
     ds = OHLCVDataset.from_csv(f'./data/{symbol}-{market.name}.csv')

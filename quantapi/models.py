@@ -384,3 +384,21 @@ class LiveLoopCache(models.Model):
 
     def __str__(self) -> str:
         return f'LLC {self.session}'
+
+
+class Backtest(models.Model):
+    class Status(models.TextChoices):
+        INIT = 'INIT'
+        ONGOING = 'ONGOING'
+        ERROR = 'ERROR'
+        COMPLETED = 'COMPLETED'
+    timestamp = models.DateTimeField(auto_now_add=True)
+    start = models.DateTimeField()
+    end = models.DateField(null=True, blank=True)
+    profit = models.FloatField(null=True, blank=True)
+    freq = models.CharField(max_length=100, choices=Session.Freq.choices)
+    report = models.TextField(null=True, blank=True)
+    symbol = models.CharField(max_length=100)
+    market = models.CharField(max_length=100)
+    status = models.CharField(max_length=100, choices=Status.choices)
+

@@ -18,7 +18,7 @@ from django.conf import settings
 from django.contrib import admin
 from django.urls import path
 from django.conf.urls.static import static
-from quantapi.views import HomeView, MarketDetailView, MarketListView, RunningThreadsView, \
+from quantapi.views import BacktestInitView, BacktestResultView, HomeView, MarketDetailView, MarketListView, RunningThreadsView, \
     SessionInitView, SessionListView, SessionManageView, SessionTerminateView, SessionDetailView
 
 urlpatterns = [
@@ -32,6 +32,8 @@ urlpatterns = [
     path('markets/', MarketListView.as_view(), name='market-list'),
     path('market/<int:pk>/', MarketDetailView.as_view(), name='market-detail'),
     path('threads/', RunningThreadsView.as_view(), name='running-threads'),
+    path('backtest/init/', BacktestInitView.as_view(), name='backtest-init'),
+    path('backtest/<int:pk>/', BacktestResultView.as_view(), name='backtest-result'),
 ]
 if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

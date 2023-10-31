@@ -19,7 +19,7 @@ def continue_sessions():
                     continue
                 hundred_candles_m = interval_to_minutes(session.freq) * 100
                 if session.last_heartbeat and datetime.now(pytz.UTC) - session.last_heartbeat > timedelta(minutes=hundred_candles_m):
-                    logger.critical(f'Purging session {session} on startup because it has not been updated for a hundred candles ({hundred_candles_m} minutes.)')
+                    logger.critical(f'Purging session {session} on startup because it has not been updated for a hundred candles ({hundred_candles_m} minutes, it\'s been {datetime.now(pytz.UTC) - session.last_heartbeat})')
                     session.status = Session.Status.PURGED
                     session.save()
                     continue

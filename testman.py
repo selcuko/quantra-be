@@ -3,12 +3,14 @@ import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Callable, Literal, Optional
+import typing
 
 import pytz
 
 from logger import logger
 from markets import IMarket
-from quantapi.models import Order
+if typing.TYPE_CHECKING:
+    from quantapi.models import Order
 
 
 class Performance:
@@ -190,7 +192,7 @@ class TestManager:
     def can_sell(self):
         return self.assets > 0.000001
     
-    def buy(self, kline:dict, sync:Optional[Order]=None):
+    def buy(self, kline:dict, sync:Optional['Order']=None):
         self.buy_signals += 1
         if not self.can_buy():
             return
@@ -225,7 +227,7 @@ class TestManager:
         self.trades.append(trade)
         return True
 
-    def sell(self, kline, sync:Optional[Order]=None):
+    def sell(self, kline, sync:Optional['Order']=None):
         self.sell_signals += 1
         if not self.can_sell():
             return
@@ -318,7 +320,7 @@ Capital: {self.capital:>3.2f} USDT '''
             'buy_signals': self.buy_signals,
             'sell_signals': self.sell_signals,
             'symbol': self.symbol,
-            'market': self.market.json(),
+            'market': str(self.market),
             'strategy': self.strategy.json(),
             'performance': Performance(self.trades, self.initial_capital).to_dict(),
             'trades': [trade.to_dict() for trade in self.trades],
@@ -327,7 +329,7 @@ Capital: {self.capital:>3.2f} USDT '''
     def save_to_disk(self, filedir=None):
         if not filedir:
             if self.symbol and self.market and self.strategy:
-                filedir = f'testman/testman-{datetime.now()}-{self.symbol.upper()}-{self.market.name.upper()}-{self.strategy.name}.json'
+                filedir = f'testman/testman-{datetime.now()}-{self.symbol.upper()}-{str(self.market).upper()}-{self.strategy.name}.json'
             else:
                 filedir = f'testman/testman-{datetime.now()}.json'
         filedir = str(filedir.replace(' ', '_').replace(':', '-'))

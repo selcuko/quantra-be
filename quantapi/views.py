@@ -1,3 +1,4 @@
+import json
 import threading
 from datetime import datetime, timedelta
 
@@ -6,10 +7,11 @@ from django.core.paginator import Paginator
 from django.db.models import Q
 from django.shortcuts import redirect, render
 from django.views import View
+from backtest import async_analyze
 
 from livetest import LiveLoop
 from markets.errors import InsufficientBalance, MarketDisabledTrading, SymbolNotInMarket
-from quantapi.models import (LiveLoopCache, Market, Order, Session, Signal,
+from quantapi.models import (Backtest, LiveLoopCache, Market, Order, Session, Signal,
                              Symbol)
 from strategy import get_strategy
 
@@ -193,3 +195,36 @@ class RunningThreadsView(View):
     def get(self, request):
         threads = threading.enumerate()
         return render(request, 'threads.html', {'threads': threads})
+
+
+class BacktestInitView(View):
+    def get(self, request):
+        markets = set(Market.objects.all().values_list('exchange_name', flat=True))
+        return render(request, 'backtest-init.html', {'markets': markets})
+    
+    def post(self, request):
+        form_data = request.POST
+        print(form_data)
+        exchange = form_data['market']
+        symbol = form_data['symbol']
+        freq = form_data['freq']
+        start = form_data['start']
+        end = form_data.get('end', None)
+        if end:
+            end = datetime.strptime(end, '%Y-%m-%d').replace(tzinfo=pytz.UTC)
+        else:
+            end = None
+        start = datetime.strptime(start, '%Y-%m-%d').replace(tzinfo=pytz.UTC)
+
+        backtest = async_analyze(market=exchange, symbol=symbol, freq=freq, start=start, end=end)
+        return redirect('backtest-result', pk=backtest.pk)
+
+
+class BacktestResultView(View):
+    def get(self, request, pk):
+        backtest = Backtest.objects.get(id=pk)
+        report = backtest.report
+        if backtest.report and backtest.status == Backtest.Status.COMPLETED:
+            report = open(f'{backtest.report}').read()
+            report = json.loads(report)
+        return render(request, 'backtest-result.html', {'backtest': backtest, 'report': report})

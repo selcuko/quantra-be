@@ -1,4 +1,5 @@
 import time
+import typing
 import uuid
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -12,8 +13,8 @@ from logger import logger
 from markets.helper import authentication_required, float_to_precision
 from markets.interface import IMarket
 from models import interval_to_minutes
-from quantapi.models import Order, Symbol
-
+if typing.TYPE_CHECKING:
+    from quantapi.models import Symbol, Order
 
 class BinanceMarket(IMarket):
     name = 'BINANCE'
@@ -112,6 +113,7 @@ class BinanceMarket(IMarket):
 
     @staticmethod
     def _prep_symbol(symbol:dict) -> 'Symbol':
+        from quantapi.models import Symbol
         exc_symbol = Symbol(
                 name = symbol['symbol'],
                 base = symbol['baseAsset'],
@@ -122,7 +124,8 @@ class BinanceMarket(IMarket):
                 margin_trading_enabled = symbol['isMarginTradingAllowed'])
         return exc_symbol
 
-    def _prep_order(self, order:dict, symbol:'Symbol') -> Order:
+    def _prep_order(self, order:dict, symbol:'Symbol') -> 'Order':
+        from quantapi.models import Order
         order_time = order.get('time') or order.get('workingTime') or order.get('transactTime') or order.get('updateTime') or 0
         return Order(
             oid=order['orderId'],
@@ -187,7 +190,7 @@ class BinanceMarket(IMarket):
         return { self._standardize_symbol(symbol): self._prep_symbol(symbol) for symbol in self.client.get_exchange_info()['symbols']}
 
     @authentication_required
-    def place_market_order(self, symbol:'Symbol|str', side:Literal['buy', 'sell'], funds:Optional[float]=None, quantity:Optional[float]=None, validate=True) -> Order:
+    def place_market_order(self, symbol:'Symbol|str', side:Literal['buy', 'sell'], funds:Optional[float]=None, quantity:Optional[float]=None, validate=True) -> 'Order':
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         client_oid = uuid.uuid4().hex
@@ -212,7 +215,7 @@ class BinanceMarket(IMarket):
         return order
 
     @authentication_required
-    def place_limit_order(self, symbol:Symbol|str, side:Literal['buy', 'sell'], price:float, quantity:float, validate=True) -> Order:
+    def place_limit_order(self, symbol:'Symbol|str', side:Literal['buy', 'sell'], price:float, quantity:float, validate=True) -> 'Order':
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         client_oid = uuid.uuid4().hex
@@ -239,7 +242,7 @@ class BinanceMarket(IMarket):
             raise
 
     @authentication_required
-    def get_order(self, symbol:Symbol|str, order:Order|str) -> Order:
+    def get_order(self, symbol:'Symbol|str', order:'Order|str') -> 'Order':
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         if isinstance(order, Order):
@@ -254,7 +257,7 @@ class BinanceMarket(IMarket):
             raise
 
     @authentication_required
-    def get_orders(self, symbol:Symbol|str) -> list[Order]:
+    def get_orders(self, symbol:'Symbol|str') -> list['Order']:
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         try:
@@ -276,7 +279,7 @@ class BinanceMarket(IMarket):
             raise
 
     @authentication_required
-    def cancel_order(self, symbol:Symbol|str, order:Order|int) -> Order:
+    def cancel_order(self, symbol:'Symbol|str', order:'Order|int') -> 'Order':
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         if isinstance(order, Order):
@@ -293,7 +296,7 @@ class BinanceMarket(IMarket):
             raise
 
     @authentication_required
-    def cancel_all_orders(self, symbol:Symbol|str) -> list[Order]:
+    def cancel_all_orders(self, symbol:'Symbol|str') -> list['Order']:
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         try:

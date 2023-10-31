@@ -16,7 +16,17 @@ class MEXCMarket(IMarket):
         if config:
             self.authenticated = True
         self.url = 'https://api.mexc.com'
+        self.symbols = {}
+        self.get_symbols()
+        self.capital = 0
+        self.assets = {}
+        self.commission = {}
     
+    def has_symbol(self, symbol: str) -> bool:
+        if not self.symbols:
+            self.get_symbols()
+        return symbol in self.symbols
+
     def _standardize_klines(self, klines):
         klines = [[ datetime.fromtimestamp(int(kline[0]) // 1000, tz=pytz.UTC).replace(second=0, microsecond=0),
                   float(kline[1]),
@@ -104,7 +114,8 @@ class MEXCMarket(IMarket):
             raise
         symbol_list = [ symbol['symbol'] for symbol in symbols['symbols'] if symbol['quoteAsset'] == 'USDT' ]
         symbol_list = [ self._standardize_symbol(symbol) for symbol in symbol_list ]
-        return sorted(symbol_list)
+        self.symbols = sorted(symbol_list)
+        return self.symbols
     
     def can_trade_on_symbol(self, symbol):
         return symbol in self.get_symbols()

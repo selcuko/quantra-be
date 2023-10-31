@@ -1,4 +1,5 @@
 import time
+import typing
 import uuid
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -12,7 +13,8 @@ from markets import IMarket
 from markets.errors import InsufficientBalance, SymbolNotInMarket
 from markets.helper import authentication_required, float_to_precision
 from models import interval_to_minutes
-from quantapi.models import Order, Symbol
+if typing.TYPE_CHECKING:
+    from quantapi.models import Order, Symbol
 
 
 class KucoinMarket(IMarket):
@@ -107,7 +109,8 @@ class KucoinMarket(IMarket):
             logger.error(f'Symbol {symbol_name} is not present in {self.name}')
             raise ValueError(f'Symbol {symbol_name} is not present in {self.name}')
 
-    def _prep_symbol(self, symbol:dict) -> Symbol:
+    def _prep_symbol(self, symbol:dict) -> 'Symbol':
+        from quantapi.models import Symbol
         return Symbol(
             name = symbol['symbol'],
             base = symbol['baseCurrency'],
@@ -118,7 +121,8 @@ class KucoinMarket(IMarket):
             margin_trading_enabled = symbol['isMarginEnabled'])
 
 
-    def _prep_order(self, order:dict, symbol:Symbol) -> Order:
+    def _prep_order(self, order:dict, symbol:'Symbol') -> 'Order':
+        from quantapi.models import Order
         oid = order.get('orderId') or order.get('id')
         return Order(
             oid=oid,
@@ -178,7 +182,7 @@ class KucoinMarket(IMarket):
                 raise ValueError(error)
         return klines
     
-    def get_symbols(self) -> dict[str, Symbol]:
+    def get_symbols(self) -> dict[str, 'Symbol']:
         symbol_list = self.market.get_symbol_list_v2()
         if not symbol_list:
             logger.error(f'No symbols found on {self.name}')
@@ -186,7 +190,7 @@ class KucoinMarket(IMarket):
         return { self._standardize_symbol(symbol['symbol']): self._prep_symbol(symbol) for symbol in symbol_list }
     
     @authentication_required
-    def place_market_order(self, symbol:Symbol|str, side:Literal['buy', 'sell'], funds:"float|None"=None, quantity:"float|None"=None, validate=True) -> Order:
+    def place_market_order(self, symbol:'Symbol|str', side:Literal['buy', 'sell'], funds:"float|None"=None, quantity:"float|None"=None, validate=True) -> 'Order':
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         client_oid = uuid.uuid4().hex
@@ -221,7 +225,7 @@ class KucoinMarket(IMarket):
             raise
 
     @authentication_required
-    def place_limit_order(self, symbol:Symbol|str, side:Literal['buy', 'sell'], price:float, quantity:float, validate=True) -> Order:
+    def place_limit_order(self, symbol:'Symbol|str', side:Literal['buy', 'sell'], price:float, quantity:float, validate=True) -> 'Order':
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         client_oid = uuid.uuid4().hex
@@ -253,7 +257,7 @@ class KucoinMarket(IMarket):
             raise
 
     @authentication_required
-    def get_order(self, symbol:Symbol|str, order:Order|str) -> Order:
+    def get_order(self, symbol:'Symbol|str', order:'Order|str') -> 'Order':
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         if isinstance(order, Order):
@@ -272,7 +276,7 @@ class KucoinMarket(IMarket):
             raise
     
     @authentication_required
-    def get_orders(self, symbol:Symbol|str) -> list[Order]:
+    def get_orders(self, symbol:'Symbol|str') -> list['Order']:
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         try:
@@ -287,7 +291,7 @@ class KucoinMarket(IMarket):
             raise
     
     @authentication_required
-    def get_open_orders(self, symbol:Symbol|str) -> list[Order]:
+    def get_open_orders(self, symbol:'Symbol|str') -> list['Order']:
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         try:
@@ -305,7 +309,7 @@ class KucoinMarket(IMarket):
             raise
 
     @authentication_required
-    def cancel_order(self, symbol:Symbol|str, order:Order|str) -> Order:
+    def cancel_order(self, symbol:'Symbol|str', order:'Order|str') -> 'Order':
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         if isinstance(order, Order):
@@ -324,7 +328,7 @@ class KucoinMarket(IMarket):
             raise
     
     @authentication_required
-    def cancel_all_orders(self, symbol:Symbol|str) -> list[Order]:
+    def cancel_all_orders(self, symbol:'Symbol|str') -> list['Order']:
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         try:
