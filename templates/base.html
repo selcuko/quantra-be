@@ -40,6 +40,7 @@
       </div>
     </div>
     {% endif %}
+    {% block header %}
     <nav class="bg-white border-b border-gray-200 dark:bg-gray-900">
       <div class="flex flex-wrap items-center justify-between p-4">
         <a href="/" class="flex items-center">
@@ -83,6 +84,7 @@
         </div>
       </div>
     </nav>
+    {% endblock %}
   </div>
   {% block content %}Base template is not overriden{% endblock %}
 </body>

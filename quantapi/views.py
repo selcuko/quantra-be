@@ -228,3 +228,5 @@ class BacktestResultView(View):
             report = open(f'{backtest.report}').read()
             report = json.loads(report)
         return render(request, 'backtest-result.html', {'backtest': backtest, 'report': report})
+
+

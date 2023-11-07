@@ -16,13 +16,14 @@ Including another URLconf
 """
 from django.conf import settings
 from django.contrib import admin
-from django.urls import path
+from django.urls import include, path
 from django.conf.urls.static import static
 from quantapi.views import BacktestInitView, BacktestResultView, HomeView, MarketDetailView, MarketListView, RunningThreadsView, \
     SessionInitView, SessionListView, SessionManageView, SessionTerminateView, SessionDetailView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('accounts/', include('allauth.urls')),
     path('', HomeView.as_view(), name='home'),
     path('sessions/', SessionListView.as_view(), name='session-list'),
     path('session/<int:pk>/', SessionDetailView.as_view(), name='session-detail'),
