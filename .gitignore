@@ -1,6 +1,7 @@
 /cache
 /data
 /testman
+/my_pg
 /__pycache__
 /**/__pycache__
 *.log
@@ -9,3 +10,4 @@ api.json
 *.db
 *.sqlite
 settings.json
+.DS_Store
