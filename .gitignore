@@ -10,3 +10,4 @@ api.json
 *.db
 *.sqlite
 settings.json
+.DS_Store

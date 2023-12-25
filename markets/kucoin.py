@@ -159,7 +159,7 @@ class KucoinMarket:
             funds=float(order.get('funds', 0)),
             client_oid=order.get('clientOid'),
         )
-    def get_earliest__valid_timestamp(self, symbol:str, interval:str, start:datetime) -> datetime:
+    def get_earliest_valid_timestamp(self, symbol:str, interval:str, start:datetime) -> datetime:
 
         klines = self._get_klines(
             symbol=symbol,

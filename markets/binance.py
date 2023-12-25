@@ -229,7 +229,8 @@ class BinanceMarket:
             return self._get_klines(symbol, interval, start, end, limit, retry=retry)
         except requests.exceptions.ConnectionError:
             return []
-
+    def get_earliest_valid_timestamp(self, symbol, interval):
+        return self.client._get_earliest_valid_timestamp(symbol, interval)
     def get_last_klines(self, symbol:str, interval:str, limit=100, retry=1, silent=True) -> list[list]:
         minutes = interval_to_minutes(interval)
         now = datetime.now(tz=pytz.UTC)
