@@ -159,7 +159,17 @@ class KucoinMarket:
             funds=float(order.get('funds', 0)),
             client_oid=order.get('clientOid'),
         )
-    
+    def get_earliest__valid_timestamp(self, symbol:str, interval:str, start:datetime) -> datetime:
+
+        klines = self._get_klines(
+            symbol=symbol,
+            interval=interval,
+            start=start,
+            end=start + timedelta(minutes=1440),
+            limit=1)
+        if klines == []:
+            return None
+        return klines[0][0]
     def _get_klines(self, symbol:str, interval:str, start:datetime, end:datetime=None, limit=1000, retry=0) -> list[list]:
         if end:
             calculated_end = end

@@ -1,6 +1,7 @@
 /cache
 /data
 /testman
+/my_pg
 /__pycache__
 /**/__pycache__
 *.log

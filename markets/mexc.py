@@ -51,7 +51,17 @@ class MEXCMarket:
     
     def _format_datetime(self, dt):
         return int(dt.timestamp()*1000)
-    
+    def get_earliest__valid_timestamp(self, symbol:str, interval:str, start:datetime) -> datetime:
+
+        klines = self._get_klines(
+            symbol=symbol,
+            interval=interval,
+            start=start,
+            end=start + timedelta(minutes=1000),
+            limit=1000)
+        if klines == []:
+            return None
+        return klines[0][0]
     def get_klines(self, symbol, interval, start=None, end=None, limit=1000):
         return self._get_klines(symbol, interval, start, end, limit)
     

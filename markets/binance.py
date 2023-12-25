@@ -197,6 +197,9 @@ class BinanceMarket:
             status=order['status'].upper(),
             funds=float(order.get('origQuoteOrderQty', 0)),
         )
+    
+    def get_earliest_valid_timestamp(self, symbol, interval):
+        return self.client._get_earliest_valid_timestamp(symbol, interval)
 
     def _get_klines(self, symbol:str, interval:str, start:datetime, end:datetime=None, limit=1000, retry=0) -> list[list]:
         if end:

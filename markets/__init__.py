@@ -122,6 +122,18 @@ class Market:
         Returns:
             list[Order]: list of Order objects
         """
+
+    def get_earliest__valid_timestamp(self, symbol:str, interval:str, start:datetime) -> datetime:
+        """Get the earliest timestamp that is valid for given symbol and interval
+
+        Args:
+            symbol (str): symbol name
+            interval (str): in "1 min" format
+            start (datetime): tzinfo is required
+
+        Returns:
+            datetime: earliest datetime
+        """
         
     def get_klines(self, symbol:ExchangeSymbol|str, interval:str, start:datetime=None, end:datetime=None, limit:int=1000, retry=0) -> list[list]:
         """Get historical candle data.
