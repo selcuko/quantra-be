@@ -164,6 +164,7 @@ class LiveLoop:
                     return self.__buy(last_kline)
                 except RejectedOrder as ro:
                     last_order = Order.objects.create(
+                        funds=self.session.capital,
                         deal_funds=self.session.capital,
                         deal_size=self.session.capital / last_kline['close'],
                         price=last_kline['close'],
@@ -211,6 +212,8 @@ class LiveLoop:
                     return self.__sell(last_kline)
                 except RejectedOrder as ro:
                     last_order = Order.objects.create(
+                        funds=self.session.capital,
+                        deal_funds=self.session.capital,
                         deal_size=self.session.assets,
                         price=last_kline['close'],
                         signal=signal,
