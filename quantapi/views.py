@@ -21,7 +21,7 @@ class HomeView(View):
         sessions = Session.objects.order_by('-started')[:12]
         orders = Order.objects.all().order_by('-timestamp')[:5]
         signals = Signal.objects.all().order_by('-timestamp')[:5]
-        total_profit = sum([session.profit() for session in sessions])
+        total_profit = 'Not available'
         return render(request, 'index.html', {
             'sessions': sessions, 
             'orders': orders, 
@@ -99,8 +99,6 @@ class SessionInitView(View):
             if not imarket.has_symbol(symbol_name):
                 raise SymbolNotInMarket(f'Symbol {symbol_name} not found in market {market.exchange_name}')
             symbol = Symbol.objects.get_or_create(name=symbol_name, market=market)[0]
-            if not Session.is_valid_freq((freq := form_data['freq'])):
-                raise ValueError(f'Invalid frequency {freq}')
             if not market.is_valid_session_type((session_type := form_data['type'])):
                 raise MarketDisabledTrading(f'Market {market.exchange_name} does not support session type {session_type}')
             if (capital_limit := float(form_data['capital'])) > imarket.capital and session_type in [Session.Type.LIVE_SANDBOX, Session.Type.LIVE_MAINNET]:
@@ -115,13 +113,13 @@ class SessionInitView(View):
         try:
             ll = LiveLoop(
                 symbol=symbol.name,
-                market=market.get_interface(),
+                market=market,
                 strategy=get_strategy('v1')(),
                 capital_limit=capital_limit,
                 asset_limit=asset_limit,
-                freq=freq,
+                freq=form_data['freq'],
                 end=planned_shutdown,
-                market_id_for_symbol=market.pk,
+                session_type=session_type,
             )
             ll.run()
         except Exception as e:
@@ -157,7 +155,7 @@ class SessionTerminateView(View):
                 'type': 'error',
                 'text': 'Session is not ongoing.'
             }})
-        session.status = Session.Status.CANCELLED
+        session.status = Session.Status.COMPLETED
         session.save()
         return redirect('session-detail', pk=session.pk)
 

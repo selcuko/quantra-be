@@ -10,6 +10,7 @@ import requests
 from binance.client import Client
 
 from logger import logger
+from markets.errors import KlineFetchFailed, RejectedOrder
 from markets.helper import authentication_required, float_to_precision
 from markets.interface import IMarket
 from models import interval_to_minutes
@@ -182,11 +183,11 @@ class BinanceMarket(IMarket):
         last_kline_dt = klines[-1][0]
         if (now - last_kline_dt) > timedelta(minutes=minutes*2):
             error = f'Last kline dt {last_kline_dt} does not match current time {now}, total klines: {len(klines)}, {start} -> {now}'
-            logger.warning(error)
             if retry > 0:
+                time.sleep(1)
                 return self.get_last_klines(symbol, interval, limit, retry-1, silent)
             if not silent:
-                raise ValueError(error)
+                raise KlineFetchFailed(error)
         return klines
 
     def get_symbols(self) -> dict[str, 'Symbol']:
@@ -203,14 +204,20 @@ class BinanceMarket(IMarket):
             funds = float_to_precision(Decimal(funds), Decimal(symbol.quote_precision))
         if quantity and symbol.base_precision:
             quantity = float_to_precision(Decimal(quantity), Decimal(symbol.base_precision))
-        _order_payload = self.client.order_market(
-            side=side,
-            symbol=symbol.name,
-            quantity=quantity,
-            quoteOrderQty=funds,
-            newClientOrderId=client_oid)
+        try:
+            _order_payload = self.client.order_market(
+                side=side,
+                symbol=symbol.name,
+                quantity=quantity,
+                quoteOrderQty=funds,
+                newClientOrderId=client_oid)
+        except Exception as e:
+            if 'filter failure' in str(e).lower():
+                raise RejectedOrder(f'Order was rejected by the exchange: {e}')
+            raise
         order = self._prep_order(_order_payload, symbol)
-        logger.info(f'Market order placed on {self.name} for {symbol} with side {side} and funds {funds} and quantity {quantity} with order id {_order_payload["orderId"]}')
+        amount_txt = f'{funds} USDT' if funds else f'{quantity} {symbol.base}'
+        logger.info(f'Market {side.upper()} {symbol} order placed on {self.name} for {amount_txt} (oid {_order_payload["orderId"]})')
         if not order.oid:
             raise ValueError(f'Error while placing market order on {self.name}')
         if validate:

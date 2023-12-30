@@ -1,3 +1,4 @@
+from datetime import datetime
 import json
 import os
 import threading
@@ -5,7 +6,7 @@ from django.conf import settings
 from django.contrib.auth.models import User
 
 import pytz
-from typing import List, Optional
+from typing import Optional
 from django.db import models
 from cryptography.fernet import Fernet
 
@@ -131,7 +132,7 @@ class Session(models.Model):
     status = models.CharField(max_length=30, choices=Status.choices)
     report = models.CharField(max_length=256, null=True, blank=True, help_text='Report file name')
     last_heartbeat = models.DateTimeField(null=True, blank=True)
-    #last_kline_timestamp = models.DateTimeField(null=True, blank=True)
+    last_kline_timestamp = models.DateTimeField(null=True, blank=True)
     signals: models.QuerySet['Signal']
     subscriptions: models.QuerySet['Subscription']
     initial_capital = models.FloatField()
@@ -156,6 +157,8 @@ class Session(models.Model):
             raise ValueError(f'Session status should be ONGOING to resume, not {self.status}')
         if not self.pk:
             raise ValueError('Session must be saved before resuming')
+        if not self.strategy:
+            raise ValueError('Session must have a strategy to resume')
         from livetest import LiveLoop
         ll = LiveLoop(
             symbol=self.symbol.name,
@@ -168,6 +171,14 @@ class Session(models.Model):
             session=self)
         ll.run()
         return ll
+
+    def stop(self):
+        """Stop an ongoing session."""
+        if self.status == Session.Status.ONGOING:
+            self.status = Session.Status.COMPLETED
+            self.planned_shutdown = datetime.now(pytz.utc)
+        else:
+            raise ValueError(f'Session status should be ONGOING to stop, not {self.status}')
 
 
 class Strategy(models.Model):
@@ -218,6 +229,7 @@ class Order(models.Model):
     timestamp = models.DateTimeField()
     status = models.CharField(max_length=30, choices=Status.choices)
     force = models.BooleanField(default=False)
+    market_response = models.TextField(null=True, blank=True)
 
     def __str__(self) -> str:
         return f'{self.status} {self.signal.side} {self.signal.session.symbol.name} {self.signal.price}'

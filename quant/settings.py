@@ -160,6 +160,10 @@ SOCIALACCOUNT_PROVIDERS = {
             'client_id': 'REDACTED.apps.googleusercontent.com',
             'secret': 'REDACTED',
             'key': ''
-        }
+        },
+        'SCOPE': [
+            'profile',
+            'email',
+        ],
     }
 }

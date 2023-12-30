@@ -9,12 +9,14 @@ class WhitelistedUserMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        if 'accounts' in request.path:
+            return self.get_response(request)
         whitelisted_default = settings.WHITELISTED_DEFAULT_EMAILS
-        if request.user.is_staff or request.user.is_superuser:
+        if request.user.is_anonymous or request.user.is_staff or request.user.is_superuser:
             return self.get_response(request)
         if request.user.is_authenticated and request.user.email in whitelisted_default:
             return self.get_response(request)
-        elif WhitelistedUser.objects.filter(user__email=request.user.email).exists():
+        elif WhitelistedUser.objects.filter(user=request.user).exists():
             return self.get_response(request)
         else:
-            return HttpResponseForbidden('Forbidden')
+            return HttpResponseForbidden('You are not authorized to view this page. <a href="/accounts/logout">Logout?</a>')
