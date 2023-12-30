@@ -8,16 +8,15 @@ def authentication_required(func):
         return func(self, *args, **kwargs)
     return wrapper
 
+def float_to_precision(value: Decimal | float, precision: Decimal | float | int):
+    precision = Decimal(str(precision))
 
-def float_to_precision(value:Decimal|float, precision:Decimal|float|int):
-    if isinstance(precision, str):
-        precision = Decimal(precision)
     if precision > 1:
-        return round(float(str(value)), int(str(precision)))
+        return round(float(str(value)), int())
     else:
         value = Decimal(str(value))
-        precision = Decimal(str(precision))
         return float((value // precision) * precision)
+
 
 
 if __name__ == '__main__':

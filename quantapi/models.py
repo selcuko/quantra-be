@@ -32,7 +32,7 @@ class Market(models.Model):
     
     def get_interface(self):
         from markets import get_market
-        return get_market(self.exchange_name, self.config)
+        return get_market(self.exchange_name, self.config, self)
 
     def is_valid_session_type(self, session_type):
         match session_type:
