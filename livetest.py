@@ -170,7 +170,8 @@ class LiveLoop:
                         price=last_kline['close'],
                         signal=signal,
                         status=Order.Status.REJECTED,
-                        market_response=repr(ro)
+                        market_response=repr(ro),
+                        timestamp=self.last_kline_dt
                     )
                 except:
                     logger.error('Failed to place market order, skipping', exc_info=True)
@@ -218,7 +219,8 @@ class LiveLoop:
                         price=last_kline['close'],
                         signal=signal,
                         status=Order.Status.REJECTED,
-                        market_response=repr(ro)
+                        market_response=repr(ro),
+                        timestamp=self.last_kline_dt
                     )
                 except:
                     logger.error('Failed to place market order, skipping', exc_info=True)
