@@ -13,13 +13,14 @@ from logger import logger
 from markets.helper import authentication_required, float_to_precision
 from markets.interface import IMarket
 from models import interval_to_minutes
+from quantapi.models import Market
 if typing.TYPE_CHECKING:
     from quantapi.models import Symbol, Order
 
 class BinanceMarket(IMarket):
     name = 'BINANCE'
 
-    def __init__(self, config=None):
+    def __init__(self, config=None, market=None):
         if config is None:
             config = {}
         self.authenticated = bool(config.get('API_KEY') and config.get('API_SECRET'))
@@ -28,6 +29,8 @@ class BinanceMarket(IMarket):
         self.capital = 0
         self.assets = {}
         self.commission = {}
+        self.market = market or Market.objects.filter(exchange_name=self.name).first()
+
         try:
             if self.authenticated:
                 self.testnet = config.get('TESTNET', False)
@@ -111,10 +114,10 @@ class BinanceMarket(IMarket):
             logger.error(f'Symbol {symbol_name} is not present in {self.name}: {self.symbols.keys()}')
             raise ValueError(f'Symbol {symbol_name} is not present in {self.name}')
 
-    @staticmethod
-    def _prep_symbol(symbol:dict) -> 'Symbol':
+    def _prep_symbol(self, symbol:dict) -> 'Symbol':
         from quantapi.models import Symbol
         exc_symbol = Symbol(
+                market = self.market,
                 name = symbol['symbol'],
                 base = symbol['baseAsset'],
                 quote = symbol['quoteAsset'],
@@ -170,12 +173,12 @@ class BinanceMarket(IMarket):
 
     def get_last_klines(self, symbol:str, interval:str, limit=100, retry=1, silent=True) -> list[list]:
         minutes = interval_to_minutes(interval)
-        now = datetime.now(tz=pytz.UTC)
-        start = now - timedelta(minutes=minutes*limit)
+        now = datetime.now(tz=pytz.UTC) + timedelta(minutes=1)
+        start = now - timedelta(minutes=minutes*limit+1)
         klines = self.get_klines(symbol, interval, start, now, limit=limit*2)
         if klines == []:
             logger.warning(f'No klines found for {symbol} at {start} -> {now}')
-            return []
+            raise ValueError(f'No klines found for {symbol} at {start} -> {now}')
         last_kline_dt = klines[-1][0]
         if (now - last_kline_dt) > timedelta(minutes=minutes*2):
             error = f'Last kline dt {last_kline_dt} does not match current time {now}, total klines: {len(klines)}, {start} -> {now}'
@@ -243,6 +246,7 @@ class BinanceMarket(IMarket):
 
     @authentication_required
     def get_order(self, symbol:'Symbol|str', order:'Order|str') -> 'Order':
+        from quantapi.models import Order
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         if isinstance(order, Order):
@@ -280,6 +284,7 @@ class BinanceMarket(IMarket):
 
     @authentication_required
     def cancel_order(self, symbol:'Symbol|str', order:'Order|int') -> 'Order':
+        from quantapi.models import Order
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         if isinstance(order, Order):

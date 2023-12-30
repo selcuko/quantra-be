@@ -1,3 +1,6 @@
+import django
+from django.conf import settings
+django.setup()
 import threading
 import time
 from datetime import datetime, timedelta
@@ -6,22 +9,21 @@ from typing import Callable, Optional
 import pytz
 
 from logger import logger
-from markets import IMarket, get_market
+from markets import IMarket
 from markets.errors import InsufficientBalance, MarketError
 from models import OHLCVDataset, interval_to_minutes
-from quantapi.models import (Market, Order, Session, Signal, Subscription,
-                             Symbol, User)
+from quantapi.models import (Market, Order, Session, Signal,
+                             Symbol)
 from strategy import Strategy, get_strategy
 from testman import TestManager
 
 
 class LiveLoop:
-    def __init__(self, symbol:str, market:IMarket, strategy:Strategy, capital_limit:float,
-            asset_limit:float, initiating_user:Optional[User]=None, freq:str='15 min',
-            end:Optional[datetime]=None, session=None, market_id_for_symbol:Optional[int]=None,
-            session_type:Optional[str]=None) -> None:
+    def __init__(self, symbol:str, market:Market, strategy:Strategy, capital_limit:float,
+            asset_limit:float, freq:str='15 min', end:Optional[datetime]=None,
+            session_type:Optional[str]=None, session=None) -> None:
         self.will_stop = False
-        self.market = market
+        self.market = market.get_interface()
         self.strategy = strategy
         self.freq = freq
         self.end = end
@@ -29,20 +31,12 @@ class LiveLoop:
         self.asset_limit = asset_limit
         self.thread = None
         self.running = False
-        
-        if market_id_for_symbol:
-            self.symbol = Symbol.objects.get_or_create(name=symbol, market_id=market_id_for_symbol)[0]
-        else:
-            try:
-                self.symbol = Symbol.objects.get_or_create(name=symbol, market__exchange_name=market.name)[0]
-            except Symbol.MultipleObjectsReturned:
-                logger.warning(f'Multiple symbols found for {symbol} in {market.name} and used the first. Please delete duplicates to avoid issues.')
-                self.symbol = Symbol.objects.filter(name=symbol, market__exchange_name=market.name).first()
+        print(f'Initializing live loop for {symbol} on {market} with freq {freq.replace(" ", "").upper()}', flush=True)
+        self.symbol = Symbol.objects.get_or_create(name=symbol, market=market)[0]
         self.session = session or Session.objects.create(
             symbol=self.symbol,
             session_type=session_type or Session.Type.LIVE_BASIC,
             freq=freq,
-            strategy_name=strategy.name,
             strategy_parameters=strategy.params,
             planned_shutdown=end,
             status=Session.Status.ONGOING,
@@ -51,55 +45,70 @@ class LiveLoop:
             initial_capital=capital_limit,
             initial_assets=asset_limit,
         )
-        self.user = initiating_user
-        if self.user:
-            Subscription.objects.create(user=self.user, session=self.session)
-        else:
-            logger.warning('No user provided, notification system disabled')
 
-        self.testman = TestManager(
-            symbol=symbol,
-            market=self.market,
-            type=self.session.session_type,
-            strategy=strategy,
-            interval=freq,
-            capital=capital_limit,
-            assets=asset_limit,
-            commission=self.market.commission
-        )
         self.loop_interval_s = interval_to_minutes(freq) * 60
-        self.last_kline_dt = None
-        self.session.notify('Initiating live test - hope the core is stable 🤞')
+        self.last_kline_dt = None    
+
+    def precheck(self):
+        """Prechecks before starting the live loop"""
+        self.market.get_account()
+        # validate capital and asset amound
+        if self.session.capital > self.market.capital:
+            raise InsufficientBalance(f'Capital limit ({self.session.capital}) is greater than available capital ({self.market.capital})')
+        if self.session.assets > self.market.assets.get(self.symbol.base, 0):
+            raise InsufficientBalance(f'Asset limit ({self.session.assets}) is greater than available assets ({self.market.assets.get(self.symbol.base, 0)})')
+
+
 
     def run(self):
         """Fire and forget function to start the live loop and keep it running in a seperate thread."""
-        if self.running:
+        if self.running and self.thread:
             raise RuntimeError(f'Live loop is already running in thread {self.thread.name}, id={self.thread.ident}')
+        self.precheck()
         self.will_stop = False
         self.running = True
         self.thread = threading.Thread(target=self.__run, name=f'LL:{self.symbol.base}:{self.freq.replace(" ", "")}@{self.market.name}')
         self.thread.start()
 
+    def stop(self):
+        """Stops the live loop"""
+        self.will_stop = True
+
     def __run(self):
         logger.info(f'Starting live loop for {self.symbol} on {self.market.name} with freq {self.freq.replace(" ", "").upper()}')
-        summary = None
-
+        last_klines = []
+        failed_kline_requests = 0
         while not self.should_stop() and self.wait_next_candle() and not self.should_stop():
-            try:
-                last_klines = self.market.get_last_klines(self.symbol.name, self.freq)
-            except:
-                logger.error('Failed to fetch last klines, halting.', exc_info=True)
-                self.stop()
-                break
+            print(f'[{datetime.now()}] Fetching last klines...', flush=True)
+            got_klines = False
+            for i in range(3):
+                if got_klines:
+                    break
+                try:
+                    last_klines = self.market.get_last_klines(self.symbol.name, self.freq)
+                    got_klines = True
+                    break
+                except:                
+                    logger.warning(f'Failed to fetch last klines, retrying ({i+1}/3)', exc_info=True)
+                    time.sleep(1)
+                    failed_kline_requests += 1
+                    continue
+            if not last_klines:
+                if failed_kline_requests > 9:
+                    logger.error(f'Cannot get last klines, failed {failed_kline_requests} times, exiting')
+                    break
+                logger.error(f'Failed to fetch last klines, skipping')
+                continue
+            print('Got last klines', flush=True)
+            failed_kline_requests = 0
             raw_dataset = OHLCVDataset(last_klines)
             strategy_dataset = self.strategy(raw_dataset)
 
             self.last_kline_dt = strategy_dataset.index[-1].to_pydatetime()
+            print('Last kline:', self.last_kline_dt, flush=True)
             last_kline = {'time': self.last_kline_dt.timestamp(), **strategy_dataset.iloc[-1].to_dict()}
             positive_buy_signal = last_kline['buy']
             positive_sell_signal = last_kline['sell']
-
-            self.testman.update(last_kline)
 
             if positive_buy_signal:
                 self.__buy(last_kline)
@@ -107,171 +116,97 @@ class LiveLoop:
             elif positive_sell_signal:
                 self.__sell(last_kline)
 
-            self.session.heartbeat()
-            summary = self.testman.summary()
-            logger.info(summary)
-
         self.running = False
-        report = self.testman.shutdown(save=True)
         self.session.ended = datetime.now(tz=pytz.UTC)
-        self.session.report = report
         self.session.status = Session.Status.COMPLETED
         self.session.save()
-        self.session.notify_complete(f'Live loop completed, summary: {summary}')
     
-    def __buy(self, last_kline={}, force=False):
+
+    def can_buy(self):
+        return self.session.capital > 0
+    
+    def can_sell(self):
+        return self.session.assets > 0
+
+    def __buy(self, last_kline:dict):
         last_order = None
-        if not force:
-            signal = Signal.objects.create(
-                session=self.session,
-                timestamp=self.last_kline_dt,
-                side=Signal.Side.BUY,
-                price=last_kline.get('close', -1),
-                raw=last_kline)
-            self.session.notify_signal(signal)
-        else:
-            signal = Signal.objects.create(
-                session=self.session,
-                timestamp=datetime.utcnow(),
-                side=Signal.Side.BUY,
-                price=-1,
-                raw='FORCED')
-        if self.testman.can_buy() or force:
+        signal = Signal.objects.create(
+            session=self.session,
+            timestamp=self.last_kline_dt,
+            side=Signal.Side.BUY,
+            price=last_kline['close'],
+            raw=last_kline)
+        if self.can_buy():
             try:
-                if self.session.session_type == Session.Type.LIVE_BASIC:
-                    last_order = Order.objects.create(
-                        deal_size=self.testman.capital,
-                        price=last_kline.get('close', -1),
-                        deal_funds=self.testman.assets,
-                        funds=self.testman.capital,
-                        signal=signal,
-                        timestamp=self.last_kline_dt,
-                    )
-                else:
-                    last_order = self.market.place_market_order(self.symbol.name, 'buy', funds=self.testman.capital)
-                    last_order.signal = signal
-                    last_order.save()
-                    self.testman.buy(last_kline, sync=last_order)   
+                last_order = self.market.place_market_order(self.symbol.name, 'buy', funds=self.session.capital)
+                last_order.signal = signal
+                last_order.save()
             except InsufficientBalance:
                 self.market.get_account()
-                self.testman.assets = self.market.assets[self.symbol.base]
-                self.testman.capital = self.market.capital
-                self.session.capital = self.testman.capital
-                self.session.assets = self.testman.assets
+                self.session.capital = self.market.capital
+                self.session.assets = self.market.assets[self.symbol.base]
                 self.session.save()
-                logger.warning(f'Insufficient balance, assets updated to {self.testman.assets} and capital updated to {self.testman.capital}')
-                return self.__buy(last_kline, force)
+                logger.warning(f'Insufficient balance, assets updated to {self.session.assets} and capital updated to {self.session.capital}')
+                return self.__buy(last_kline)
             except:
                 logger.error('Failed to place market order, skipping', exc_info=True)
                 return
-
-            self.session.notify_order(last_order)
-        
-        self.session.capital = self.testman.capital
-        self.session.assets = self.testman.assets
-        self.session.save()
+            self.session.save()
         return last_order
 
-    def __sell(self, last_kline=None, force=False):
+    def __sell(self, last_kline:dict):
         if not last_kline:
             last_kline = {}
         last_order = None
         signal = None
-        if not force:
-            signal = Signal.objects.create(
-                session=self.session,
-                timestamp=self.last_kline_dt,
-                side=Signal.Side.SELL,
-                price=last_kline.get('close', -1),
-                raw=last_kline)
-            self.session.notify_signal(signal)
-        if self.testman.can_sell() or force:
+        signal = Signal.objects.create(
+            session=self.session,
+            timestamp=self.last_kline_dt,
+            side=Signal.Side.SELL,
+            price=last_kline['close'],
+            raw=last_kline)
+        if self.can_sell():
             try:
-                if self.session.session_type == Session.Type.LIVE_BASIC:
-                    last_order = Order.objects.create(
-                        deal_size=self.testman.assets,
-                        price=last_kline.get('close', -1),
-                        deal_funds=self.testman.capital,
-                        funds=self.testman.capital,
-                        signal=signal,
-                        timestamp=self.last_kline_dt,
-                    )
-                else:
-                    last_order = self.market.place_market_order(self.symbol.name, 'sell', quantity=self.testman.assets)
-                    last_order.signal = signal
-                    last_order.save()
-                    self.testman.sell(last_kline, sync=last_order)
+                last_order = self.market.place_market_order(self.symbol.name, 'sell', quantity=self.session.assets)
+                last_order.signal = signal
+                last_order.save()
                 
             except InsufficientBalance:
                 self.market.get_account()
-                self.testman.assets = self.market.assets[self.symbol.base]
-                self.testman.capital = self.market.capital
-                self.session.capital = self.testman.capital
-                self.session.assets = self.testman.assets
+                self.session.capital = self.market.capital
+                self.session.assets = self.market.assets[self.symbol.base]
                 self.session.save()
-                logger.warning(f'Insufficient balance, assets updated to {self.testman.assets} and capital updated to {self.testman.capital}')
-                return self.__sell(last_kline, force)
-            self.session.notify_order(last_order)
-        self.session.capital = self.testman.capital
-        self.session.assets = self.testman.assets
+                logger.warning(f'Insufficient balance, assets updated to {self.session.assets} and capital updated to {self.session.capital}')
+                return self.__sell(last_kline)
         self.session.save()
         return last_order
 
-    def handle_manual_overrides(self):
-        """Handle manual overrides such as force buy, update capital limit etc."""
-        raise NotImplementedError
-
     def should_stop(self):
-        """Returns whether the loop should stop or not
-
-        Returns:
-            bool: True if the loop should stop, False otherwise
-        """
+        """Returns whether the loop should stop or not"""
         before_end = True
         if self.end:
             before_end = datetime.now(tz=pytz.UTC) < self.end
         return self.will_stop or not before_end
 
     def wait_next_candle(self):
-        """Waits until the next candle is available"""
+        """Waits until the next candle should be available"""
         if not self.last_kline_dt:
+            print('No last kline, get some...', flush=True)
             return True
         last_kline_ts = self.last_kline_dt.timestamp()
         residue = last_kline_ts + self.loop_interval_s + 5 - time.time()
+        print(f'LKTS: {last_kline_ts} Residue: {residue:.2f}s', flush=True)
         if residue > 0:
             slept = 0
             while residue > 0 and not self.will_stop:
+                print(f'Waiting for next candle, {residue:.2f}s left...', flush=True)
                 time.sleep(1)
                 slept += 1
                 residue -= 1
         else:
-            # new candle is not available yet
             time.sleep(1)
+            print('New candle is should be available now', flush=True)
         return True
-
-    def stop(self, set_completed=True):
-        self.will_stop = True
-        if set_completed:
-            self.session.status = Session.Status.COMPLETED
-            self.session.save()
-    
-    def force_buy(self):
-        if self.testman.bought:
-            logger.error('Already bought, skipping')
-            return
-        return self.__buy(force=True)
-
-    def force_sell(self):
-        raise NotImplementedError
-
-    def force_shutdown(self):
-        raise NotImplementedError
-
-    def update_capital_limit(self):
-        raise NotImplementedError
-
-    def update_asset_limit(self):
-        raise NotImplementedError
 
     def idle(self):
         """Idle indefinitely (for development purposes)"""
@@ -287,11 +222,6 @@ class LiveLoop:
             except KeyboardInterrupt:
                 break
 
-    def handle_sigint(self, sig, frame):
-        logger.info('SIGINT detected, shutting down gracefully')
-        self.stop(False)
-        logger.info('Shutdown complete')
-
 
 def run_livetest(symbol:str, market:IMarket, strategy:Callable, freq='15 min', end:Optional[datetime]=None):
     _symbol = Symbol.objects.get_or_create(name=symbol, market=market.name)[0]
@@ -299,7 +229,6 @@ def run_livetest(symbol:str, market:IMarket, strategy:Callable, freq='15 min', e
         symbol=_symbol,
         session_type=Session.Type.LIVE_BASIC,
         freq=freq,
-        strategy_name=strategy.name,
         strategy_parameters=strategy.params,
         planned_shutdown=end,
         status=Session.Status.ONGOING,
@@ -382,34 +311,23 @@ def run_livetest(symbol:str, market:IMarket, strategy:Callable, freq='15 min', e
     testman.shutdown()
 
 
-def sample_livetest():
-    strg = get_strategy('v1')()
-    market = get_market('MEXC')
-    run_livetest('TARA-USDT', market, strg)
-
-
-def create_objs():
-    Market.objects.get_or_create(
-        exchange_name=Market.Exchange.KUCOIN,
-        friendly_name='KuCoin Unauthorized')
-
-
 if __name__ == '__main__':
-    create_objs()
-    import json
-    mc = json.load(open('api.json', 'r', encoding='ascii'))['BINANCE-TESTNET']
+    
+
+    """ market = Market.objects.filter(exchange_name='BINANCE').first()
     ll = LiveLoop(
         'BTC-USDT', 
-        get_market('BINANCE', mc),
+        market,
         get_strategy('v1')(),
         capital_limit=100,
-        asset_limit=100,
+        asset_limit=0.1,
         freq='1 min')
-    o = ll.force_buy()
-    print(o)
-    try:
-        while True:
+    ll.run()
+    ll.idle() """
+    s = Session.objects.get(pk=69)
+    s.resume()
+    while True:
+        try:
             time.sleep(1)
-    except KeyboardInterrupt:
-        ll.stop()
-        logger.info('KeyboardInterrupt detected, shutting down gracefully')
+        except KeyboardInterrupt:
+            break

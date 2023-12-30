@@ -1,12 +1,12 @@
-from datetime import datetime
 import json
 import os
+import threading
 from django.conf import settings
+from django.contrib.auth.models import User
 
 import pytz
 from typing import List, Optional
 from django.db import models
-from django.contrib.auth.models import User
 from cryptography.fernet import Fernet
 
 from strategy import get_strategy
@@ -92,10 +92,7 @@ class Symbol(models.Model):
         }
 
     def __str__(self):
-        try:
-            return f'{self.name}@{self.market.exchange_name}'
-        except:
-            return f'{self.name}@Unbound'
+        return f'{self.name}@{self.market.exchange_name}'
 
 
 class Session(models.Model):
@@ -107,7 +104,6 @@ class Session(models.Model):
     class Status(models.TextChoices):
         ONGOING   = 'ONGOING',   'Ongoing'
         COMPLETED = 'COMPLETED', 'Completed'
-        CANCELLED = 'CANCELLED', 'Cancelled'
         ERROR     = 'ERROR',     'Error'
         PURGED    = 'PURGED',    'Purged'
     class Freq(models.TextChoices):
@@ -124,145 +120,63 @@ class Session(models.Model):
         HOUR12 = '12 hour', '12 hours'
         DAY1  = '1 day',  '1 day'
 
-    class Strategy(models.TextChoices):
-        V1 = 'v1', 'Strategy v1: Lisa (PandasTA)'
-        V2 = 'v2', 'Strategy v2: Lisa (NumPy)'
-
     session_type = models.CharField(max_length=30, choices=Type.choices)
     freq = models.CharField(max_length=30)
     started = models.DateTimeField(auto_now_add=True)
     ended = models.DateTimeField(null=True, blank=True)
     symbol = models.ForeignKey(Symbol, on_delete=models.PROTECT, related_name='sessions')
-    strategy_name = models.CharField(max_length=30, choices=Strategy.choices)
+    strategy = models.ForeignKey('Strategy', on_delete=models.PROTECT, related_name='sessions', null=True, blank=True)
     strategy_parameters = models.CharField(max_length=256)
     planned_shutdown = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=30, choices=Status.choices)
     report = models.CharField(max_length=256, null=True, blank=True, help_text='Report file name')
     last_heartbeat = models.DateTimeField(null=True, blank=True)
+    #last_kline_timestamp = models.DateTimeField(null=True, blank=True)
     signals: models.QuerySet['Signal']
     subscriptions: models.QuerySet['Subscription']
-    live_loop_cache: Optional['LiveLoopCache']
     initial_capital = models.FloatField()
     initial_assets = models.FloatField()
     capital = models.FloatField()
     assets = models.FloatField()
+    thread_id = models.IntegerField(null=True, blank=True)
 
     def __str__(self):
-        return f'{self.strategy_name} - {self.symbol} - {self.status}'
-
-    def heartbeat(self):
-        self.last_heartbeat = datetime.now(pytz.UTC)
-        self.save()
-
-    def notify(self, message):
-        print(f'Notifying {self.subscriptions.count()} subscribers: {message}')
-
-    def notify_signal(self, signal):
-        return self.notify(str(signal))
-
-    def notify_order(self, order):
-        return self.notify(str(order))
-
-    def notify_complete(self, summary):
-        return self.notify(str(summary))
-
-    def profit(self):
-        orders:List[Order] = []
-        for signal in self.signals.all():
-            try:
-                if signal.order:
-                    orders.append(signal.order)
-            except:
-                pass
-        if not orders:
-            return 0.
-        if orders[-1].signal.side == 'SELL':
-            return orders[-1].deal_funds - orders[0].deal_funds
-        elif len(orders) > 1:
-            return orders[-2].deal_funds - orders[0].deal_funds
-        return 0.
-
-    def equity(self):
-        orders:List[Order] = []
-        for signal in self.signals.all():
-            try:
-                if signal.order:
-                    orders.append(signal.order)
-            except:
-                pass
-        if not orders:
-            return 0.
-        else:
-            price = orders[-1].price or orders[-1].signal.price
-            return orders[-1].deal_funds + orders[-1].deal_size * price
-
-    def orders(self):
-        orders:List[Order] = []
-        for signal in self.signals.all():
-            try:
-                if signal.order:
-                    orders.append(signal.order)
-            except:
-                pass
-        return orders
-
+        return f'{self.strategy} - {self.symbol} - {self.status}'
+    
     @property
-    def cache(self):
-        if hasattr(self, 'live_loop_cache') and self.live_loop_cache is not None:
-            return self.live_loop_cache
-        return None
+    def thread(self):
+        threads = threading.enumerate()
+        for thread in threads:
+            if thread.ident == self.thread_id and thread.is_alive():
+                return thread
 
     def resume(self):
-        """Resume a session that was interrupted by a shutdown or error."""
+        """Resume an interrupted session."""
         if not self.status == Session.Status.ONGOING:
-            raise ValueError('Cannot resume non-ongoing session')
+            raise ValueError(f'Session status should be ONGOING to resume, not {self.status}')
         if not self.pk:
-            raise ValueError('Cannot resume session without id')
+            raise ValueError('Session must be saved before resuming')
         from livetest import LiveLoop
         ll = LiveLoop(
             symbol=self.symbol.name,
-            market=self.symbol.market.get_interface(),
-            strategy=get_strategy(self.strategy_name)(),
+            market=self.symbol.market,
+            strategy=get_strategy(self.strategy.name)(),
             capital_limit=self.capital,
             asset_limit=self.assets,
             freq=self.freq,
             end=self.planned_shutdown,
-            session=self,
-            market_id_for_symbol=self.symbol.market.pk,
-        )
+            session=self)
         ll.run()
-        if not self.cache:
-            cache = LiveLoopCache.objects.create(
-                session=self,
-                status='RESUME',
-                created=datetime.now(pytz.UTC),
-                last_started=datetime.now(pytz.UTC),
-                thread_id=ll.thread.ident if ll.thread else None,
-            )
-        else:
-            cache = self.cache
-            cache.status = 'RESUME'
-            cache.last_started = datetime.now(pytz.UTC)
-            cache.thread_id = (ll.thread.ident if ll.thread else None)
-            cache.save()
         return ll
 
-    @classmethod
-    def is_valid_freq(cls, f):
-        return f in cls.Freq.values
 
-    def has_open_position(self):
-        return self.open_position() is not None
+class Strategy(models.Model):
+    name = models.CharField(max_length=30)
+    description = models.CharField(max_length=256)
+    sessions: models.QuerySet[Session]
 
-    def open_position(self) -> "Order":
-        "Returns the last order if that order is a BUY"
-        orders = self.orders()
-        if not orders:
-            return None
-        if orders[-1].signal.side == 'BUY':
-            return orders[-1]
-        return None
-
+    def __str__(self):
+        return self.name
 
 class Signal(models.Model):
     class Side(models.TextChoices):
@@ -280,23 +194,7 @@ class Signal(models.Model):
     
     @property
     def symbol(self):
-        try:
-            return self.session.symbol
-        except:
-            return None
-    
-    @property
-    def display_price(self):
-        if self.price > 0:
-            return self.price
-        if self.raw and self.raw.startswith('{'):
-            try:
-                price = json.loads(self.raw).get('close')
-                if price:
-                    return price
-            except:
-                pass
-        return 0.
+        return self.session.symbol
 
 
 class Order(models.Model):
@@ -357,7 +255,7 @@ class Subscription(models.Model):
     session = models.ForeignKey(Session, on_delete=models.PROTECT, related_name='subscriptions')
 
     def __str__(self) -> str:
-        return f'SUB {self.user.username} - {self.session.strategy_name} - {self.session.symbol.name}'
+        return f'SUB {self.user.username} - {self.session.strategy} - {self.session.symbol.name}'
 
 
 class Endpoint(models.Model):
@@ -369,21 +267,6 @@ class Endpoint(models.Model):
 
     def __str__(self) -> str:
         return f'{self.endpoint_type} {self.external_id}'
-
-
-class LiveLoopCache(models.Model):
-    class Meta:
-        verbose_name = 'Live Loop Cache'
-        verbose_name_plural = 'Live Loop Cache'
-    session = models.OneToOneField(Session, on_delete=models.PROTECT, related_name='live_loop_cache', null=True, blank=True)
-    created = models.DateTimeField()
-    last_started = models.DateTimeField()
-    last_ended = models.DateTimeField(null=True, blank=True)
-    thread_id = models.IntegerField()
-    status = models.CharField(max_length=30)
-
-    def __str__(self) -> str:
-        return f'LLC {self.session}'
 
 
 class Backtest(models.Model):
@@ -402,3 +285,9 @@ class Backtest(models.Model):
     market = models.CharField(max_length=100)
     status = models.CharField(max_length=100, choices=Status.choices)
 
+
+class WhitelistedUser(models.Model):
+    user = models.OneToOneField(User, on_delete=models.PROTECT, related_name='allowed_user')
+    allowed = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)

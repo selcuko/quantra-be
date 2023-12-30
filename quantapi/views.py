@@ -11,7 +11,7 @@ from backtest import async_analyze
 
 from livetest import LiveLoop
 from markets.errors import InsufficientBalance, MarketDisabledTrading, SymbolNotInMarket
-from quantapi.models import (Backtest, LiveLoopCache, Market, Order, Session, Signal,
+from quantapi.models import (Backtest, Market, Order, Session, Signal,
                              Symbol)
 from strategy import get_strategy
 
@@ -124,14 +124,6 @@ class SessionInitView(View):
                 market_id_for_symbol=market.pk,
             )
             ll.run()
-            cache = LiveLoopCache(
-                session=ll.session,
-                status='INIT',
-                created=datetime.now(pytz.UTC),
-                last_started=datetime.now(pytz.UTC),
-                thread_id=ll.thread.ident if ll.thread else None,
-            )
-            cache.save()
         except Exception as e:
             return render(request, 'session-init.html', {'markets': markets, 'form_error': f'Cannot initiate session: {e!r}'})
         return redirect('session-detail', pk=ll.session.pk)

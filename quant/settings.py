@@ -27,7 +27,7 @@ SYMKEY = b'REDACTED'
 DEBUG = True
 
 ALLOWED_HOSTS = ['*']
-
+WHITELISTED_DEFAULT_EMAILS = ['user@example.com']
 
 # Application definition
 
@@ -55,10 +55,10 @@ MIDDLEWARE = [
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'login_required.middleware.LoginRequiredMiddleware',
-
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'allauth.account.middleware.AccountMiddleware',
+    'quantapi.middleware.WhitelistedUserMiddleware',
 ]
 
 LOGIN_REQUIRED_IGNORE_PATHS = [

@@ -45,7 +45,7 @@ plain_formatter = logging.Formatter("%(threadName)s::%(asctime)s %(levelname)s %
 
 console_handler = logging.StreamHandler()
 console_handler.setFormatter(colored_formatter)
-console_handler.setLevel(logging.WARNING)
+console_handler.setLevel(logging.DEBUG)
 logger.addHandler(console_handler)
 
 file_handler = logging.FileHandler('quant-be.log')
@@ -61,5 +61,3 @@ if LOGTAIL_TOKEN:
     logtail_handler = LogtailHandler(LOGTAIL_TOKEN)
     logtail_handler.setFormatter(colored_formatter)
     logger.addHandler(logtail_handler)
-else:
-    logger.warning('LOGTAIL_TOKEN not set, logging locally.')

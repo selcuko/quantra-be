@@ -12,18 +12,7 @@ def continue_sessions():
 
         for session in Session.objects.filter(status=Session.Status.ONGOING):
             try:
-                if not session.cache:
-                    logger.warning(f'Purging session {session} on startup because it has no cache.')
-                    session.status = Session.Status.PURGED
-                    session.save()
-                    continue
-                hundred_candles_m = interval_to_minutes(session.freq) * 100
-                if session.last_heartbeat and datetime.now(pytz.UTC) - session.last_heartbeat > timedelta(minutes=hundred_candles_m):
-                    logger.critical(f'Purging session {session} on startup because it has not been updated for a hundred candles ({hundred_candles_m} minutes, it\'s been {datetime.now(pytz.UTC) - session.last_heartbeat})')
-                    session.status = Session.Status.PURGED
-                    session.save()
-                    continue
-                session.resume()
+                pass
             except:
                 logger.error(f'Failed to resume session {session} on startup.', exc_info=True)
     except:
