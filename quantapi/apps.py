@@ -37,6 +37,10 @@ class QuantapiConfig(AppConfig):
     verbose_name = 'Quant API'
 
     def ready(self) -> None:
+        # check if this is a migration or not
+        import sys
+        if 'migrate' in sys.argv or 'makemigrations' in sys.argv:
+            return
         threading.Thread(target=continue_sessions, daemon=True).start()
         
 

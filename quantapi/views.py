@@ -123,6 +123,7 @@ class SessionInitView(View):
             )
             ll.run()
         except Exception as e:
+            raise e
             return render(request, 'session-init.html', {'markets': markets, 'form_error': f'Cannot initiate session: {e!r}'})
         return redirect('session-detail', pk=ll.session.pk)
 
@@ -218,5 +219,11 @@ class BacktestResultView(View):
             report = open(f'{backtest.report}').read()
             report = json.loads(report)
         return render(request, 'backtest-result.html', {'backtest': backtest, 'report': report})
+
+
+class WatchdogView(View):
+    def get(self, request):
+        from watchdog import watchdog
+        return render(request, 'watchdog.html', context={'watchdog': watchdog()})
 
 

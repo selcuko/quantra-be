@@ -21,6 +21,11 @@ def watchdog():
         print('Crashed threads: ', crashed_thread_ids)
     for crashed_thread_id in crashed_thread_ids:
         handle_crashed_thread(crashed_thread_id)
+    return {
+        'all': session_thread_ids,
+        'current': current_thread_ids,
+        'crashed': crashed_thread_ids
+    }
 
 
 def watchdog_loop():

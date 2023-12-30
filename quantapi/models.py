@@ -139,7 +139,7 @@ class Session(models.Model):
     initial_assets = models.FloatField()
     capital = models.FloatField()
     assets = models.FloatField()
-    thread_id = models.IntegerField(null=True, blank=True)
+    thread_id = models.BigIntegerField(null=True, blank=True)
 
     def __str__(self):
         return f'{self.strategy} - {self.symbol} - {self.status}'
