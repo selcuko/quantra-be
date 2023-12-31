@@ -78,9 +78,16 @@ def async_analyze(**kwargs):
             market=kwargs['market'],
             status='INIT' )
     def download_and_analyze():
+        try:
+            strategy = get_strategy(kwargs.get('strategy_name', 'v1'))()
+        except Exception as e:
+            logger.error(f'Error while loading strategy {kwargs.get("strategy_name", "v1")}', exc_info=True)
+            backtest.status = Backtest.Status.ERROR
+            backtest.report = repr(e)
+            backtest.save()
+            return
         download_symbol(kwargs['market'], kwargs['symbol'], kwargs['start'], kwargs.get('end'))
         ds = OHLCVDataset.from_csv(f'./data/{kwargs["symbol"]}-{kwargs["market"]}.csv')
-        strategy = get_strategy(kwargs.get('strategy_name', 'v1'))()
         analyze(ds, symbol=kwargs['symbol'], market=kwargs['market'], strategy=strategy, freq=kwargs['freq'], start=kwargs['start'], end=kwargs.get('end'), backtest=backtest)
     analyze_thread = threading.Thread(target=download_and_analyze)
     analyze_thread.start()

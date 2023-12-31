@@ -22,7 +22,7 @@ class StrategyV1(Strategy):
                 'signal': 9
             },
             'stochrsi': {
-                'length': 14,
+                'length': 3,
                 'rsi_length': 14,
                 'k': 3,
                 'd': 3

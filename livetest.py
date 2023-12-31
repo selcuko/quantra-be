@@ -1,3 +1,4 @@
+import json
 import django
 django.setup()
 import threading
@@ -34,13 +35,15 @@ class LiveLoop:
         logger.info(f'Initializing live loop for {symbol} on {market.exchange_name}')
 
         self.symbol = Symbol.objects.get_or_create(name=symbol, market=market)[0]
-        strategy_model = StrategyModel.objects.get_or_create(name=strategy.name)[0]
+        if not (strategy_model := StrategyModel.objects.filter(name=strategy.name).first()):
+            strategy_model = StrategyModel.objects.create(name=strategy.name, parameters=json.dumps(strategy.params))
+        strategy_model.parameters = json.dumps(strategy.params)
+        strategy_model.save()
         self.session = session or Session.objects.create(
             symbol=self.symbol,
             session_type=session_type,
             freq=freq,
             strategy=strategy_model,
-            strategy_parameters=strategy.params,
             planned_shutdown=end,
             status=Session.Status.ONGOING,
             capital=capital_limit,
@@ -275,7 +278,6 @@ def run_livetest(symbol:str, market:IMarket, strategy:Callable, freq='15 min', e
         symbol=_symbol,
         session_type=Session.Type.LIVE_BASIC,
         freq=freq,
-        strategy_parameters=strategy.params,
         planned_shutdown=end,
         status=Session.Status.ONGOING,
     )

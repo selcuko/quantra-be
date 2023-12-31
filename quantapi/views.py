@@ -95,7 +95,7 @@ class SessionInitView(View):
         try:
             market = Market.objects.get(pk=form_data['market'])
             imarket = market.get_interface()
-            symbol_name = form_data['symbol'].upper()
+            symbol_name = form_data['symbol'].upper().replace('-', '').replace('/', '') + '-USDT'
             if not imarket.has_symbol(symbol_name):
                 raise SymbolNotInMarket(f'Symbol {symbol_name} not found in market {market.exchange_name}')
             symbol = Symbol.objects.get_or_create(name=symbol_name, market=market)[0]
@@ -201,13 +201,14 @@ class BacktestInitView(View):
         freq = form_data['freq']
         start = form_data['start']
         end = form_data.get('end', None)
+        strategy_name = form_data.get('strategy_name', 'v1')
         if end:
             end = datetime.strptime(end, '%Y-%m-%d').replace(tzinfo=pytz.UTC)
         else:
             end = None
         start = datetime.strptime(start, '%Y-%m-%d').replace(tzinfo=pytz.UTC)
 
-        backtest = async_analyze(market=exchange, symbol=symbol, freq=freq, start=start, end=end)
+        backtest = async_analyze(market=exchange, symbol=symbol, freq=freq, start=start, end=end, strategy_name=strategy_name)
         return redirect('backtest-result', pk=backtest.pk)
 
 
