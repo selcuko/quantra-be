@@ -119,6 +119,7 @@ class LiveLoop:
             if self.session.last_kline_timestamp and self.last_kline_dt <= self.session.last_kline_timestamp:
                 continue
             self.last_kline = {'time': self.last_kline_dt.timestamp(), **strategy_dataset.iloc[-1].to_dict()}
+            print(str(self.last_kline))
             positive_buy_signal = self.last_kline['buy']
             positive_sell_signal = self.last_kline['sell']
 
@@ -129,6 +130,7 @@ class LiveLoop:
                 self.sell(self.last_kline)
             
             self.session.last_kline_timestamp = self.last_kline_dt
+            self.session.last_price = self.last_kline['close']
             self.session.save()
 
         self.running = False
@@ -370,7 +372,7 @@ if __name__ == '__main__':
         'MX-USDT', 
         market,
         get_strategy('v1')(),
-        capital_limit=10,
+        capital_limit=9,
         asset_limit=0,
         freq='1 min',
         use_heikin_ashi=True)

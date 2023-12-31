@@ -16,17 +16,80 @@ from quantapi.models import (Backtest, Market, Order, Session, Signal,
 from strategy import get_strategy
 
 
+def get_open_position(session):
+    # get last filled order
+    orders = Order.objects.filter(signal__session=session, status=Order.Status.FILLED)
+    if not orders:
+        return None
+    last_order = orders.order_by('-timestamp')[0]
+    if last_order.signal.side == 'BUY':
+        return last_order
+    else:
+        return None
+
+def calculate_session_profit(session, current_price):
+    # get capital delta from initial capital
+    if current_price:
+        current_equity = session.assets * current_price + session.capital
+        initial_equity = session.initial_capital + session.initial_assets * current_price
+        delta_equity = current_equity - initial_equity
+        delta_pct = delta_equity / initial_equity * 100
+        return delta_equity, delta_pct
+    else:
+        return 0, 0
+
+
 class HomeView(View):
     def get(self, request):
-        sessions = Session.objects.order_by('-started')[:12]
-        orders = Order.objects.all().order_by('-timestamp')[:5]
-        signals = Signal.objects.all().order_by('-timestamp')[:5]
-        total_profit = 'Not available'
+        sessions = Session.objects.filter(status=Session.Status.ONGOING).order_by('-started')
+        session_ctx = []
+        total_open_positions = []
+        for session in sessions:
+            recent_orders = Order.objects.filter(signal__session=session)
+            open_position = get_open_position(session)
+            current_price = session.symbol.market.get_interface().get_last_klines(session.symbol.name, session.freq, limit=1)[0][4]
+            if open_position:
+                capital_delta = (session.assets * current_price - session.initial_capital) / session.initial_capital * 100
+                capital_delta_pct = capital_delta / session.initial_capital * 100
+                open_position_delta = (current_price - open_position.price)
+                open_position_delta_pct = open_position_delta / open_position.price * 100
+                total_open_positions.append(open_position_delta_pct)
+            else:
+                capital_delta = (session.capital - session.initial_capital)
+                capital_delta_pct = capital_delta / session.initial_capital * 100
+                open_position_delta = None
+                open_position_delta_pct = None
+            session_ctx.append({
+                'session': session,
+                'total_orders': recent_orders.count(),
+                'open_position': open_position,
+                'current_price': current_price,
+                'capital_delta': capital_delta,
+                'capital_delta_pct': capital_delta_pct,
+                'open_position_delta': open_position_delta,
+                'open_position_delta_pct': open_position_delta_pct,
+            })
+
+        recent_orders = Order.objects.filter(signal__session__in=sessions).order_by('-timestamp')[:8]
+
+        all_sessions = Session.objects.all()
+        total_delta_equity = 0
+        total_delta_pct = 0
+        for session in all_sessions:
+            current_price = session.last_price
+            delta_equity, delta_pct = calculate_session_profit(session, current_price)
+            total_delta_equity += delta_equity
+            total_delta_pct += delta_pct
+
         return render(request, 'index.html', {
-            'sessions': sessions, 
-            'orders': orders, 
-            'signals': signals, 
-            'total_profit': total_profit,})
+            'sessions': session_ctx, 
+            'orders': recent_orders,
+            'open_positions': total_open_positions,
+            'total_delta_equity': total_delta_equity,
+            'total_delta_pct': total_delta_pct,
+            'total_open_positions': total_open_positions,
+            'total_capital': sum([session.capital for session in sessions]),
+        })
 
 
 class SessionDetailView(View):

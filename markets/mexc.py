@@ -187,6 +187,8 @@ class MEXCMarket(IMarket):
         now = datetime.now(tz=pytz.UTC)
         start = now - timedelta(minutes=minutes*limit)
         klines = self.get_klines(symbol, interval, start, now)
+        if not klines:
+            return []
         last_kline_dt = klines[-1][0]
         if (now - last_kline_dt) > timedelta(minutes=minutes):
             error = f'Last kline dt {last_kline_dt} does not match current time {now}, total klines: {len(klines)}, {start} -> {now}'

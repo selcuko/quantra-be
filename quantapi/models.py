@@ -131,6 +131,7 @@ class Session(models.Model):
     status = models.CharField(max_length=30, choices=Status.choices)
     report = models.CharField(max_length=256, null=True, blank=True, help_text='Report file name')
     last_heartbeat = models.DateTimeField(null=True, blank=True)
+    last_price = models.FloatField(null=True, blank=True)
     last_kline_timestamp = models.DateTimeField(null=True, blank=True)
     signals: models.QuerySet['Signal']
     subscriptions: models.QuerySet['Subscription']
