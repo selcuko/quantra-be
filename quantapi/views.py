@@ -95,7 +95,7 @@ class SessionInitView(View):
         try:
             market = Market.objects.get(pk=form_data['market'])
             imarket = market.get_interface()
-            symbol_name = form_data['symbol'].upper().replace('-', '').replace('/', '') + '-USDT'
+            symbol_name = form_data['symbol'].upper().replace('-', '').replace('/', '').replace('USDT', '') + '-USDT'
             if not imarket.has_symbol(symbol_name):
                 raise SymbolNotInMarket(f'Symbol {symbol_name} not found in market {market.exchange_name}')
             symbol = Symbol.objects.get_or_create(name=symbol_name, market=market)[0]

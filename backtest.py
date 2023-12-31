@@ -1,4 +1,5 @@
 from datetime import datetime
+import json
 from typing import Optional
 import threading
 
@@ -8,7 +9,7 @@ from models import OHLCVDataset
 from strategy import get_strategy
 from strategy.interface import Strategy
 from testman import TestManager
-from quantapi.models import Backtest
+from quantapi.models import Backtest, Strategy as StrategyModel
 
 from logger import logger
 
@@ -79,7 +80,13 @@ def async_analyze(**kwargs):
             status='INIT' )
     def download_and_analyze():
         try:
-            strategy = get_strategy(kwargs.get('strategy_name', 'v1'))()
+            strategy_name = kwargs.get('strategy_name', 'v1')
+            strategy = get_strategy(strategy_name)()
+            if not (strategy_model := StrategyModel.objects.filter(name=strategy_name).first()):
+                strategy_model = StrategyModel.objects.create(name=strategy_name, parameters=json.dumps(strategy.params))
+                strategy_model.save()
+            else:
+                strategy.params = json.loads(strategy_model.parameters)
         except Exception as e:
             logger.error(f'Error while loading strategy {kwargs.get("strategy_name", "v1")}', exc_info=True)
             backtest.status = Backtest.Status.ERROR

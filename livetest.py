@@ -84,28 +84,26 @@ class LiveLoop:
         self.session.planned_shutdown = datetime.now(tz=pytz.UTC)
 
     def __run(self):
+        MAX_FAILED_KLINE_REQUESTS = 10
         logger.info(f'Starting live loop for {self.symbol} on {self.imarket.name} with freq {self.freq.replace(" ", "").upper()}')
         last_klines = []
         failed_kline_requests = 0
         while not self.should_stop() and self.wait_next_candle() and not self.should_stop():
-            got_klines = False
             for i in range(3):
-                if got_klines:
-                    break
                 try:
                     last_klines = self.imarket.get_last_klines(self.symbol.name, self.freq)
-                    got_klines = True
                     break
                 except:
-                    logger.warning(f'Failed to fetch last klines, retrying ({i+1}/3)', exc_info=True)
+                    logger.warning(f'Failed to fetch last klines from {self.market.exchange_name}, retrying ({i+1}/3)', exc_info=True)
                     time.sleep(1)
                     failed_kline_requests += 1
                     continue
             if not last_klines:
-                if failed_kline_requests > 9:
-                    logger.error(f'Cannot get last klines, failed {failed_kline_requests} times, exiting')
+                if failed_kline_requests > MAX_FAILED_KLINE_REQUESTS:
+                    logger.error(f'Cannot get last klines, failed {failed_kline_requests} times for {self.market.exchange_name}, exiting')
                     break
-                logger.error(f'Failed to fetch last klines, skipping')
+                next_candle_time = self.last_kline_dt + timedelta(minutes=interval_to_minutes(self.freq))
+                logger.error(f'Failed to fetch last klines from {self.market.exchange_name}, skipping this candle ({next_candle_time})')
                 continue
             failed_kline_requests = 0
             raw_dataset = OHLCVDataset(last_klines)
