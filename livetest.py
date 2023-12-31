@@ -22,7 +22,7 @@ from django.utils import timezone
 class LiveLoop:
     def __init__(self, symbol:str, market:Market, strategy:Strategy, capital_limit:float,
             asset_limit:float, freq:str='15 min', end:Optional[datetime]=None,
-            session_type:Optional[str]=None, session=None) -> None:
+            session_type:Optional[str]=None, session=None, use_heikin_ashi=False) -> None:
         self.will_stop = False
         self.market = market
         self.imarket = market.get_interface()
@@ -34,6 +34,7 @@ class LiveLoop:
         self.thread = None
         self.running = False
         self.last_kline = None
+        self.use_heikin_ashi = use_heikin_ashi
         logger.info(f'Initializing live loop for {symbol} on {market.exchange_name}')
 
         self.symbol = Symbol.objects.get_or_create(name=symbol, market=market)[0]
@@ -52,6 +53,7 @@ class LiveLoop:
             assets=asset_limit,
             initial_capital=capital_limit,
             initial_assets=asset_limit,
+            strategy_parameters=json.dumps(strategy.params)
         )
 
         self.loop_interval_s = interval_to_minutes(freq) * 60
@@ -109,6 +111,8 @@ class LiveLoop:
                 continue
             failed_kline_requests = 0
             raw_dataset = OHLCVDataset(last_klines)
+            if self.use_heikin_ashi:
+                raw_dataset = raw_dataset.convert_to_heikin_ashi()
             strategy_dataset = self.strategy(raw_dataset)
 
             self.last_kline_dt = strategy_dataset.index[-1].to_pydatetime()
@@ -368,16 +372,17 @@ if __name__ == '__main__':
         get_strategy('v1')(),
         capital_limit=10,
         asset_limit=0,
-        freq='1 min')
+        freq='1 min',
+        use_heikin_ashi=True)
     ll.run()
     while True:
         try:
             td = timezone.now() - ll.session.started
             print('Time elapsed:', td)
-            if td > timedelta(seconds=5):
+            """if td > timedelta(seconds=5):
                 last_kline = ll.last_kline
                 ll.buy(last_kline)
-                exit()
+                exit()"""
             time.sleep(1)
         except KeyboardInterrupt:
             ll.stop()

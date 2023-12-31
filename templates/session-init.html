@@ -53,6 +53,34 @@
           <label for="assets">Asset limit</label>
           <input type="number" value="0" placeholder="Asset limit" name="assets" id="" class="mb-6 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" >
         </div>
+        <button type="submit" class="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm w-full sm:w-auto px-5 py-2.5 text-center dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800">Submit</button>
+        <br>
+        <div>
+          <label for="candle_type">Candle type</label>
+          <select name="candle_type" id="candle_type" class="mb-6 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" 
+          >
+            <option value="standard" selected>Standard</option>
+            <option value="heikin_ashi">Heikin Ashi</option>
+          </select>
+        </div>
+        <div>
+          <label for="source">Strategy source</label>
+          <select name="source" id="source" class="mb-6 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" 
+          >
+            <option value="close" selected>close</option>
+            <option value="ohlc4">OHLC4</option>
+            <option value="volume">volume</option>
+            <option value="volume_ma">volume MA</option>
+          </select>
+        </div>
+        <div>
+          <label for="stoch_length">Stoch length</label>
+          <input type="number" value="3" name="stoch_length" id="" class="mb-6 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" >
+        </div>
+        <div>
+          <label for="volume_ma">Volume MA (only used when source=volume MA)</label>
+          <input type="number" value="20" name="volume_ma" id="" class="mb-6 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" >
+        </div>
         <div>
           <label for="shutdown">Shutdown time</label>
           <input type="date" placeholder="Optional shutdown date" name="shutdown" id="" class="mb-6 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" >

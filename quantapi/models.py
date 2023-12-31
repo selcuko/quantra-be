@@ -139,6 +139,8 @@ class Session(models.Model):
     capital = models.FloatField()
     assets = models.FloatField()
     thread_id = models.BigIntegerField(null=True, blank=True)
+    use_heikin_ashi = models.BooleanField(default=False)
+    strategy_parameters = models.TextField(null=True, blank=True, help_text='JSON string of parameters for this strategy, leave blank to use defaults.')
 
     def __str__(self):
         return f'{self.strategy} - {self.symbol} - {self.status}'
@@ -163,7 +165,7 @@ class Session(models.Model):
         ll = LiveLoop(
             symbol=self.symbol.name,
             market=self.symbol.market,
-            strategy=strategy(params=json.loads(self.strategy.parameters or '{}')),
+            strategy=strategy(params=json.loads(self.strategy_parameters or '{}')),
             capital_limit=self.capital,
             asset_limit=self.assets,
             freq=self.freq,
@@ -184,7 +186,6 @@ class Session(models.Model):
 class Strategy(models.Model):
     name = models.CharField(max_length=30, unique=True)
     description = models.CharField(max_length=256, null=True, blank=True)
-    parameters = models.TextField(null=True, blank=True, help_text='JSON string of parameters for this strategy, leave blank to use defaults.')
     sessions: models.QuerySet[Session]
 
     class Meta:

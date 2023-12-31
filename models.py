@@ -1,4 +1,5 @@
 import os
+from typing import Literal
 
 import pandas as pd
 
@@ -71,10 +72,7 @@ class OHLCVDataset(pd.DataFrame):
         return OHLCVDataset(new_ds, pass_thru=True)
 
     @classmethod
-    def from_csv(cls, filename):
-        if not os.path.exists(filename):
-            logger.fatal(f'File {filename} does not exist')
-            raise FileNotFoundError(f'File {filename} does not exist')
+    def from_csv_as_standard_candles(self, filename):
         ds = pd.read_csv(filename)
         ds.columns = ['time', 'open', 'high', 'low', 'close', 'volume']
         ds['time'] = pd.to_datetime(ds['time'], unit='s')
@@ -85,6 +83,49 @@ class OHLCVDataset(pd.DataFrame):
         ds['close'] = ds['close'].astype(float)
         ds['volume'] = ds['volume'].astype(float)
         return OHLCVDataset(ds, pass_thru=True)
+
+    def convert_to_heikin_ashi(self):
+        ds = self.copy()
+        ds['open'] = (ds['open'].shift(1) + ds['close'].shift(1)) / 2
+        ds['open'].iloc[0] = ds['open'].iloc[1]
+        ds['high']   = ds[['open', 'close', 'high']].max(axis=1)
+        ds['low']    = ds[['open', 'close', 'low']].min(axis=1)
+        ds['close']  = (ds['open'] + ds['high'] + ds['low'] + ds['close']) / 4
+        ds['volume'] = ds['volume']
+        return OHLCVDataset(ds, pass_thru=True)
+
+    @classmethod
+    def from_csv_as_heikin_ashi_candles(self, filename):
+        ds = pd.read_csv(filename)
+        ds.columns = ['time', 'open', 'high', 'low', 'close', 'volume']
+        ds['time'] = pd.to_datetime(ds['time'], unit='s')
+        ds.set_index('time', inplace=True)
+        ds['open'] = ds['open'].astype(float)
+        ds['high'] = ds['high'].astype(float)
+        ds['low'] = ds['low'].astype(float)
+        ds['close'] = ds['close'].astype(float)
+        ds['volume'] = ds['volume'].astype(float)
+        ha_ds = pd.DataFrame(index=ds.index, columns=['open', 'high', 'low', 'close', 'volume'])
+
+        ha_ds['open'] = (ds['open'].shift(1) + ds['close'].shift(1)) / 2
+        ha_ds['open'].iloc[0] = ds['open'].iloc[0]  # For the first row
+        ha_ds['high']   = ds[['open', 'close', 'high']].max(axis=1)
+        ha_ds['low']    = ds[['open', 'close', 'low']].min(axis=1)
+        ha_ds['close']  = (ds['open'] + ds['high'] + ds['low'] + ds['close']) / 4
+        ha_ds['volume'] = ds['volume']
+        return OHLCVDataset(ha_ds, pass_thru=True)
+
+    @classmethod
+    def from_csv(cls, filename, candle_type:Literal['standard', 'heikin_ashi'] = 'standard'):
+        if not os.path.exists(filename):
+            logger.fatal(f'File {filename} does not exist')
+            raise FileNotFoundError(f'File {filename} does not exist')
+        if candle_type == 'standard':
+            return cls.from_csv_as_standard_candles(filename)
+        elif candle_type == 'heikin_ashi':
+            return cls.from_csv_as_heikin_ashi_candles(filename)
+        else:
+            raise ValueError(f'Invalid candle_type "{candle_type}", must be either "standard" or "heikin_ashi"')
     
     # modify [] operator to return a OHLCVDataset
     def __getitem__(self, key):

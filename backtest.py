@@ -105,8 +105,8 @@ if __name__ == '__main__':
     from markets import get_market
     symbol = 'XRP-USDT'
     market = get_market('KUCOIN')
-    ds = OHLCVDataset.from_csv(f'./data/{symbol}-{market.name}.csv')
-    strategy = get_strategy('v2')()
+    ds = OHLCVDataset.from_csv(f'./data/{symbol}-{market.name}.csv', candle_type='heikin_ashi')
+    strategy = get_strategy('v1')()
     tm = analyze(
         ds=ds, 
         strategy=strategy, 

@@ -19,7 +19,7 @@ if typing.TYPE_CHECKING:
 
 class KucoinMarket(IMarket):
     name = 'KUCOIN'
-    def __init__(self, config=None) -> None:
+    def __init__(self, config=None, market=None) -> None:
         if not config:
             config = {}
         self.authenticated = bool(config.get('API_KEY') and config.get('API_SECRET') and config.get('API_PASSPHRASE'))
@@ -27,6 +27,7 @@ class KucoinMarket(IMarket):
         self.spot_trading_enabled = False
         self.capital = 0
         self.assets = {}
+        self.market = market
         self.commission = {}
         try:
             if self.authenticated:

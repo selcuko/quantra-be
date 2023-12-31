@@ -45,19 +45,19 @@
         </div>
         <div>
           <label for="capital">Starting capital (in quote currency)</label>
-          <input type="number" placeholder="Capital limit" name="capital" id="" class="mb-6 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" >
+          <input type="number" placeholder="Capital limit" name="capital" value="1000" id="" class="mb-6 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" >
         </div>
         <div>
           <label for="assets">Starting asset qty (in base qurrency)</label>
-          <input type="number" placeholder="Asset limit" name="assets" id="" class="mb-6 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" >
+          <input type="number" placeholder="Asset limit" name="assets" value= "0" id="" class="mb-6 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" >
         </div>
         <div>
-          <label for="shutdown">Start time</label>
-          <input required value="Leave empty to test to date" type="date" placeholder="Optional shutdown date" name="start" id="" class="mb-6 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" >
+          <label for="start">Start time</label>
+          <input required value="Leave empty to test to date" type="date" placeholder="Optional shutdown date" name="start" id="startTimeInput" class="mb-6 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" >
         </div>
         <div>
           <label for="shutdown">End time (optional)</label>
-          <input type="date" placeholder="Optional shutdown date" name="end" id="" class="mb-6 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" >
+          <input type="date" placeholder="Optional shutdown date" name="end" id="shutdownDateInput" class="mb-6 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" >
         </div>
         <div>
           <label for="strategy_name">Strategy</label>
@@ -69,4 +69,25 @@
         <button type="submit" class="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm w-full sm:w-auto px-5 py-2.5 text-center dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800">Submit</button>
       </form>
 </section>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    // Get the current date in the format "YYYY-MM-DD"
+    //const last_week = (new Date() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const today = new Date().toISOString().split('T')[0];
+
+    // Set the default value for the date input
+    //document.getElementById('startTimeInput').defaultValue = last_week;
+    document.getElementById('shutdownDateInput').defaultValue = today;
+  });
+</script>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    // Get the current date in the format "YYYY-MM-DD"
+    const now = new Date();
+    const last_week = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7).toISOString().split('T')[0];
+
+    // Set the default value for the date input
+    document.getElementById('startTimeInput').defaultValue = last_week;
+  });
+</script>
 {% endblock %}

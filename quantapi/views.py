@@ -12,7 +12,7 @@ from backtest import async_analyze
 from livetest import LiveLoop
 from markets.errors import InsufficientBalance, MarketDisabledTrading, SymbolNotInMarket
 from quantapi.models import (Backtest, Market, Order, Session, Signal,
-                             Symbol)
+                             Symbol, Strategy as StrategyModel)
 from strategy import get_strategy
 
 
@@ -30,6 +30,18 @@ class HomeView(View):
 
 
 class SessionDetailView(View):
+    def get_open_position(self, session):
+        # get last filled order
+        orders = Order.objects.filter(signal__session=session, status=Order.Status.FILLED)
+        if not orders:
+            return None
+        last_order = orders.order_by('-timestamp')[0]
+        print('LAST ORDER', last_order)
+        if last_order.signal.side == 'BUY':
+            return last_order
+        else:
+            return None
+
     def get(self, request, pk):
         session = Session.objects.get(pk=pk)
         signals = Signal.objects.filter(session=session)
@@ -37,7 +49,26 @@ class SessionDetailView(View):
         error = request.session.pop('error', None)
         market = session.symbol.market
         message = request.session.pop('message', None)
-        return render(request, 'session-detail.html', {'session': session, 'error': error, 'orders': orders, 'signals': signals, 'market': market, 'message': message   })
+        open_position = self.get_open_position(session)
+        current_price = market.get_interface().get_last_klines(session.symbol.name, session.freq, limit=1)[0][4]
+        open_position_delta = None
+        if open_position:
+            capital_delta = (session.assets * current_price - session.initial_capital) / session.initial_capital * 100
+            open_position_delta = (current_price - open_position.price) / current_price * 100
+        else:
+            capital_delta = (session.capital - session.initial_capital) / session.initial_capital * 100
+        return render(request, 'session-detail.html', {
+            'session': session, 
+            'error': error, 
+            'orders': orders, 
+            'signals': signals, 
+            'market': market, 
+            'message': message, 
+            'open_position': open_position, 
+            'current_price': current_price, 
+            'capital_delta': capital_delta,
+            'open_position_delta': open_position_delta
+            })
 
 
 class SessionListView(View):
@@ -114,12 +145,17 @@ class SessionInitView(View):
             ll = LiveLoop(
                 symbol=symbol.name,
                 market=market,
-                strategy=get_strategy('v1')(),
+                strategy=get_strategy('v1')({
+                    'source': form_data.get('source', 'close'),
+                    'stochrsi': {'length': int(form_data.get('stoch_length', 3))},
+                    'volume': {'ma': int(form_data.get('volume_ma', 20))},
+                }),
                 capital_limit=capital_limit,
                 asset_limit=asset_limit,
                 freq=form_data['freq'],
                 end=planned_shutdown,
                 session_type=session_type,
+                use_heikin_ashi=form_data.get('candle_type', 'standard') == 'heikin_ashi',
             )
             ll.run()
         except Exception as e:

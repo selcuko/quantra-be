@@ -5,9 +5,20 @@ from models import OHLCVDataset
 from strategy.interface import Strategy
 
 
+def merge_dicts(d1, d2):
+    # deep merge two dicts into a new one
+    d = d1.copy()
+    for k, v in d2.items():
+        if k in d and isinstance(d[k], dict):
+            d[k] = merge_dicts(d[k], v)
+        else:
+            d[k] = v
+    return d
+
+
 class StrategyV1(Strategy):
     def __init__(self, params={}):
-        self.params = {**self.default_params(), **params}
+        self.params = merge_dicts(self.default_params(), params)
         self.name = 'StrategyV1.Lisa.PandasTA'
         self.ds = OHLCVDataset(pd.DataFrame())
     
@@ -30,8 +41,23 @@ class StrategyV1(Strategy):
             't3': {
                 'length': 7,
                 'a': 0.7
-            }
+            },
+            'volume': {
+                'ma': 20
+            },
+            'source': 'close',
         }
+
+    def get_source(self, src = 'close'):
+        if src == 'volume_ma':
+            self.ds['volume_ma'] = self.ds['volume'].rolling(window=self.params['volume']['ma']).mean()
+        elif src == 'ohlc4':
+            self.ds['ohlc4'] = (self.ds['high'] + self.ds['low'] + self.ds['open'] + self.ds['close']) / 4
+        elif src == 'hlc3':
+            self.ds['hlc3'] = (self.ds['high'] + self.ds['low'] + self.ds['close']) / 3
+        elif src == 'hl2':
+            self.ds['hl2'] = (self.ds['high'] + self.ds['low']) / 2
+        return src
 
     def calculate(self, ds:OHLCVDataset):
         self.ds = ds
@@ -44,12 +70,14 @@ class StrategyV1(Strategy):
         if self.ds.empty or not self.ds.ta:
             return
         self.ds.ta.macd(
+            close=self.get_source(self.params['source']),
             fast=self.params['macd']['fast'], 
             slow=self.params['macd']['slow'], 
             signal=self.params['macd']['signal'],
             col_names=('macd', 'macd_diff', 'macd_signal'),
             append=True)
         self.ds.ta.stochrsi(
+            close=self.get_source(self.params['source']),
             length=self.params['stochrsi']['length'],
             rsi_length=self.params['stochrsi']['rsi_length'],
             k=self.params['stochrsi']['k'],
@@ -57,6 +85,7 @@ class StrategyV1(Strategy):
             col_names=('stochrsi_k', 'stochrsi_d'),
             append=True)
         self.ds.ta.t3(
+            close=self.get_source(self.params['source']),
             length=self.params['t3']['length'],
             a=self.params['t3']['a'],
             col_names=('t3',),
