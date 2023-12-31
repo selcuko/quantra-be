@@ -27,6 +27,7 @@ class MEXCMarket(IMarket):
             self.authenticated = True
         self.market = market
         self.api_secret = config['API_SECRET']
+        self.access_key = config['ACCESS_KEY']
         self.url = 'https://api.mexc.com'
         self.symbols = {}
         self.get_symbols()
@@ -37,7 +38,6 @@ class MEXCMarket(IMarket):
         if self.authenticated:
             self.session.headers.update({
                 'X-MEXC-APIKEY': config['ACCESS_KEY'],
-                'Contnet-Type': 'application/json',
             })
     
     def has_symbol(self, symbol: str) -> bool:
@@ -167,11 +167,30 @@ class MEXCMarket(IMarket):
             raise ValueError(f'Symbol {name} is not available on {self.name}')
         return self.symbols[name]
 
-    def sign(self, timestamp:str, **kwargs):
-        query_string = '&'.join([f'{key}={value}' for key, value in sorted(kwargs.items())])
-        query_string = self.api_key + timestamp + query_string
+    def sign(self,query_string: str, api_secret: str = 'REDACTED') -> str:
+        """
+        Generates a signature for an API request using HMAC SHA256 encryption.
+
+        Args:
+            **kwargs: Arbitrary keyword arguments representing request parameters.
+
+        Returns:
+            A hexadecimal string representing the signature of the request.
+
+        """
+
+        # Generate signature
         signature = hmac.new(self.api_secret.encode('utf-8'), query_string.encode('utf-8'), hashlib.sha256).hexdigest()
         return signature
+    
+    def _prep_payload(self, params: dict) -> dict:
+        params['params'] = {k: v for k, v in params['params'].items() if v is not None}
+        kwargs = {k: v for k, v in sorted(params.items())}
+        payload = urlencode(kwargs.pop('params'), doseq=True).replace('+', '%20')
+
+        payload += "&signature=" + self.sign(payload, self.api_secret)
+        print('payload', payload)
+        return payload
 
     @authentication_required
     def place_market_order(self, symbol: Symbol | str, side: Literal['buy', 'sell'], funds: float | None = None, quantity: float | None = None, validate=True) -> Order:
@@ -185,29 +204,26 @@ class MEXCMarket(IMarket):
         if quantity and symbol.base_precision:
             quantity = float_to_precision(quantity, symbol.base_precision)
         try:
-            _order_payload = {
-                'symbol': symbol.name,
-                'type': 'market',
-                'side': side,
-                'timestamp': int(time.time()*1000),
-                'origClientOrderId': client_oid,
-            }
+            _order_payload = self._prep_payload(params={'params':{ 
+                                                    'symbol': 'ANALOSUSDT',
+                                                    'side': 'BUY',
+                                                    'type': 'MARKET',
+                                                    'quantity':None,
+                                                    'quoteOrderQty':6,
+                                                    'price':0.1,
+                                                    'newClientOrderId':None,
+                                                    'timestamp': str(int(time.time()*1000)),
+                                                }})
             print('order payload', _order_payload)
-            if funds:
-                _order_payload['funds'] = funds
-            if quantity:
-                _order_payload['quantity'] = quantity
+            
             endpoint = '/api/v3/order/test'
             uri = f'{self.url}{endpoint}'
-            query_string = urlencode(_order_payload)
-            signature_payload = f'{endpoint}?{query_string}'
-            signature = hmac.new(self.api_secret.encode('utf-8'), signature_payload.encode('utf-8'), hashlib.sha256).hexdigest()
-            query_string += f'&signature={signature}'
-            uri += f'?{query_string}'
-            logger.debug(f'Placing order on {self.name} ({uri})')
-            response = self.session.post(uri, headers={
-                'Signature': hmac.new(self.api_secret.encode('utf-8'), '', hashlib.sha256).hexdigest(),
-            })
+            
+            #query_string = urlencode(_order_payload)
+            query_string = _order_payload
+            uri_debug = uri + f'?{query_string}'
+            logger.debug(f'Placing order on {self.name} ({uri_debug})')
+            response = self.session.request('POST', uri, params=query_string )
             order_data = response.json()
         except:
             logger.error(f'Error while placing order on {self.name}', exc_info=True)
@@ -215,3 +231,6 @@ class MEXCMarket(IMarket):
         print(order_data)
 
 
+
+    
+    

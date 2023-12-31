@@ -27,7 +27,7 @@ SYMKEY = b'REDACTED'
 DEBUG = True
 
 ALLOWED_HOSTS = ['*']
-WHITELISTED_DEFAULT_EMAILS = ['user@example.com']
+WHITELISTED_DEFAULT_EMAILS = ['user@example.com', 'user2@example.com']
 
 # Application definition
 

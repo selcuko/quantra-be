@@ -19,4 +19,4 @@ class WhitelistedUserMiddleware:
         elif WhitelistedUser.objects.filter(user=request.user).exists():
             return self.get_response(request)
         else:
-            return HttpResponseForbidden('You are not authorized to view this page. <a href="/accounts/logout">Logout?</a>')
+            return self.get_response(request)
