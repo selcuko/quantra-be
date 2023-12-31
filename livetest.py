@@ -16,6 +16,7 @@ from quantapi.models import (Market, Order, Session, Signal,
                              Symbol, Strategy as StrategyModel)
 from strategy import Strategy, get_strategy
 from testman import TestManager
+from django.utils import timezone
 
 
 class LiveLoop:
@@ -32,6 +33,7 @@ class LiveLoop:
         self.asset_limit = asset_limit
         self.thread = None
         self.running = False
+        self.last_kline = None
         logger.info(f'Initializing live loop for {symbol} on {market.exchange_name}')
 
         self.symbol = Symbol.objects.get_or_create(name=symbol, market=market)[0]
@@ -41,7 +43,7 @@ class LiveLoop:
         strategy_model.save()
         self.session = session or Session.objects.create(
             symbol=self.symbol,
-            session_type=session_type,
+            session_type=session_type or Session.Type.LIVE_MAINNET,
             freq=freq,
             strategy=strategy_model,
             planned_shutdown=end,
@@ -112,15 +114,15 @@ class LiveLoop:
             self.last_kline_dt = strategy_dataset.index[-1].to_pydatetime()
             if self.session.last_kline_timestamp and self.last_kline_dt <= self.session.last_kline_timestamp:
                 continue
-            last_kline = {'time': self.last_kline_dt.timestamp(), **strategy_dataset.iloc[-1].to_dict()}
-            positive_buy_signal = last_kline['buy']
-            positive_sell_signal = last_kline['sell']
+            self.last_kline = {'time': self.last_kline_dt.timestamp(), **strategy_dataset.iloc[-1].to_dict()}
+            positive_buy_signal = self.last_kline['buy']
+            positive_sell_signal = self.last_kline['sell']
 
             if positive_buy_signal:
-                self.__buy(last_kline)
+                self.buy(self.last_kline)
             
             elif positive_sell_signal:
-                self.__sell(last_kline)
+                self.sell(self.last_kline)
             
             self.session.last_kline_timestamp = self.last_kline_dt
             self.session.save()
@@ -136,7 +138,7 @@ class LiveLoop:
     def can_sell(self):
         return self.session.assets > 0
 
-    def __buy(self, last_kline:dict):
+    def buy(self, last_kline:dict):
         with self.order_lock:
             last_order = None
             signal = Signal.objects.create(
@@ -162,7 +164,7 @@ class LiveLoop:
                     self.session.assets = self.imarket.assets[self.symbol.base]
                     self.session.save()
                     logger.warning(f'Insufficient balance, assets updated to {self.session.assets} and capital updated to {self.session.capital}')
-                    return self.__buy(last_kline)
+                    return self.buy(last_kline)
                 except RejectedOrder as ro:
                     last_order = Order.objects.create(
                         funds=self.session.capital,
@@ -182,7 +184,7 @@ class LiveLoop:
                 return False
             return last_order
 
-    def __sell(self, last_kline:dict):
+    def sell(self, last_kline:dict):
         with self.order_lock:
             if not last_kline:
                 last_kline = {}
@@ -211,7 +213,7 @@ class LiveLoop:
                     self.session.assets = self.imarket.assets[self.symbol.base]
                     self.session.save()
                     logger.warning(f'Insufficient balance, assets updated to {self.session.assets} and capital updated to {self.session.capital}')
-                    return self.__sell(last_kline)
+                    return self.sell(last_kline)
                 except RejectedOrder as ro:
                     last_order = Order.objects.create(
                         funds=self.session.capital,
@@ -359,22 +361,24 @@ def run_livetest(symbol:str, market:IMarket, strategy:Callable, freq='15 min', e
 if __name__ == '__main__':
     
 
-    """market = Market.objects.get(testnet_enabled=True, exchange_name='BINANCE')
+    market = Market.objects.get(exchange_name='MEXC')
     ll = LiveLoop(
-        'BTC-USDT', 
+        'MX-USDT', 
         market,
         get_strategy('v1')(),
-        capital_limit=100,
-        asset_limit=0.1,
+        capital_limit=10,
+        asset_limit=0,
         freq='1 min')
     ll.run()
-    #ll.idle() """
-    """    s = Session.objects.get(pk=37)
-    s.resume()
     while True:
         try:
+            td = timezone.now() - ll.session.started
+            print('Time elapsed:', td)
+            if td > timedelta(seconds=5):
+                last_kline = ll.last_kline
+                ll.buy(last_kline)
+                exit()
             time.sleep(1)
         except KeyboardInterrupt:
-            #ll.stop()
-            break"""
-    pass
+            ll.stop()
+            break

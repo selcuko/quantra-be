@@ -14,6 +14,7 @@ import requests
 
 from logger import logger
 from markets import IMarket
+from markets.errors import InsufficientBalance, RejectedOrder
 from markets.helper import authentication_required, float_to_precision
 from models import interval_to_minutes
 from quantapi.models import Market, Order, Symbol
@@ -23,30 +24,33 @@ class MEXCMarket(IMarket):
     name = 'MEXC'
     def __init__(self, config=None, market=None) -> None:
         self.authenticated = False
+        self.session = requests.Session()
         if config:
             self.authenticated = True
-        self.market = market
-        self.api_secret = config['API_SECRET']
-        self.access_key = config['ACCESS_KEY']
-        self.url = 'https://api.mexc.com'
-        self.symbols = {}
-        self.get_symbols()
-        self.capital = 0
-        self.assets = {}
-        self.commission = {}
-        self.session = requests.Session()
-        if self.authenticated:
+            self.api_secret = config['API_SECRET']
+            self.access_key = config['ACCESS_KEY']
+            self.url = 'https://api.mexc.com'
             self.session.headers.update({
                 'X-MEXC-APIKEY': config['ACCESS_KEY'],
             })
-    
+
+        self.market = market
+
+        self.symbols = {}
+        self.capital = 0
+        self.assets = {}
+        self.commission = {}
+
+        self.get_symbols()
+        self.get_account()
+
     def has_symbol(self, symbol: str) -> bool:
         if not self.symbols:
             self.get_symbols()
         return symbol in self.symbols
 
     def _standardize_klines(self, klines):
-        klines = [[ datetime.fromtimestamp(int(kline[0]) // 1000, tz=pytz.UTC).replace(second=0, microsecond=0),
+        klines = [[ self._standardize_datetime(kline[0]),
                   float(kline[1]),
                   float(kline[2]),
                   float(kline[3]),
@@ -59,7 +63,7 @@ class MEXCMarket(IMarket):
         return symbol.replace('USDT', '-USDT')
     
     def _format_symbol(self, symbol):
-        assert '-' in symbol, f'Symbol must be in the format BASE-QUOTE, you provided:{symbol}'
+        assert '-' in symbol, f'Symbol must be in the format BASE-QUOTE, you provided: {symbol}'
         return symbol.replace('-', '').upper()
     
     def _format_interval(self, interval):
@@ -82,11 +86,42 @@ class MEXCMarket(IMarket):
         }[interval]
     
     def _format_datetime(self, dt):
-        return int(dt.timestamp()*1000)
-    
+        return str(int(dt.timestamp()*1000))
+
+    def _standardize_datetime(self, dt):
+        return datetime.fromtimestamp(int(dt) // 1000, tz=pytz.UTC).replace(second=0, microsecond=0)
+
+    def sign(self, query_string) -> str:
+        signature = hmac.new(self.api_secret.encode('utf-8'), query_string.encode('utf-8'), hashlib.sha256).hexdigest()
+        return query_string + '&signature=' + signature
+
+    def _prep_payload(self, payload={}) -> str:
+        payload = { k:v for k,v in payload.items() if v is not None }
+        payload['timestamp'] = self._format_datetime(datetime.now(tz=pytz.UTC))
+        payload = urlencode(payload, doseq=True).replace('+', '%20')
+        payload = self.sign(payload)
+        return payload
+
     def get_klines(self, symbol, interval, start=None, end=None, limit=1000):
         return self._get_klines(symbol, interval, start, end, limit)
-    
+
+    def get_account(self):
+        uri = f'{self.url}/api/v3/account'
+        try:
+            request_query = self._prep_payload()
+            response = self.session.get(uri, params=request_query)
+            account_payload = response.json()
+            self.spot_trading_enabled = 'SPOT' in account_payload.get('permissions', [])
+            self.margin_trading_enabled = 'MARGIN' in account_payload.get('permissions', [])
+            
+            for asset in account_payload['balances']:
+                self.assets[asset['asset']] = float(asset['free'])
+            self.capital = self.assets.get('USDT', 0)
+
+        except:
+            logger.error(f'Error while fetching account data for {self.name}', exc_info=True)
+            raise
+
     def _get_klines(self, symbol, interval, start=None, end=None, limit=1000, retry=3):
         if not end and not start:
             raise ValueError('Either start or end must be provided')
@@ -146,10 +181,7 @@ class MEXCMarket(IMarket):
         symbol_list = { self._standardize_symbol(symbol['symbol']): self._prep_symbol(symbol) for symbol in symbols if symbol['quoteAsset'] == 'USDT' }
         self.symbols = symbol_list
         return symbol_list
-    
-    def can_trade_on_symbol(self, symbol):
-        return symbol in self.get_symbols()
-    
+
     def get_last_klines(self, symbol, interval, limit=100):
         minutes = interval_to_minutes(interval)
         now = datetime.now(tz=pytz.UTC)
@@ -167,30 +199,20 @@ class MEXCMarket(IMarket):
             raise ValueError(f'Symbol {name} is not available on {self.name}')
         return self.symbols[name]
 
-    def sign(self,query_string: str, api_secret: str = 'REDACTED') -> str:
-        """
-        Generates a signature for an API request using HMAC SHA256 encryption.
-
-        Args:
-            **kwargs: Arbitrary keyword arguments representing request parameters.
-
-        Returns:
-            A hexadecimal string representing the signature of the request.
-
-        """
-
-        # Generate signature
-        signature = hmac.new(self.api_secret.encode('utf-8'), query_string.encode('utf-8'), hashlib.sha256).hexdigest()
-        return signature
-    
-    def _prep_payload(self, params: dict) -> dict:
-        params['params'] = {k: v for k, v in params['params'].items() if v is not None}
-        kwargs = {k: v for k, v in sorted(params.items())}
-        payload = urlencode(kwargs.pop('params'), doseq=True).replace('+', '%20')
-
-        payload += "&signature=" + self.sign(payload, self.api_secret)
-        print('payload', payload)
-        return payload
+    def _prep_order(self, order, symbol):
+        print('order response', order)
+        order_time = order.get('time') or order.get('transactTime') or order.get('timestamp') or 0
+        return Order(
+            oid = order.get('orderId'),
+            client_oid = order.get('clientOrderId'),
+            order_type = order.get('type', 'MARKET'),
+            price = order.get('price'),
+            timestamp = self._standardize_datetime(order_time),
+            deal_funds = float(order.get('origQuoteOrderQty', 0)),
+            deal_size = float(order.get('executedQty', 0)),
+            funds = float(order.get('origQuoteOrderQty', 0)),
+            status = order.get('status'),
+        )
 
     @authentication_required
     def place_market_order(self, symbol: Symbol | str, side: Literal['buy', 'sell'], funds: float | None = None, quantity: float | None = None, validate=True) -> Order:
@@ -204,33 +226,54 @@ class MEXCMarket(IMarket):
         if quantity and symbol.base_precision:
             quantity = float_to_precision(quantity, symbol.base_precision)
         try:
-            _order_payload = self._prep_payload(params={'params':{ 
-                                                    'symbol': 'ANALOSUSDT',
-                                                    'side': 'BUY',
-                                                    'type': 'MARKET',
-                                                    'quantity':None,
-                                                    'quoteOrderQty':6,
-                                                    'price':0.1,
-                                                    'newClientOrderId':None,
-                                                    'timestamp': str(int(time.time()*1000)),
-                                                }})
-            print('order payload', _order_payload)
-            
-            endpoint = '/api/v3/order/test'
-            uri = f'{self.url}{endpoint}'
-            
-            #query_string = urlencode(_order_payload)
-            query_string = _order_payload
-            uri_debug = uri + f'?{query_string}'
-            logger.debug(f'Placing order on {self.name} ({uri_debug})')
-            response = self.session.request('POST', uri, params=query_string )
+            uri = f'{self.url}/api/v3/order'
+            order_query = self._prep_payload({ 
+                                    'symbol': symbol.name,
+                                    'side': side.upper(),
+                                    'type': 'MARKET',
+                                    'quantity':quantity,
+                                    'quoteOrderQty':funds,
+                                    'newClientOrderId':client_oid,
+                                    'timestamp': str(int(time.time()*1000))
+                                })
+
+            response = self.session.request('POST', uri, params=order_query )
             order_data = response.json()
+            order = self._prep_order(order_data, symbol)
+            if not order.oid:
+                if order_data.get('msg') == 'Oversold' and side == 'sell':
+                    raise InsufficientBalance(f'Not enough balance to place order on {self.name} (we have {self.assets.get(symbol.base, 0)} {symbol.base} but tried to sell {quantity} {symbol.base}): {order_data}')
+                elif order_data.get('msg') == 'Insufficient position' and side == 'buy':
+                    raise InsufficientBalance(f'Not enough balance to place order on {self.name} (we have {self.assets.get(symbol.quote, 0)} {symbol.quote} but tried to buy with {funds} {symbol.quote}): {order_data}')
+                raise RejectedOrder(f'Error while placing order on {self.name}: {order_data}\nOrder query: {order_query}')
+            if validate:
+                print('validating order', order.oid)
+                order = self.get_order(symbol, order.oid)
+            return order
         except:
             logger.error(f'Error while placing order on {self.name}', exc_info=True)
             raise
-        print(order_data)
 
-
-
-    
-    
+    @authentication_required
+    def get_order(self, symbol:Symbol|str, order:Order|str):
+        if isinstance(symbol, str):
+            symbol = self._get_symbol_from_name(symbol)
+        if isinstance(order, Order):
+            order = order.oid
+        try:
+            order_query = self._prep_payload({ 
+                                                    'symbol': symbol.name,
+                                                    'orderId': order,
+                                                    'timestamp': str(int(time.time()*1000)),
+                                                })
+            
+            uri = f'{self.url}/api/v3/order'
+            response = self.session.request('GET', uri, params=order_query )
+            order_data = response.json()
+            if order_data.get('msg') == 'Order does not exist':
+                return None
+            order = self._prep_order(order_data, symbol)
+            return order
+        except:
+            logger.error(f'Error while getting order on {self.name}', exc_info=True)
+            raise

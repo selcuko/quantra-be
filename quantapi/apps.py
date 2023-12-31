@@ -23,6 +23,8 @@ def continue_sessions():
                 else:
                     session.resume()
             except:
+                session.status = Session.Status.ERROR
+                session.save()
                 logger.error(f'Failed to resume session {session} on startup.', exc_info=True)
     except:
         logger.error('Failed to continue sessions on startup.', exc_info=True)

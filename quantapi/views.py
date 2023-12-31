@@ -157,6 +157,8 @@ class SessionTerminateView(View):
                 'text': 'Session is not ongoing.'
             }})
         session.status = Session.Status.COMPLETED
+        session.ended = datetime.now(pytz.UTC)
+        session.planned_shutdown = datetime.now(pytz.UTC)
         session.save()
         return redirect('session-detail', pk=session.pk)
 

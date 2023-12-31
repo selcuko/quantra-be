@@ -236,7 +236,10 @@ class Order(models.Model):
     market_response = models.TextField(null=True, blank=True)
 
     def __str__(self) -> str:
-        return f'{self.status} {self.signal.side} {self.signal.session.symbol.name} {self.signal.price}'
+        try:
+            return f'{self.status} {self.signal.side} {self.signal.session.symbol.name} {self.signal.price}'
+        except:
+            return f'{self.status} {self.oid}'
 
     def refresh_from_market(self, market_interface):
         if not self.oid:
