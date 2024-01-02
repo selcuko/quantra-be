@@ -7,12 +7,8 @@ from quantapi.models import Market
 
 
 if __name__ == '__main__':
-    market = Market.objects.get(exchange_name='MEXC')
+    market = Market.objects.get(exchange_name='KUCOIN', mainnet_enabled=True)
+    print(market.config)
     interface = market.get_interface()
-    lk = interface.get_last_klines('APE-USDT', '15 min')
-    ds = OHLCVDataset(lk)
-    print(ds.tail(20))
-    strategy = get_strategy('StrategyV1.Lisa.PandasTA')()
-    stg_ds = strategy(ds)
-    last = stg_ds.iloc[-1].to_dict()
-    pprint(last)
+    print(interface.assets, interface.capital)
+    #interface.place_market_order('BNBUSDT', 'buy', quantity=0.01)    

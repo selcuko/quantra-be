@@ -37,7 +37,7 @@ class LiveLoop:
         self.use_heikin_ashi = use_heikin_ashi
         logger.info(f'Initializing live loop for {symbol} on {market.exchange_name}')
 
-        self.symbol = Symbol.objects.get_or_create(name=symbol, market=market)[0]
+        self.symbol = Symbol.objects.get(name=symbol, market=market)
         if not (strategy_model := StrategyModel.objects.filter(name=strategy.name).first()):
             strategy_model = StrategyModel.objects.create(name=strategy.name, parameters=json.dumps(strategy.params))
         strategy_model.parameters = json.dumps(strategy.params)
@@ -179,7 +179,7 @@ class LiveLoop:
                         price=last_kline['close'],
                         signal=signal,
                         status=Order.Status.REJECTED,
-                        market_response=repr(ro),
+                        details=repr(ro),
                         timestamp=self.last_kline_dt
                     )
                 except:
@@ -228,7 +228,7 @@ class LiveLoop:
                         price=last_kline['close'],
                         signal=signal,
                         status=Order.Status.REJECTED,
-                        market_response=repr(ro),
+                        details=repr(ro),
                         timestamp=self.last_kline_dt
                     )
                 except:
@@ -245,7 +245,7 @@ class LiveLoop:
         self.session.refresh_from_db()
         if self.session.planned_shutdown:
             before_end = datetime.now(tz=pytz.UTC) < self.session.planned_shutdown
-        return self.will_stop or not before_end
+        return self.will_stop or not before_end and self.session.status == Session.Status.ONGOING
 
     def wait_next_candle(self):
         """Waits until the next candle should be available"""
@@ -367,12 +367,12 @@ def run_livetest(symbol:str, market:IMarket, strategy:Callable, freq='15 min', e
 if __name__ == '__main__':
     
 
-    market = Market.objects.get(exchange_name='MEXC')
+    market = Market.objects.get(exchange_name='BINANCE')
     ll = LiveLoop(
-        'MX-USDT', 
+        'BNB-USDT', 
         market,
         get_strategy('v1')(),
-        capital_limit=9,
+        capital_limit=10,
         asset_limit=0,
         freq='1 min',
         use_heikin_ashi=True)

@@ -1,3 +1,4 @@
+import json
 import time
 import typing
 import uuid
@@ -30,7 +31,7 @@ class BinanceMarket(IMarket):
         self.capital = 0
         self.assets = {}
         self.commission = {}
-        self.market = market or Market.objects.filter(exchange_name=self.name).first()
+        self.market = market
 
         try:
             if self.authenticated:
@@ -68,8 +69,8 @@ class BinanceMarket(IMarket):
                   float(kline[5]),
                 ] for kline in klines ]
 
-    def _standardize_symbol(self, symbol:dict) -> str:
-        return f'{symbol["baseAsset"]}-{symbol["quoteAsset"]}'
+    def _standardize_symbol(self, symbol:str) -> str:
+        return symbol.replace('-', '').replace('USDT', '-USDT').upper()
 
     def _standardize_datetime(self, dtstr:str) -> datetime:
         return datetime.fromtimestamp(int(dtstr) // 1000, tz=pytz.UTC).replace(second=0, microsecond=0)
@@ -119,13 +120,14 @@ class BinanceMarket(IMarket):
         from quantapi.models import Symbol
         exc_symbol = Symbol(
                 market = self.market,
-                name = symbol['symbol'],
+                name = self._standardize_symbol(symbol['symbol']),
                 base = symbol['baseAsset'],
                 quote = symbol['quoteAsset'],
                 base_precision = symbol['baseAssetPrecision'],
                 quote_precision = symbol['quotePrecision'],
                 spot_trading_enabled = symbol['isSpotTradingAllowed'],
-                margin_trading_enabled = symbol['isMarginTradingAllowed'])
+                margin_trading_enabled = symbol['isMarginTradingAllowed'],
+                details=json.dumps(symbol))
         return exc_symbol
 
     def _prep_order(self, order:dict, symbol:'Symbol') -> 'Order':
@@ -141,6 +143,7 @@ class BinanceMarket(IMarket):
             deal_size=float(order.get('origQty', 0)),
             status=order['status'].upper(),
             funds=float(order.get('origQuoteOrderQty', 0)),
+            details=json.dumps(order),
         )
 
     def _get_klines(self, symbol:str, interval:str, start:datetime, end:Optional[datetime]=None, limit=1000, retry=0) -> list[list]:
@@ -191,7 +194,11 @@ class BinanceMarket(IMarket):
         return klines
 
     def get_symbols(self) -> dict[str, 'Symbol']:
-        return { self._standardize_symbol(symbol): self._prep_symbol(symbol) for symbol in self.client.get_exchange_info()['symbols']}
+        from quantapi.models import Symbol
+        self.symbols = { self._standardize_symbol(symbol['symbol']): self._prep_symbol(symbol) for symbol in self.client.get_exchange_info()['symbols']}
+        self.symbols = { key: value for key, value in self.symbols.items() if value.quote == 'USDT'}
+        Symbol.objects.bulk_create(self.symbols.values(), ignore_conflicts=True)
+        return self.symbols
 
     @authentication_required
     def place_market_order(self, symbol:'Symbol|str', side:Literal['buy', 'sell'], funds:Optional[float]=None, quantity:Optional[float]=None, validate=True) -> 'Order':
@@ -221,7 +228,14 @@ class BinanceMarket(IMarket):
         if not order.oid:
             raise ValueError(f'Error while placing market order on {self.name}')
         if validate:
-            order = self.get_order(symbol, order.oid)
+            MAX_TRY = 10
+            tries = 0
+            while order.status not in ['FILLED', 'CANCELED', 'EXPIRED', 'REJECTED'] and tries < MAX_TRY:
+                time.sleep(1)
+                tries += 1
+                order = self.get_order(symbol, order)
+            if order.status not in ['FILLED', 'CANCELED', 'EXPIRED', 'REJECTED']:
+                raise Exception(f'Order {order.oid} on {self.name} is still {order.status} after {MAX_TRY} tries')
         return order
 
     @authentication_required

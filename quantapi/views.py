@@ -192,7 +192,9 @@ class SessionInitView(View):
             symbol_name = form_data['symbol'].upper().replace('-', '').replace('/', '').replace('USDT', '') + '-USDT'
             if not imarket.has_symbol(symbol_name):
                 raise SymbolNotInMarket(f'Symbol {symbol_name} not found in market {market.exchange_name}')
-            symbol = Symbol.objects.get_or_create(name=symbol_name, market=market)[0]
+            symbol = Symbol.objects.get(name=symbol_name, market=market)
+            if not symbol.spot_trading_enabled:
+                raise MarketDisabledTrading(f'{market.exchange_name} does not allow {symbol.name} in SPOT trading')
             if not market.is_valid_session_type((session_type := form_data['type'])):
                 raise MarketDisabledTrading(f'Market {market.exchange_name} does not support session type {session_type}')
             if (capital_limit := float(form_data['capital'])) > imarket.capital and session_type in [Session.Type.LIVE_SANDBOX, Session.Type.LIVE_MAINNET]:

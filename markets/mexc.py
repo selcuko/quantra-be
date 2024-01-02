@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+import json
 from pprint import pprint
 
 
@@ -159,13 +160,14 @@ class MEXCMarket(IMarket):
         from quantapi.models import Symbol
         return Symbol(
             market = self.market,
-            name = symbol['symbol'],
+            name = self._standardize_symbol(symbol['symbol']),
             base = symbol['baseAsset'],
             quote = symbol['quoteAsset'],
-            base_precision = symbol['baseSizePrecision'],
-            quote_precision = symbol['quoteAmountPrecision'],
+            base_precision = symbol['baseSizePrecision'][:10],  # MEXC specific (they use ints)
+            quote_precision = symbol['quoteAmountPrecision'][:10], # MEXC specific (they use ints)
             spot_trading_enabled = symbol['isSpotTradingAllowed'],
             margin_trading_enabled = symbol['isMarginTradingAllowed'],
+            details=json.dumps(symbol),
         )
 
     def get_symbols(self):
@@ -178,9 +180,10 @@ class MEXCMarket(IMarket):
         except:
             logger.error(f'Error while fetching symbols for {self.name}', exc_info=True)
             raise
-        symbol_list = { self._standardize_symbol(symbol['symbol']): self._prep_symbol(symbol) for symbol in symbols if symbol['quoteAsset'] == 'USDT' }
-        self.symbols = symbol_list
-        return symbol_list
+        self.symbols = { self._standardize_symbol(symbol['symbol']): self._prep_symbol(symbol) for symbol in symbols if symbol['quoteAsset'] == 'USDT' }
+        self.symbols = { key: value for key, value in self.symbols.items() if value.quote == 'USDT'}
+        Symbol.objects.bulk_create(self.symbols.values(), ignore_conflicts=True)
+        return self.symbols
 
     def get_last_klines(self, symbol, interval, limit=100):
         minutes = interval_to_minutes(interval)
@@ -202,7 +205,6 @@ class MEXCMarket(IMarket):
         return self.symbols[name]
 
     def _prep_order(self, order, symbol):
-        print('order response', order)
         order_time = order.get('time') or order.get('transactTime') or order.get('timestamp') or 0
         return Order(
             oid = order.get('orderId'),
@@ -213,7 +215,8 @@ class MEXCMarket(IMarket):
             deal_funds = float(order.get('origQuoteOrderQty', 0)),
             deal_size = float(order.get('executedQty', 0)),
             funds = float(order.get('origQuoteOrderQty', 0)),
-            status = order.get('status'),
+            status = order.get('status', 'NOT_FOUND'),
+            details=json.dumps(order),        
         )
 
     @authentication_required
@@ -249,8 +252,14 @@ class MEXCMarket(IMarket):
                     raise InsufficientBalance(f'Not enough balance to place order on {self.name} (we have {self.assets.get(symbol.quote, 0)} {symbol.quote} but tried to buy with {funds} {symbol.quote}): {order_data}')
                 raise RejectedOrder(f'Error while placing order on {self.name}: {order_data}\nOrder query: {order_query}')
             if validate:
-                print('validating order', order.oid)
-                order = self.get_order(symbol, order.oid)
+                MAX_TRY = 10
+                tries = 0
+                while order.status not in ['FILLED', 'CANCELED', 'EXPIRED', 'REJECTED'] and tries < MAX_TRY:
+                    time.sleep(1)
+                    tries += 1
+                    order = self.get_order(symbol, order)
+                if order.status not in ['FILLED', 'CANCELED', 'EXPIRED', 'REJECTED']:
+                    raise Exception(f'Order {order.oid} on {self.name} is still {order.status} after {MAX_TRY} tries')
             return order
         except:
             logger.error(f'Error while placing order on {self.name}', exc_info=True)

@@ -1,3 +1,4 @@
+import json
 import time
 import typing
 import uuid
@@ -27,7 +28,7 @@ class KucoinMarket(IMarket):
         self.spot_trading_enabled = False
         self.capital = 0
         self.assets = {}
-        self.market = market
+        self.market_model = market
         self.commission = {}
         try:
             if self.authenticated:
@@ -113,13 +114,15 @@ class KucoinMarket(IMarket):
     def _prep_symbol(self, symbol:dict) -> 'Symbol':
         from quantapi.models import Symbol
         return Symbol(
-            name = symbol['symbol'],
+            market=self.market_model,
+            name = self._standardize_symbol(symbol['symbol']),
             base = symbol['baseCurrency'],
             quote = symbol['quoteCurrency'],
             base_precision = symbol['baseIncrement'],
             quote_precision = symbol['quoteIncrement'],
             spot_trading_enabled = symbol['enableTrading'],
-            margin_trading_enabled = symbol['isMarginEnabled'])
+            margin_trading_enabled = symbol['isMarginEnabled'],
+            details=json.dumps(symbol))
 
 
     def _prep_order(self, order:dict, symbol:'Symbol') -> 'Order':
@@ -135,6 +138,7 @@ class KucoinMarket(IMarket):
             status='ACTIVE' if order.get('isActive') else 'CLOSED',
             funds=float(order.get('funds', 0)),
             client_oid=order.get('clientOid'),
+            details=json.dumps(order),
         )
     
     def _get_klines(self, symbol:str, interval:str, start:datetime, end:"datetime|None"=None, limit=1000, retry=0) -> list[list]:
@@ -184,12 +188,16 @@ class KucoinMarket(IMarket):
         return klines
     
     def get_symbols(self) -> dict[str, 'Symbol']:
+        from quantapi.models import Symbol
         symbol_list = self.market.get_symbol_list_v2()
         if not symbol_list:
             logger.error(f'No symbols found on {self.name}')
             return {}
-        return { self._standardize_symbol(symbol['symbol']): self._prep_symbol(symbol) for symbol in symbol_list }
-    
+        self.symbols = { self._standardize_symbol(symbol['symbol']): self._prep_symbol(symbol) for symbol in symbol_list }
+        self.symbols = { key: value for key, value in self.symbols.items() if value.quote == 'USDT'}
+        Symbol.objects.bulk_create(self.symbols.values(), ignore_conflicts=True)
+        return self.symbols
+
     @authentication_required
     def place_market_order(self, symbol:'Symbol|str', side:Literal['buy', 'sell'], funds:"float|None"=None, quantity:"float|None"=None, validate=True) -> 'Order':
         if isinstance(symbol, str):
@@ -217,7 +225,14 @@ class KucoinMarket(IMarket):
             if not order.oid:
                 raise ValueError(f'Error while placing market order on {self.name}')
             if validate:
-                order = self.get_order(symbol, order.oid)
+                MAX_TRY = 10
+                tries = 0
+                while order.status not in ['FILLED', 'CANCELED', 'EXPIRED', 'REJECTED', 'CLOSED'] and tries < MAX_TRY:
+                    time.sleep(1)
+                    tries += 1
+                    order = self.get_order(symbol, order)
+                if order.status not in ['FILLED', 'CANCELED', 'EXPIRED', 'REJECTED', 'CLOSED']:
+                    raise Exception(f'Order {order.oid} on {self.name} is still {order.status} after {MAX_TRY} tries')
             return order
         except Exception as e:
             if "Balance insufficient!" in str(e):

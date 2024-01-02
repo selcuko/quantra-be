@@ -19,19 +19,20 @@ class SymbolAdmin(admin.ModelAdmin):
 class SessionAdmin(admin.ModelAdmin):
     list_display = ('__str__', 'freq', 'session_type', 'started', 'ended', 'status', 'last_heartbeat')
     search_fields = ('symbol__name', )
-    list_filter = ('symbol__name', 'freq', 'status', 'session_type')
+    list_filter = ('freq', 'status', 'session_type')
+    readonly_fields = ('started', 'ended', 'last_heartbeat', 'symbol')
 
 
 class SignalAdmin(admin.ModelAdmin):
     list_display = ('__str__', 'side', 'symbol', 'price', 'timestamp')
     search_fields = ('session',)
-    list_filter = ('session__symbol', )
+    readonly_fields = ('session', 'symbol')
 
 
 class OrderAdmin(admin.ModelAdmin):
     list_display = ('__str__', 'oid', 'status', 'order_type', 'symbol', 'timestamp', 'force')
     search_fields = ('session',)
-    list_filter = ('status', 'order_type', 'force', 'signal__session__symbol')
+    list_filter = ('status', 'order_type', 'force')
 
 
 admin.site.register(Market, MarketAdmin)

@@ -65,14 +65,20 @@ class Market(models.Model):
         self.config_enc = f.encrypt(json.dumps(value).encode()).decode()
 
 class Symbol(models.Model):
+    # unique constraint on (name, market)
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['name', 'market'], name='unique_symbol')
+        ]
     market = models.ForeignKey(Market, on_delete=models.PROTECT, related_name='symbols')
-    base = models.CharField(max_length=10)
-    quote = models.CharField(max_length=10)
-    name = models.CharField(max_length=30)
-    base_precision = models.IntegerField(null=True, blank=True, help_text='Number of decimal places for base currency')
-    quote_precision = models.IntegerField(null=True, blank=True, help_text='Number of decimal places for quote currency')
+    base = models.CharField(max_length=30)
+    quote = models.CharField(max_length=30)
+    name = models.CharField(max_length=60)
+    base_precision = models.DecimalField(null=True, blank=True, max_digits=20, decimal_places=10, help_text='Number of decimal places for base currency')
+    quote_precision = models.DecimalField(null=True, blank=True, max_digits=20, decimal_places=10, help_text='Number of decimal places for quote currency')
     spot_trading_enabled = models.BooleanField(default=True, help_text='Spot trading enabled for this symbol in related market')
     margin_trading_enabled = models.BooleanField(default=False, help_text='Margin trading enabled for this symbol in related market')
+    details = models.TextField(null=True, blank=True, help_text='JSON string of symbol detail from market')
     sessions: models.QuerySet['Session']
 
     def save(self, *args, **kwargs):
@@ -142,6 +148,7 @@ class Session(models.Model):
     thread_id = models.BigIntegerField(null=True, blank=True)
     use_heikin_ashi = models.BooleanField(default=False)
     strategy_parameters = models.TextField(null=True, blank=True, help_text='JSON string of parameters for this strategy, leave blank to use defaults.')
+    details = models.TextField(null=True, blank=True, help_text='JSON string of session details from market')
 
     def __str__(self):
         return f'{self.strategy} - {self.symbol} - {self.status}'
@@ -235,7 +242,7 @@ class Order(models.Model):
     timestamp = models.DateTimeField()
     status = models.CharField(max_length=30, choices=Status.choices)
     force = models.BooleanField(default=False)
-    market_response = models.TextField(null=True, blank=True)
+    details = models.TextField(null=True, blank=True)
 
     def __str__(self) -> str:
         try:
@@ -305,6 +312,7 @@ class Backtest(models.Model):
     symbol = models.CharField(max_length=100)
     market = models.CharField(max_length=100)
     status = models.CharField(max_length=100, choices=Status.choices)
+    details = models.TextField(null=True, blank=True)
 
 
 class WhitelistedUser(models.Model):
