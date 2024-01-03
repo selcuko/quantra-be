@@ -48,7 +48,7 @@ class HomeView(View):
         for session in sessions:
             recent_orders = Order.objects.filter(signal__session=session)
             open_position = get_open_position(session)
-            current_price = session.last_price
+            current_price = session.last_price or 0
             if open_position:
                 capital_delta = (session.assets * current_price - session.initial_capital) / session.initial_capital * 100 if session.initial_capital else 0
                 capital_delta_pct = capital_delta / session.initial_capital * 100 if session.initial_capital else 0
@@ -63,6 +63,7 @@ class HomeView(View):
             session_ctx.append({
                 'session': session,
                 'total_orders': recent_orders.count(),
+                'total_signals': Signal.objects.filter(session=session).count(),
                 'open_position': open_position,
                 'current_price': current_price,
                 'capital_delta': capital_delta,

@@ -214,7 +214,7 @@ class BinanceMarket(IMarket):
         try:
             _order_payload = self.client.order_market(
                 side=side,
-                symbol=symbol.name,
+                symbol=self._format_symbol(symbol.name),
                 quantity=quantity,
                 quoteOrderQty=funds,
                 newClientOrderId=client_oid)
@@ -250,7 +250,7 @@ class BinanceMarket(IMarket):
         try:
             order = self.client.order_limit(
                 side=side,
-                symbol=symbol.name,
+                symbol=self._format_symbol(symbol.name),
                 price=price,
                 quantity=quantity,
                 newClientOrderId=client_oid)
@@ -275,7 +275,7 @@ class BinanceMarket(IMarket):
         else:
             _order_oid = order
         try:
-            _order_payload = self.client.get_order(symbol=symbol.name, orderId=_order_oid)
+            _order_payload = self.client.get_order(symbol=self._format_symbol(symbol.name), orderId=_order_oid)
             return self._prep_order(_order_payload, symbol)
         except:
             logger.error(f'Error while getting order on {self.name}', exc_info=True)
@@ -286,7 +286,7 @@ class BinanceMarket(IMarket):
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         try:
-            orders = self.client.get_all_orders(symbol=symbol.name)
+            orders = self.client.get_all_orders(symbol=self._format_symbol(symbol.name))
             return [self._prep_order(order, symbol) for order in orders]
         except:
             logger.error(f'Error while getting order list on {self.name}', exc_info=True)
@@ -297,7 +297,7 @@ class BinanceMarket(IMarket):
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         try:
-            orders = self.client.get_open_orders(symbol=symbol.name)
+            orders = self.client.get_open_orders(symbol=self._format_symbol(symbol.name))
             return [self._prep_order(order, symbol) for order in orders]
         except:
             logger.error(f'Error while getting open orders on {self.name}', exc_info=True)
@@ -313,7 +313,7 @@ class BinanceMarket(IMarket):
         else:
             _order_oid = order
         try:
-            _order_payload = self.client.cancel_order(symbol=symbol.name, orderId=_order_oid)
+            _order_payload = self.client.cancel_order(symbol=self._format_symbol(symbol.name), orderId=_order_oid)
             return self._prep_order(_order_payload, symbol)
         except Exception as e:
             if 'Unknown order sent' in str(e):
