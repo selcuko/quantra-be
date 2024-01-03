@@ -29,7 +29,7 @@ class KucoinMarket(IMarket):
         self.assets = {}
         self.market_model = market
         if not self.market_model:
-            self.market = MarketModel.objects.filter(exchange_name=self.name).first()
+            self.market_model = MarketModel.objects.filter(exchange_name=self.name).first()
         self.commission = {}
         try:
             if self.authenticated:
