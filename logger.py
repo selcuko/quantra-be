@@ -44,7 +44,7 @@ colored_formatter = ColoredFormatter()
 plain_formatter = logging.Formatter("%(threadName)s::%(asctime)s %(levelname)s %(filename)s:%(lineno)d >> %(message)s")
 
 console_handler = logging.StreamHandler()
-console_handler.setFormatter(colored_formatter)
+#console_handler.setFormatter(colored_formatter)
 console_handler.setLevel(logging.DEBUG)
 logger.addHandler(console_handler)
 

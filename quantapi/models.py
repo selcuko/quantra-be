@@ -99,7 +99,10 @@ class Symbol(models.Model):
         }
 
     def __str__(self):
-        return f'{self.name}@{self.market.exchange_name}'
+        try:
+            return f'{self.name}@{self.market.exchange_name}'
+        except:
+            return f'{self.name}@NOMARKET'
 
 
 class Session(models.Model):
@@ -231,6 +234,7 @@ class Order(models.Model):
         CANCELLED = 'CANCELLED'
         REJECTED = 'REJECTED'
         EXPIRED = 'EXPIRED'
+        ERROR = 'ERROR'
     oid = models.CharField(max_length=256, unique=True, null=True, blank=True)
     client_oid = models.CharField(max_length=256, unique=True, null=True, blank=True)
     deal_size = models.FloatField(help_text='Amount of quote currency in this order (e.g. BTC)')

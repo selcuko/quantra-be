@@ -7,6 +7,7 @@ from django.core.paginator import Paginator
 from django.db.models import Q
 from django.shortcuts import redirect, render
 from django.views import View
+from regex import F
 from backtest import async_analyze
 
 from livetest import LiveLoop
@@ -47,16 +48,16 @@ class HomeView(View):
         for session in sessions:
             recent_orders = Order.objects.filter(signal__session=session)
             open_position = get_open_position(session)
-            current_price = session.symbol.market.get_interface().get_last_klines(session.symbol.name, session.freq, limit=1)[0][4]
+            current_price = session.last_price
             if open_position:
-                capital_delta = (session.assets * current_price - session.initial_capital) / session.initial_capital * 100
-                capital_delta_pct = capital_delta / session.initial_capital * 100
+                capital_delta = (session.assets * current_price - session.initial_capital) / session.initial_capital * 100 if session.initial_capital else 0
+                capital_delta_pct = capital_delta / session.initial_capital * 100 if session.initial_capital else 0
                 open_position_delta = (current_price - open_position.price)
-                open_position_delta_pct = open_position_delta / open_position.price * 100
+                open_position_delta_pct = open_position_delta / open_position.price * 100 if open_position.price else 0
                 total_open_positions.append(open_position_delta_pct)
             else:
-                capital_delta = (session.capital - session.initial_capital)
-                capital_delta_pct = capital_delta / session.initial_capital * 100
+                capital_delta = (session.capital - session.initial_capital) if session.initial_capital else 0
+                capital_delta_pct = capital_delta / session.initial_capital * 100 if session.initial_capital else 0
                 open_position_delta = None
                 open_position_delta_pct = None
             session_ctx.append({
@@ -99,7 +100,6 @@ class SessionDetailView(View):
         if not orders:
             return None
         last_order = orders.order_by('-timestamp')[0]
-        print('LAST ORDER', last_order)
         if last_order.signal.side == 'BUY':
             return last_order
         else:
@@ -113,13 +113,13 @@ class SessionDetailView(View):
         market = session.symbol.market
         message = request.session.pop('message', None)
         open_position = self.get_open_position(session)
-        current_price = market.get_interface().get_last_klines(session.symbol.name, session.freq, limit=1)[0][4]
+        current_price = session.last_price or 0
         open_position_delta = None
         if open_position:
-            capital_delta = (session.assets * current_price - session.initial_capital) / session.initial_capital * 100
+            capital_delta = (session.assets * current_price - session.initial_capital) / session.initial_capital * 100 if session.initial_capital else 0
             open_position_delta = (current_price - open_position.price) / current_price * 100
         else:
-            capital_delta = (session.capital - session.initial_capital) / session.initial_capital * 100
+            capital_delta = (session.capital - session.initial_capital) / session.initial_capital * 100 if session.initial_capital else 0
         return render(request, 'session-detail.html', {
             'session': session, 
             'error': error, 
@@ -298,7 +298,6 @@ class BacktestInitView(View):
     
     def post(self, request):
         form_data = request.POST
-        print(form_data)
         exchange = form_data['market']
         symbol = form_data['symbol']
         freq = form_data['freq']

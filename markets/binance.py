@@ -230,7 +230,7 @@ class BinanceMarket(IMarket):
         if validate:
             MAX_TRY = 10
             tries = 0
-            while order.status not in ['FILLED', 'CANCELED', 'EXPIRED', 'REJECTED'] and tries < MAX_TRY:
+            while order.status not in ['FILLED', 'CANCELED', 'EXPIRED', 'REJECTED'] and tries < MAX_TRY or tries == 0:
                 time.sleep(1)
                 tries += 1
                 order = self.get_order(symbol, order)

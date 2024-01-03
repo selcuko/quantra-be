@@ -14,8 +14,7 @@ from markets import IMarket
 from markets.errors import InsufficientBalance, SymbolNotInMarket
 from markets.helper import authentication_required, float_to_precision
 from models import interval_to_minutes
-if typing.TYPE_CHECKING:
-    from quantapi.models import Order, Symbol
+from quantapi.models import Order, Symbol
 
 
 class KucoinMarket(IMarket):
@@ -227,7 +226,7 @@ class KucoinMarket(IMarket):
             if validate:
                 MAX_TRY = 10
                 tries = 0
-                while order.status not in ['FILLED', 'CANCELED', 'EXPIRED', 'REJECTED', 'CLOSED'] and tries < MAX_TRY:
+                while order.status not in ['FILLED', 'CANCELED', 'EXPIRED', 'REJECTED', 'CLOSED'] and tries < MAX_TRY or tries == 0:
                     time.sleep(1)
                     tries += 1
                     order = self.get_order(symbol, order)

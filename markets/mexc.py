@@ -141,7 +141,6 @@ class MEXCMarket(IMarket):
                 raise ValueError(f'We can get a maximum of 1000 klines per request (limit={limit}), your timerange is too wide ({candles_in_timerange} candles), please reduce the timerange or increase the interval')
         try:
             uri = f'{self.url}/api/v3/klines?symbol={self._format_symbol(symbol)}&interval={self._format_interval(interval)}&limit={limit}&startTime={self._format_datetime(start)}&endTime={self._format_datetime(end)}'
-            logger.debug(f'Hitting MEXC API for {symbol} at {start} -> {end} with limit {limit} ({uri})')
             response = requests.get(uri)
             response.raise_for_status()
             kline_data = response.json()
@@ -173,7 +172,6 @@ class MEXCMarket(IMarket):
     def get_symbols(self):
         try:
             uri = f'{self.url}/api/v3/exchangeInfo'
-            logger.debug(f'Hitting MEXC API for symbols ({uri})')
             response = requests.get(uri)
             response.raise_for_status()
             symbols = response.json()['symbols']
@@ -254,7 +252,7 @@ class MEXCMarket(IMarket):
             if validate:
                 MAX_TRY = 10
                 tries = 0
-                while order.status not in ['FILLED', 'CANCELED', 'EXPIRED', 'REJECTED'] and tries < MAX_TRY:
+                while order.status not in ['FILLED', 'CANCELED', 'EXPIRED', 'REJECTED'] and tries < MAX_TRY or tries == 0:
                     time.sleep(1)
                     tries += 1
                     order = self.get_order(symbol, order)

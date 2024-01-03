@@ -132,7 +132,7 @@
                         Open position change: {{ session.open_position_delta }} ({{ session.open_position_delta_pct }}%)
                     </td>
                     <td class="font-medium text-gray-900 whitespace-nowrap dark:text-white px-6 py-4" style="width:100%">
-                        Current price: {{ session.current_price }}$
+                        Current price: {{ session.current_price }}$ (updated {{ session.session.last_kline_timestamp|timesince }} ago)
                     </td>
                     <td class="font-medium text-gray-900 whitespace-nowrap dark:text-white px-6 py-4" style="width:100%">
                         Frequency: {{ session.session.freq }}

@@ -40,7 +40,6 @@ class LiveLoop:
         self.symbol = Symbol.objects.get(name=symbol, market=market)
         if not (strategy_model := StrategyModel.objects.filter(name=strategy.name).first()):
             strategy_model = StrategyModel.objects.create(name=strategy.name, parameters=json.dumps(strategy.params))
-        strategy_model.parameters = json.dumps(strategy.params)
         strategy_model.save()
         self.session = session or Session.objects.create(
             symbol=self.symbol,
@@ -65,9 +64,11 @@ class LiveLoop:
         self.imarket.get_account()
         # validate capital and asset amound
         if self.session.capital > self.imarket.capital:
-            raise InsufficientBalance(f'Capital limit ({self.session.capital}) is greater than available capital ({self.imarket.capital})')
+            logger.warning(f'Capital limit ({self.session.capital}) is greater than available capital ({self.imarket.capital}), updating capital limit to {self.session.capital}')
+            self.session.capital = self.imarket.capital
         if self.session.assets > self.imarket.assets.get(self.symbol.base, 0):
-            raise InsufficientBalance(f'Asset limit ({self.session.assets}) is greater than available assets ({self.imarket.assets.get(self.symbol.base, 0)})')
+            logger.warning(f'Asset limit ({self.session.assets}) is greater than available assets ({self.imarket.assets.get(self.symbol.base, 0)}), updating asset limit to {self.session.assets}')
+            self.session.assets = self.imarket.assets.get(self.symbol.base, 0)
 
     def run(self):
         """Fire and forget function to start the live loop and keep it running in a seperate thread."""
@@ -89,7 +90,7 @@ class LiveLoop:
 
     def __run(self):
         MAX_FAILED_KLINE_REQUESTS = 10
-        logger.info(f'Starting live loop for {self.symbol} on {self.imarket.name} with freq {self.freq.replace(" ", "").upper()}')
+        logger.info(f'Starting live loop for {self.symbol} on {self.market.exchange_name} with freq {self.freq.replace(" ", "").upper()}')
         last_klines = []
         failed_kline_requests = 0
         while not self.should_stop() and self.wait_next_candle() and not self.should_stop():
@@ -119,7 +120,6 @@ class LiveLoop:
             if self.session.last_kline_timestamp and self.last_kline_dt <= self.session.last_kline_timestamp:
                 continue
             self.last_kline = {'time': self.last_kline_dt.timestamp(), **strategy_dataset.iloc[-1].to_dict()}
-            print(str(self.last_kline))
             positive_buy_signal = self.last_kline['buy']
             positive_sell_signal = self.last_kline['sell']
 
@@ -158,16 +158,17 @@ class LiveLoop:
                     last_order = self.imarket.place_market_order(self.symbol.name, 'buy', funds=self.session.capital)
                     last_order.signal = signal
                     last_order.price = last_kline['close']
+                    last_order.timestamp = last_order.timestamp or self.last_kline_dt or datetime.now(tz=pytz.UTC)
                     last_order.save()
                     if last_order.status == Order.Status.FILLED:
                         self.session.assets += last_order.deal_size
                         self.session.capital -= last_order.deal_funds
                     else:
-                        logger.warning(f'Order not filled, status is {last_order.status}')
+                        logger.warning(f'Order not filled, status is {last_order.status} (oid={last_order.oid}))')
                 except InsufficientBalance:
                     self.imarket.get_account()
                     self.session.capital = self.imarket.capital
-                    self.session.assets = self.imarket.assets[self.symbol.base]
+                    self.session.assets = self.imarket.assets.get(self.symbol.base, 0)
                     self.session.save()
                     logger.warning(f'Insufficient balance, assets updated to {self.session.assets} and capital updated to {self.session.capital}')
                     return self.buy(last_kline)
@@ -180,11 +181,20 @@ class LiveLoop:
                         signal=signal,
                         status=Order.Status.REJECTED,
                         details=repr(ro),
-                        timestamp=self.last_kline_dt
+                        timestamp=self.last_kline_dt or datetime.now(tz=pytz.UTC)
                     )
-                except:
-                    logger.error('Failed to place market order, skipping', exc_info=True)
-                    return
+                except Exception as e:
+                    logger.error(f'Failed to place market buy order for {self.session.capital} {self.symbol.quote}, skipping', exc_info=True)
+                    last_order = Order.objects.create(
+                        funds=self.session.capital,
+                        deal_funds=self.session.capital,
+                        deal_size=self.session.capital / last_kline['close'],
+                        price=last_kline['close'],
+                        signal=signal,
+                        status=Order.Status.ERROR,
+                        details=repr(e),
+                        timestamp=self.last_kline_dt or datetime.now(tz=pytz.UTC)
+                    )
                 self.session.save()
             else:
                 return False
@@ -207,16 +217,17 @@ class LiveLoop:
                     last_order = self.imarket.place_market_order(self.symbol.name, 'sell', quantity=self.session.assets)
                     last_order.signal = signal
                     last_order.price = last_kline['close']
+                    last_order.timestamp = last_order.timestamp or self.last_kline_dt or datetime.now(tz=pytz.UTC)
                     last_order.save()
                     if last_order.status == Order.Status.FILLED:
                         self.session.assets -= last_order.deal_size
                         self.session.capital += last_order.deal_funds
                     else:
-                        logger.warning(f'Order not filled, status is {last_order.status}')
+                        logger.warning(f'Order not filled, status is {last_order.status}, oid={last_order.oid}')
                 except InsufficientBalance:
                     self.imarket.get_account()
                     self.session.capital = self.imarket.capital
-                    self.session.assets = self.imarket.assets[self.symbol.base]
+                    self.session.assets = self.imarket.assets.get(self.symbol.base, 0)
                     self.session.save()
                     logger.warning(f'Insufficient balance, assets updated to {self.session.assets} and capital updated to {self.session.capital}')
                     return self.sell(last_kline)
@@ -229,11 +240,20 @@ class LiveLoop:
                         signal=signal,
                         status=Order.Status.REJECTED,
                         details=repr(ro),
-                        timestamp=self.last_kline_dt
+                        timestamp=self.last_kline_dt or datetime.now(tz=pytz.UTC)
                     )
-                except:
-                    logger.error('Failed to place market order, skipping', exc_info=True)
-                    return
+                except Exception as e:
+                    logger.error(f'Failed to place market sell order for {self.session.assets} {self.symbol.base}, skipping', exc_info=True)
+                    last_order = Order.objects.create(
+                        funds=self.session.capital,
+                        deal_funds=self.session.capital,
+                        deal_size=self.session.capital / last_kline['close'],
+                        price=last_kline['close'],
+                        signal=signal,
+                        status=Order.Status.ERROR,
+                        details=repr(e),
+                        timestamp=self.last_kline_dt or datetime.now(tz=pytz.UTC)
+                    )
                 self.session.save()
             else:
                 return False
