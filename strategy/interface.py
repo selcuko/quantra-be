@@ -6,7 +6,7 @@ class Strategy:
     name: str
     ds: OHLCVDataset
     
-    def __init__(self) -> None:
+    def __init__(self, params:dict={}) -> None:
         raise NotImplementedError
     
     def __call__(self, ds:OHLCVDataset) -> OHLCVDataset:

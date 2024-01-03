@@ -32,6 +32,8 @@ class BinanceMarket(IMarket):
         self.assets = {}
         self.commission = {}
         self.market = market
+        if not self.market:
+            self.market = Market.objects.filter(exchange_name=self.name).first()
 
         try:
             if self.authenticated:

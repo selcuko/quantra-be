@@ -26,16 +26,18 @@ class MEXCMarket(IMarket):
     def __init__(self, config=None, market=None) -> None:
         self.authenticated = False
         self.session = requests.Session()
+        self.url = 'https://api.mexc.com'
         if config:
             self.authenticated = True
             self.api_secret = config['API_SECRET']
             self.access_key = config['ACCESS_KEY']
-            self.url = 'https://api.mexc.com'
             self.session.headers.update({
                 'X-MEXC-APIKEY': config['ACCESS_KEY'],
             })
 
         self.market = market
+        if not self.market:
+            self.market = Market.objects.filter(exchange_name=self.name).first()
 
         self.symbols = {}
         self.capital = 0
@@ -231,7 +233,7 @@ class MEXCMarket(IMarket):
         try:
             uri = f'{self.url}/api/v3/order'
             order_query = self._prep_payload({ 
-                                    'symbol': symbol.name,
+                                    'symbol': self._format_symbol(symbol.name),
                                     'side': side.upper(),
                                     'type': 'MARKET',
                                     'quantity':quantity,
@@ -271,7 +273,7 @@ class MEXCMarket(IMarket):
             order = order.oid
         try:
             order_query = self._prep_payload({ 
-                                                    'symbol': symbol.name,
+                                                    'symbol': self._format_symbol(symbol.name),
                                                     'orderId': order,
                                                     'timestamp': str(int(time.time()*1000)),
                                                 })

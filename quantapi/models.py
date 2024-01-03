@@ -317,6 +317,11 @@ class Backtest(models.Model):
     market = models.CharField(max_length=100)
     status = models.CharField(max_length=100, choices=Status.choices)
     details = models.TextField(null=True, blank=True)
+    use_heikin_ashi = models.BooleanField(default=False)
+    parameters = models.TextField(null=True, blank=True)
+
+    def __str__(self) -> str:
+        return f'{self.symbol} {self.market} {self.status}'
 
 
 class WhitelistedUser(models.Model):

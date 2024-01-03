@@ -71,31 +71,38 @@ def analyze(ds:OHLCVDataset, symbol:str, market:IMarket, strategy:Strategy, freq
 
 
 def async_analyze(**kwargs):
+    start = kwargs.pop('start')
+    end = kwargs.pop('end')
     backtest = Backtest.objects.create(
-            start=kwargs['start'],
-            end=kwargs.get('end') or None,
+            start=start,
+            end=end,
             freq=kwargs['freq'],
             symbol=kwargs['symbol'],
             market=kwargs['market'],
-            status='INIT' )
+            status='INIT',
+            parameters=json.dumps(kwargs),
+            use_heikin_ashi=kwargs.get('candle_type') == 'heikin_ashi')
     def download_and_analyze():
         try:
-            strategy_name = kwargs.get('strategy_name', 'v1')
-            strategy = get_strategy(strategy_name)()
-            if not (strategy_model := StrategyModel.objects.filter(name=strategy_name).first()):
-                strategy_model = StrategyModel.objects.create(name=strategy_name, parameters=json.dumps(strategy.params))
+            strategy = get_strategy('v1')({
+                'stochrsi': {'length': kwargs.get('stoch_length')},
+                'volume': {'ma': kwargs.get('volume_ma')},
+                'source': kwargs.get('source'),
+            })
+            if not (strategy_model := StrategyModel.objects.filter(name='v1').first()):
+                strategy_model = StrategyModel.objects.create(name='v1')
                 strategy_model.save()
-            else:
-                strategy.params = json.loads(strategy_model.parameters)
         except Exception as e:
             logger.error(f'Error while loading strategy {kwargs.get("strategy_name", "v1")}', exc_info=True)
             backtest.status = Backtest.Status.ERROR
             backtest.report = repr(e)
             backtest.save()
             return
-        download_symbol(kwargs['market'], kwargs['symbol'], kwargs['start'], kwargs.get('end'))
+        download_symbol(kwargs['market'], kwargs['symbol'], start, end)
         ds = OHLCVDataset.from_csv(f'./data/{kwargs["symbol"]}-{kwargs["market"]}.csv')
-        analyze(ds, symbol=kwargs['symbol'], market=kwargs['market'], strategy=strategy, freq=kwargs['freq'], start=kwargs['start'], end=kwargs.get('end'), backtest=backtest)
+        if kwargs.get('candle_type') == 'heikin_ashi':
+            ds = ds.convert_to_heikin_ashi()
+        analyze(ds, symbol=kwargs['symbol'], market=kwargs['market'], strategy=strategy, freq=kwargs['freq'], start=start   , end=end, backtest=backtest)
     analyze_thread = threading.Thread(target=download_and_analyze)
     analyze_thread.start()
     return backtest

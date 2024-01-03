@@ -14,7 +14,7 @@ from markets import IMarket
 from markets.errors import InsufficientBalance, SymbolNotInMarket
 from markets.helper import authentication_required, float_to_precision
 from models import interval_to_minutes
-from quantapi.models import Order, Symbol
+from quantapi.models import Order, Symbol, Market as MarketModel
 
 
 class KucoinMarket(IMarket):
@@ -28,6 +28,8 @@ class KucoinMarket(IMarket):
         self.capital = 0
         self.assets = {}
         self.market_model = market
+        if not self.market_model:
+            self.market = MarketModel.objects.filter(exchange_name=self.name).first()
         self.commission = {}
         try:
             if self.authenticated:

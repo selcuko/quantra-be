@@ -3,7 +3,11 @@ from django.contrib import admin
 from quantapi.models import *
 
 
-# generate admin models for each model to have list display, filters and search fields
+class BacktestAdmin(admin.ModelAdmin):
+    list_display = ('__str__', 'symbol', 'market', 'start', 'end', 'freq', 'status')
+    search_fields = ('symbol', 'market',)
+    list_filter = ('market', 'status')
+
 class MarketAdmin(admin.ModelAdmin):
     list_display = ('exchange_name', 'friendly_name', 'testnet_enabled', 'trading_enabled', 'mainnet_enabled')
     search_fields = ('exchange_name', 'name', 'description')
@@ -42,6 +46,6 @@ admin.site.register(Signal, SignalAdmin)
 admin.site.register(Order, OrderAdmin)
 admin.site.register(Subscription)
 admin.site.register(Endpoint)
-admin.site.register(Backtest)
+admin.site.register(Backtest, BacktestAdmin)
 admin.site.register(WhitelistedUser)
 admin.site.register(Strategy)

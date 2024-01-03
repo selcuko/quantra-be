@@ -301,17 +301,31 @@ class BacktestInitView(View):
         form_data = request.POST
         exchange = form_data['market']
         symbol = form_data['symbol']
+        symbol = symbol.upper().replace('-', '').replace('/', '').replace('USDT', '') + '-USDT'
         freq = form_data['freq']
         start = form_data['start']
         end = form_data.get('end', None)
-        strategy_name = form_data.get('strategy_name', 'v1')
+        stoch_length = int(form_data.get('stoch_length', 3))
+        volume_ma = int(form_data.get('volume_ma', 20))
+        source = form_data.get('source', 'close')
+        candle_type = form_data.get('candle_type', 'standard')
         if end:
             end = datetime.strptime(end, '%Y-%m-%d').replace(tzinfo=pytz.UTC)
         else:
             end = None
         start = datetime.strptime(start, '%Y-%m-%d').replace(tzinfo=pytz.UTC)
 
-        backtest = async_analyze(market=exchange, symbol=symbol, freq=freq, start=start, end=end, strategy_name=strategy_name)
+        backtest = async_analyze(
+            market=exchange, 
+            symbol=symbol, 
+            freq=freq, 
+            start=start, 
+            end=end, 
+            candle_type=candle_type,
+            stoch_length=stoch_length,
+            volume_ma=volume_ma,
+            source=source,
+        )
         return redirect('backtest-result', pk=backtest.pk)
 
 
