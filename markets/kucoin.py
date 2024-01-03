@@ -134,7 +134,7 @@ class KucoinMarket(IMarket):
             timestamp=self._standardize_datetime(str(order.get('createdAt'))) if order.get('createdAt') else None,
             deal_funds=float(order.get('dealFunds', 0)),
             deal_size=float(order.get('dealSize', 0)),
-            status='ACTIVE' if order.get('isActive') else 'CLOSED',
+            status='NEW' if order.get('isActive') else 'FILLED',
             funds=float(order.get('funds', 0)),
             client_oid=order.get('clientOid'),
             details=json.dumps(order),
