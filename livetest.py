@@ -139,10 +139,10 @@ class LiveLoop:
         self.session.save()
 
     def can_buy(self):
-        return self.session.capital > 0
+        return self.session.capital > 5
     
     def can_sell(self):
-        return self.session.assets > 0
+        return self.session.assets * (self.session.last_price or 0) > 5
 
     def buy(self, last_kline:dict):
         with self.order_lock:
