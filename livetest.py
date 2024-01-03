@@ -90,7 +90,6 @@ class LiveLoop:
 
     def __run(self):
         MAX_FAILED_KLINE_REQUESTS = 10
-        logger.info(f'Starting live loop for {self.symbol} on {self.market.exchange_name} with freq {self.freq.replace(" ", "").upper()}')
         last_klines = []
         failed_kline_requests = 0
         while not self.should_stop() and self.wait_next_candle() and not self.should_stop():

@@ -61,3 +61,16 @@ if LOGTAIL_TOKEN:
     logtail_handler = LogtailHandler(LOGTAIL_TOKEN)
     logtail_handler.setFormatter(colored_formatter)
     logger.addHandler(logtail_handler)
+
+
+class NotificationHandler(logging.Handler):
+    def emit(self, record):
+        from quantapi.models import Notification
+        n = Notification.objects.create(
+            message=record.getMessage(),
+            severity=record.levelname,
+            notification_type=Notification.Type.LOG,
+        )
+        n.send()
+
+logger.addHandler(NotificationHandler())

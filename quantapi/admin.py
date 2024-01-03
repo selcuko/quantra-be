@@ -39,6 +39,17 @@ class OrderAdmin(admin.ModelAdmin):
     list_filter = ('status', 'order_type', 'force')
 
 
+class NotificationAdmin(admin.ModelAdmin):
+    list_display = ('timestamp', 'message', 'severity', 'notification_type', 'state')
+    list_filter = ('severity', 'notification_type', 'state')
+    search_fields = ('message', 'subject')
+
+    actions = ['send']
+
+    def send(self, request, queryset):
+        for notification in queryset:
+            notification.send()
+
 admin.site.register(Market, MarketAdmin)
 admin.site.register(Symbol, SymbolAdmin)
 admin.site.register(Session, SessionAdmin)
@@ -49,3 +60,4 @@ admin.site.register(Endpoint)
 admin.site.register(Backtest, BacktestAdmin)
 admin.site.register(WhitelistedUser)
 admin.site.register(Strategy)
+admin.site.register(Notification, NotificationAdmin)

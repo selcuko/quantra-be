@@ -4,7 +4,7 @@ import os
 import threading
 from django.conf import settings
 from django.contrib.auth.models import User
-
+from logger import logger
 import pytz
 from typing import Optional
 from django.db import models
@@ -293,12 +293,76 @@ class Subscription(models.Model):
 class Endpoint(models.Model):
     class Type(models.TextChoices):
         TELEGRAM = 'TELEGRAM'
+    class Group(models.TextChoices):
+        TRADER = 'TRADER'
+        ADMIN = 'ADMIN'
+        DEVOPS = 'DEVOPS'
     user = models.ForeignKey(User, on_delete=models.PROTECT, related_name='endpoints')
     endpoint_type = models.CharField(max_length=30, choices=Type.choices)
     external_id = models.CharField(max_length=256)
+    group = models.CharField(max_length=30, choices=Group.choices, default=Group.ADMIN)
 
     def __str__(self) -> str:
         return f'{self.endpoint_type} {self.external_id}'
+
+
+class Notification(models.Model):
+    class Severity(models.TextChoices):
+        INFO = 'INFO'
+        WARNING = 'WARNING'
+        ERROR = 'ERROR'
+        CRITICIAL = 'CRITICAL'
+    class Type(models.TextChoices):
+        ORDER = 'ORDER'
+        SIGNAL = 'SIGNAL'
+        EXCEPTION = 'EXCEPTION'
+        CRASH = 'CRASH'
+        DEBUG = 'DEBUG'
+        LOG = 'LOG'
+
+    class State(models.TextChoices):
+        NEW = 'NEW'
+        SENT = 'SENT'
+        SENT_PARTIAL = 'SENT_PARTIAL'
+        ERROR = 'ERROR'
+
+    severity = models.CharField(max_length=30, choices=Severity.choices, default=Severity.INFO)
+    notification_type = models.CharField(max_length=30, choices=Type.choices, default=Type.DEBUG)
+    state = models.CharField(max_length=30, choices=State.choices, default=State.NEW)
+    subject = models.CharField(max_length=256, null=True, blank=True)
+    message = models.TextField()
+    details = models.TextField(null=True, blank=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    sent_to = models.ManyToManyField(Endpoint, related_name='notifications', blank=True)
+
+    def __str__(self) -> str:
+        return f'{self.severity} {self.notification_type} {self.state} {self.subject or ""}'
+    
+    def send(self):
+        from telegram import send_message
+        if not self.pk:
+            self.save()
+        message = f'{self.severity} {self.notification_type}\n{self.message}'
+        sent_to = []
+        already_sent_to = self.sent_to.all()
+        for endpoint in Endpoint.objects.all():
+            if endpoint in already_sent_to:
+                sent_to.append(endpoint)
+                continue
+            try:
+                send_message(int(endpoint.external_id), message)
+                sent_to.append(endpoint)
+            except:
+                logger.error(f'Failed to send notification to {endpoint.external_id} (notification {self.pk})')
+        self.sent_to.add(*sent_to)
+        if len(sent_to) == 0:
+            self.state = Notification.State.ERROR
+        elif len(sent_to) < len(Endpoint.objects.all()):
+            self.state = Notification.State.SENT_PARTIAL
+        else:
+            self.state = Notification.State.SENT
+        self.save()
+
 
 
 class Backtest(models.Model):
