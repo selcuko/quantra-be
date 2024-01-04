@@ -66,6 +66,8 @@ if LOGTAIL_TOKEN:
 class NotificationHandler(logging.Handler):
     def emit(self, record):
         from quantapi.models import Notification
+        if record.levelno < logging.WARNING:
+            return
         n = Notification.objects.create(
             message=record.getMessage(),
             severity=record.levelname,
