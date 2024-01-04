@@ -89,7 +89,8 @@
             }).then((data) => {
                 capital = data["USDT"];
                 delete data["USDT"];
-                document.getElementById('market_detail').innerHTML = `{"USDT": "${capital},` + JSON.stringify(data, null, 2).slice(1);
+                Object.keys(data).forEach((key) => (data[key] == 0) && delete data[key]);
+                document.getElementById('market_detail').innerHTML = `{"USDT": ${capital},` + JSON.stringify(data, null, 2).slice(1);
             }).catch((error) => {
                 console.log(error);
             });
