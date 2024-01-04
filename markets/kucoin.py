@@ -92,6 +92,8 @@ class KucoinMarket(IMarket):
     def _standardize_datetime(self, dt:int|str) -> "datetime|None":
         try:
             return datetime.fromtimestamp(int(dt), tz=pytz.UTC)
+        except ValueError:
+            return datetime.fromtimestamp(int(dt)/1000, tz=pytz.UTC)
         except:
             logger.error(f'Error while standardizing datetime for {self.name}: {dt}', exc_info=True)
 

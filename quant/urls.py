@@ -18,8 +18,8 @@ from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path
 from django.conf.urls.static import static
-from quantapi.views import BacktestInitView, BacktestResultView, HomeView, MarketDetailView, MarketListView, RunningThreadsView, \
-    SessionInitView, SessionListView, SessionManageView, SessionTerminateView, SessionDetailView, WatchdogView
+from quantapi.views import BacktestInitView, BacktestResultView, HomeView, MarketDetailView, MarketListView, OrderManagementView, RunningThreadsView, \
+    SessionInitView, SessionListView, SessionManageView, SessionTerminateView, SessionDetailView, WatchdogView, raw_market_data
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -32,10 +32,12 @@ urlpatterns = [
     path('session/<int:pk>/manage/', SessionManageView.as_view(), name='session-manage'),
     path('markets/', MarketListView.as_view(), name='market-list'),
     path('market/<int:pk>/', MarketDetailView.as_view(), name='market-detail'),
+    path('market/<int:pk>/raw/', raw_market_data, name='market-raw'),
     path('threads/', RunningThreadsView.as_view(), name='running-threads'),
     path('backtest/init/', BacktestInitView.as_view(), name='backtest-init'),
     path('backtest/<int:pk>/', BacktestResultView.as_view(), name='backtest-result'),
-    path('watchdog/', WatchdogView.as_view(), name='watchdog')
+    path('watchdog/', WatchdogView.as_view(), name='watchdog'),
+    path('orders/', OrderManagementView.as_view(), name='order-management'),
 ]
 if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

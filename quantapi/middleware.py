@@ -16,7 +16,7 @@ class WhitelistedUserMiddleware:
             return self.get_response(request)
         if request.user.is_authenticated and request.user.email in whitelisted_default:
             return self.get_response(request)
-        elif WhitelistedUser.objects.filter(user=request.user).exists():
+        elif WhitelistedUser.objects.filter(user=request.user, allowed=True).exists():
             return self.get_response(request)
         else:
             return self.get_response(request)

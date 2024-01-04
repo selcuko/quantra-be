@@ -9,7 +9,7 @@ from django.shortcuts import redirect, render
 from django.views import View
 from regex import F
 from backtest import async_analyze
-
+from django.http import HttpResponse, JsonResponse, response
 from livetest import LiveLoop
 from markets.errors import InsufficientBalance, MarketDisabledTrading, SymbolNotInMarket
 from quantapi.models import (Backtest, Market, Order, Session, Signal,
@@ -277,6 +277,12 @@ class MarketDetailView(View):
         interface = market.get_interface()
         symbols = Symbol.objects.filter(market=market)
         return render(request, 'market-detail.html', {'market': market, 'symbols': symbols, 'interface': interface})
+    
+
+def raw_market_data(request, pk):
+    market = Market.objects.get(pk=pk)
+    interface = market.get_interface()
+    return JsonResponse(interface.assets)
 
 
 class SearchSymbolView(View):
@@ -345,3 +351,23 @@ class WatchdogView(View):
         return render(request, 'watchdog.html', context={'watchdog': watchdog()})
 
 
+class OrderManagementView(View):
+    def get(self, request):
+        markets = Market.objects.all().order_by('exchange_name')
+        return render(request, 'order-management.html', context={ 'markets': markets })
+    
+    def post(self, request):
+        payload = request.POST
+        market = Market.objects.get(pk=payload['market'])
+        symbol_name = payload['symbol']
+        symbol_name = symbol_name.upper().replace('-', '').replace('/', '').replace('USDT', '') + '-USDT'
+        symbol = Symbol.objects.get(name=symbol_name, market=market)
+        interface = market.get_interface()
+        amount = float(payload['amount'])
+        if payload['side'] == 'SELL':
+            order = interface.place_market_order(symbol.name, 'sell', quantity=amount)
+            return HttpResponse(f'Order {order.oid} placed. {order.details}')
+        elif payload['side'] == 'BUY':
+            order = interface.place_market_order(symbol.name, 'buy', quantity=amount)
+            return HttpResponse(f'Order {order.oid} placed. {order.details}')
+        return HttpResponse('Invalid side')
