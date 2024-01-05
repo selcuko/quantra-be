@@ -17,7 +17,7 @@
           required>
           <option value="" disabled selected>Select a market</option>
           {% for market in markets %}
-            <option value="{{ market.id }}">{{ market.friendly_name }}</option>
+            <option value="{{ market.id }}">[{{market.exchange_name}}] {{ market.friendly_name }} {% if market.mainnet_enabled %}(MAINNET){% else %}(TESTNET){% endif %}</option>
           {% endfor %}
         </select>
         <div>

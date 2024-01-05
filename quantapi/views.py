@@ -143,7 +143,7 @@ class SessionListView(View):
         paginator = Paginator(query, 20)
         page_number = request.GET.get('page')
         page = paginator.get_page(page_number)
-        markets = Market.objects.all()
+        markets = Market.objects.filter(trading_enabled=True).order_by('exchange_name')
         return render(request, 'session-list.html', {
             'sessions': page, 
             'markets': markets,
@@ -181,12 +181,12 @@ class SessionListView(View):
 
 class SessionInitView(View):
     def get(self, request):
-        markets = Market.objects.all()
+        markets = Market.objects.filter(trading_enabled=True).order_by('exchange_name')
         return render(request, 'session-init.html', {'markets': markets})
 
     def post(self, request, *args, **kwargs):
         form_data = request.POST
-        markets = Market.objects.all()
+        markets = Market.objects.filter(trading_enabled=True).order_by('exchange_name')
         try:
             market = Market.objects.get(pk=form_data['market'])
             imarket = market.get_interface()
@@ -267,7 +267,7 @@ class SessionTerminateView(View):
 
 class MarketListView(View):
     def get(self, request):
-        markets = Market.objects.all()
+        markets = Market.objects.filter(trading_enabled=True).order_by('exchange_name')
         return render(request, 'market-list.html', {'markets': markets})
 
 
@@ -300,7 +300,7 @@ class RunningThreadsView(View):
 
 class BacktestInitView(View):
     def get(self, request):
-        markets = set(Market.objects.all().values_list('exchange_name', flat=True))
+        markets = set(Market.objects.filter(trading_enabled=True).order_by('exchange_name').values_list('exchange_name', flat=True))
         return render(request, 'backtest-init.html', {'markets': markets})
     
     def post(self, request):
@@ -353,7 +353,7 @@ class WatchdogView(View):
 
 class OrderManagementView(View):
     def get(self, request):
-        markets = Market.objects.all().order_by('exchange_name')
+        markets = Market.objects.filter(trading_enabled=True).order_by('exchange_name').order_by('exchange_name')
         return render(request, 'order-management.html', context={ 'markets': markets })
     
     def post(self, request):
