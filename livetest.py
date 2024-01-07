@@ -134,6 +134,10 @@ class LiveLoop:
             last_klines = OHLCVDataset(last_klines)
             last_kline = {**last_klines.iloc[-1].to_dict(), 'time': last_klines.index[-1].to_pydatetime()}
             processed_ok = self.on_candle(last_kline)
+        self.running = False
+        self.session.ended = datetime.now(tz=pytz.UTC)
+        self.session.status = Session.Status.COMPLETED
+        self.session.save()
 
     def __run_websocket(self):
         ws_uri = self.imarket.get_websocket_uri(self.symbol.name, self.freq)
@@ -149,7 +153,12 @@ class LiveLoop:
                     self.on_candle(candle)
         except Exception as e:
             logger.error(f'Failed to connect to websocket {ws_uri}, exiting', exc_info=True)
-            return
+            self.session.status = Session.Status.ERROR
+            self.session.details = repr(e)
+        self.running = False
+        self.session.ended = datetime.now(tz=pytz.UTC)
+        self.session.status = Session.Status.COMPLETED if self.session.status == Session.Status.ONGOING else self.session.status
+        self.session.save()
 
     def on_candle(self, candle):
         try:
@@ -182,11 +191,6 @@ class LiveLoop:
         
         self.session.last_kline_timestamp = self.last_kline_dt
         self.session.last_price = self.last_kline['close']
-        self.session.save()
-
-        self.running = False
-        self.session.ended = datetime.now(tz=pytz.UTC)
-        self.session.status = Session.Status.COMPLETED
         self.session.save()
 
     def can_buy(self):
