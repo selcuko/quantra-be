@@ -205,6 +205,7 @@ class SessionInitView(View):
             planned_shutdown = form_data.get('planned_shutdown', None)
             if planned_shutdown and not planned_shutdown > datetime.now(pytz.UTC):
                 raise ValueError('Planned shutdown must be in the future')
+            use_websocket = form_data.get('websocket', False)
         except Exception as e:
             return render(request, 'session-init.html', {'markets': markets, 'form_error': repr(e)})
         try:
@@ -223,7 +224,10 @@ class SessionInitView(View):
                 session_type=session_type,
                 use_heikin_ashi=form_data.get('candle_type', 'standard') == 'heikin_ashi',
             )
-            ll.run()
+            if use_websocket:
+                ll.run(websocket=True)
+            else:
+                ll.run(polling=True)
         except Exception as e:
             raise e
             return render(request, 'session-init.html', {'markets': markets, 'form_error': f'Cannot initiate session: {e!r}'})

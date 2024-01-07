@@ -21,9 +21,9 @@ class SymbolAdmin(admin.ModelAdmin):
 
 
 class SessionAdmin(admin.ModelAdmin):
-    list_display = ('__str__', 'freq', 'session_type', 'started', 'ended', 'status', 'last_heartbeat')
+    list_display = ('__str__', 'freq', 'status', 'started', 'ended', 'session_type', 'last_heartbeat', 'use_websocket', 'use_heikin_ashi')
     search_fields = ('symbol__name', )
-    list_filter = ('freq', 'status', 'session_type')
+    list_filter = ('freq', 'status', 'session_type', 'use_heikin_ashi', 'use_websocket')
     readonly_fields = ('started', 'ended', 'last_heartbeat', 'symbol')
 
 
@@ -31,6 +31,7 @@ class SignalAdmin(admin.ModelAdmin):
     list_display = ('__str__', 'side', 'symbol', 'price', 'timestamp')
     search_fields = ('session',)
     readonly_fields = ('session', 'symbol')
+    list_filter = ('side',)
 
 
 class OrderAdmin(admin.ModelAdmin):

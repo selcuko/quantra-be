@@ -150,6 +150,7 @@ class Session(models.Model):
     assets = models.FloatField()
     thread_id = models.BigIntegerField(null=True, blank=True)
     use_heikin_ashi = models.BooleanField(default=False)
+    use_websocket = models.BooleanField(default=False)
     strategy_parameters = models.TextField(null=True, blank=True, help_text='JSON string of parameters for this strategy, leave blank to use defaults.')
     details = models.TextField(null=True, blank=True, help_text='JSON string of session details from market')
 
@@ -182,7 +183,10 @@ class Session(models.Model):
             freq=self.freq,
             end=self.planned_shutdown,
             session=self)
-        ll.run()
+        if self.use_websocket:
+            ll.run(websocket=True)
+        else:
+            ll.run(polling=True)
         return ll
 
     def stop(self):

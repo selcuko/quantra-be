@@ -1,5 +1,6 @@
 import json
 import django
+import pandas as pd
 django.setup()
 import threading
 import time
@@ -17,6 +18,7 @@ from quantapi.models import (Market, Order, Session, Signal,
 from strategy import Strategy, get_strategy
 from testman import TestManager
 from django.utils import timezone
+from websockets.sync.client import connect
 
 
 class LiveLoop:
@@ -58,6 +60,7 @@ class LiveLoop:
         self.loop_interval_s = interval_to_minutes(freq) * 60
         self.last_kline_dt = None
         self.order_lock = threading.Lock()
+        self.last_100_klines = None
 
     def precheck(self):
         """Prechecks before starting the live loop"""
@@ -69,15 +72,31 @@ class LiveLoop:
         if self.session.assets > self.imarket.assets.get(self.symbol.base, 0):
             logger.warning(f'Asset limit ({self.session.assets}) is greater than available assets ({self.imarket.assets.get(self.symbol.base, 0)}), updating asset limit to {self.session.assets}')
             self.session.assets = self.imarket.assets.get(self.symbol.base, 0)
+        last_klines = self.imarket.get_last_klines(self.symbol.name, self.freq)
+        if not last_klines:
+            logger.error(f'Cannot get last klines from {self.market.exchange_name}, exiting')
+            raise RuntimeError(f'Cannot get last klines from {self.market.exchange_name}, exiting')
+        last_klines = OHLCVDataset(last_klines)
+        self.last_kline_dt = last_klines.index[-1].to_pydatetime()
+        self.session.last_kline_timestamp = self.last_kline_dt
+        self.last_kline = last_klines.iloc[-1].to_dict()
+        self.last_100_klines = last_klines
+        self.session.save()
 
-    def run(self):
+    def run(self, **kwargs):
         """Fire and forget function to start the live loop and keep it running in a seperate thread."""
         if self.running and self.thread:
             raise RuntimeError(f'Live loop is already running in thread {self.thread.name}, id={self.thread.ident}')
+        if kwargs.get('polling') == kwargs.get('websocket') == True:
+            raise RuntimeError('You must choose either polling or websocket')
         self.precheck()
         self.will_stop = False
         self.running = True
-        self.thread = threading.Thread(target=self.__run, name=f'LL:{self.symbol.base}:{self.freq.replace(" ", "")}@{self.market.exchange_name}')
+        if kwargs.get('websocket'):
+            self.thread = threading.Thread(target=self.__run_websocket, name=f'LL:{self.symbol.base}:{self.freq.replace(" ", "")}@{self.market.exchange_name}')
+            self.session.use_websocket = True
+        else:
+            self.thread = threading.Thread(target=self.__run_polling, name=f'LL:{self.symbol.base}:{self.freq.replace(" ", "")}@{self.market.exchange_name}')
         self.thread.start()
         self.session.started = datetime.now(tz=pytz.UTC)
         self.session.thread_id = self.thread.ident
@@ -88,7 +107,7 @@ class LiveLoop:
         self.will_stop = True
         self.session.planned_shutdown = datetime.now(tz=pytz.UTC)
 
-    def __run(self):
+    def __run_polling(self):
         MAX_FAILED_KLINE_REQUESTS = 10
         last_klines = []
         failed_kline_requests = 0
@@ -106,31 +125,64 @@ class LiveLoop:
                 if failed_kline_requests > MAX_FAILED_KLINE_REQUESTS:
                     logger.error(f'Cannot get last klines, failed {failed_kline_requests} times for {self.market.exchange_name}, exiting')
                     break
+                if not self.last_kline_dt:
+                    self.last_kline_dt = datetime.now(tz=pytz.UTC)
                 next_candle_time = self.last_kline_dt + timedelta(minutes=interval_to_minutes(self.freq))
                 logger.error(f'Failed to fetch last klines from {self.market.exchange_name}, skipping this candle ({next_candle_time})')
                 continue
             failed_kline_requests = 0
-            raw_dataset = OHLCVDataset(last_klines)
-            if self.use_heikin_ashi:
-                raw_dataset = raw_dataset.convert_to_heikin_ashi()
-            strategy_dataset = self.strategy(raw_dataset)
+            last_klines = OHLCVDataset(last_klines)
+            last_kline = {**last_klines.iloc[-1].to_dict(), 'time': last_klines.index[-1].to_pydatetime()}
+            processed_ok = self.on_candle(last_kline)
 
-            self.last_kline_dt = strategy_dataset.index[-1].to_pydatetime()
-            if self.session.last_kline_timestamp and self.last_kline_dt <= self.session.last_kline_timestamp:
-                continue
-            self.last_kline = {'time': self.last_kline_dt.timestamp(), **strategy_dataset.iloc[-1].to_dict()}
-            positive_buy_signal = self.last_kline['buy']
-            positive_sell_signal = self.last_kline['sell']
+    def __run_websocket(self):
+        ws_uri = self.imarket.get_websocket_uri(self.symbol.name, self.freq)
+        try:
+            ws = connect(ws_uri)
+            while True:
+                if self.should_stop():
+                    break
+                payload_str = ws.recv()
+                payload = json.loads(payload_str)
+                candle = self.imarket.format_ws_candle(payload)
+                if candle['last']:
+                    self.on_candle(candle)
+        except Exception as e:
+            logger.error(f'Failed to connect to websocket {ws_uri}, exiting', exc_info=True)
+            return
 
-            if positive_buy_signal:
-                self.buy(self.last_kline)
-            
-            elif positive_sell_signal:
-                self.sell(self.last_kline)
-            
-            self.session.last_kline_timestamp = self.last_kline_dt
-            self.session.last_price = self.last_kline['close']
-            self.session.save()
+    def on_candle(self, candle):
+        try:
+            self.last_kline_dt = candle['time']
+        except KeyError:
+            logger.error(f'Invalid candle received: {candle}')
+            return False
+        if self.session.last_kline_timestamp and self.last_kline_dt <= self.session.last_kline_timestamp:
+            return
+        if self.last_100_klines is None:
+            raise RuntimeError('last_100_klines is not initialized')
+        self.last_100_klines = (pd.concat([self.last_100_klines, OHLCVDataset([candle])]))
+        self.last_100_klines = self.last_100_klines.iloc[-100:]
+        raw_dataset = OHLCVDataset(self.last_100_klines, pass_thru=True)
+        if self.use_heikin_ashi:
+            raw_dataset = raw_dataset.convert_to_heikin_ashi()
+        strategy_dataset = self.strategy(raw_dataset)
+
+        self.last_kline_dt = strategy_dataset.index[-1].to_pydatetime()
+        
+        self.last_kline = {'time': self.last_kline_dt.timestamp(), **strategy_dataset.iloc[-1].to_dict()}
+        positive_buy_signal = self.last_kline['buy']
+        positive_sell_signal = self.last_kline['sell']
+
+        if positive_buy_signal:
+            self.buy(self.last_kline)
+        
+        elif positive_sell_signal:
+            self.sell(self.last_kline)
+        
+        self.session.last_kline_timestamp = self.last_kline_dt
+        self.session.last_price = self.last_kline['close']
+        self.session.save()
 
         self.running = False
         self.session.ended = datetime.now(tz=pytz.UTC)
@@ -396,10 +448,11 @@ if __name__ == '__main__':
         freq='1 min',
         use_heikin_ashi=True)
     ll.run()
+    ll.idle()
     while True:
         try:
             td = timezone.now() - ll.session.started
-            print('Time elapsed:', td)
+            #print('Time elapsed:', td)
             """if td > timedelta(seconds=5):
                 last_kline = ll.last_kline
                 ll.buy(last_kline)

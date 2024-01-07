@@ -26,11 +26,34 @@ class IMarket:
         Returns:
             dict: dict representing this market instance
         """
-        raise NotImplementedError
+        raise NotImplementedError(f'{self.name} does not implement json()')
+
+    def get_websocket_uri(self, symbol:'Symbol|str', interval:str) -> str:
+        """Get websocket uri for given symbol and interval
+
+        Args:
+            symbol (ExchangeSymbol | str): symbol object or symbol name
+            interval (str): in "1 min" format
+
+        Returns:
+            str: websocket uri
+        """
+        raise NotImplementedError(f'{self.name} does not implement get_websocket_uri()')
+    
+    def format_ws_candle(self, payload:dict) -> dict:
+        """Format websocket candle payload to standard format
+
+        Args:
+            payload (dict): websocket payload
+
+        Returns:
+            dict: standard candle
+        """
+        raise NotImplementedError(f'{self.name} does not implement format_ws_candle()')
 
     def get_account(self):
         """Sets capital, assets etc. on market instance."""
-        raise NotImplementedError
+        raise NotImplementedError(f'{self.name} does not implement get_account()')
 
     def has_symbol(self, symbol:str) -> bool:
         """Check if symbol is present in this market

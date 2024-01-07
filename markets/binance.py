@@ -62,6 +62,30 @@ class BinanceMarket(IMarket):
             'spot_trading_enabled': self.spot_trading_enabled,
         }
 
+    def get_websocket_uri(self, symbol:'Symbol|str', interval:str) -> str:
+        if isinstance(symbol, str):
+            symbol = self._get_symbol_from_name(symbol)
+        symbol_name = self._format_symbol(symbol.name).lower()
+        return f'wss://stream.binance.com:9443/ws/{symbol_name}@kline_{self._format_interval(interval)}'
+
+    def format_ws_candle(self, payload:dict) -> dict:
+        candle = payload['k']
+        return {
+            'time': datetime.fromtimestamp(candle['t']/1000, tz=pytz.UTC).replace(second=0, microsecond=0),
+            'start': candle['t'],
+            'end': candle['T'],
+            'open': float(candle['o']),
+            'high': float(candle['h']),
+            'low': float(candle['l']),
+            'close': float(candle['c']),
+            'volume': float(candle['v']),
+            'trades': int(candle['n']),
+            'last': candle['x'],
+            'quote_asset_volume': float(candle['q']),
+            'taker_buy_base_asset_volume': float(candle['V']),
+            'taker_buy_quote_asset_volume': float(candle['Q']),
+        }
+
     def _standardize_klines(self, klines:list[list]) -> list[list]:
         return [[ self._standardize_datetime(kline[0]),
                   float(kline[1]),
