@@ -28,6 +28,7 @@ SYMKEY = b'REDACTED'
 DEBUG = True
 
 ALLOWED_HOSTS = ['*']
+CSRF_TRUSTED_ORIGINS = ['https://example.org', 'https://example.com']
 WHITELISTED_DEFAULT_EMAILS = ['user@example.com', 'user2@example.com']
 
 # Application definition
