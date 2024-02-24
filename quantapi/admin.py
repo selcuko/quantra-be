@@ -36,7 +36,7 @@ class SignalAdmin(admin.ModelAdmin):
 
 class OrderAdmin(admin.ModelAdmin):
     list_display = ('__str__', 'oid', 'status', 'order_type', 'symbol', 'timestamp', 'force')
-    search_fields = ('session',)
+    search_fields = ('signal__session',)
     list_filter = ('status', 'order_type', 'force')
 
 

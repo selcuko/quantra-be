@@ -28,14 +28,18 @@ class SessionAnalytics:
         if not self.open_position:
             return None
         in_price = self.open_position.price
-        return self.session.last_price or 0 - in_price
+        if not self.session.last_price:
+            return None
+        return self.session.last_price - in_price
 
     @property
     def open_position_delta_pct(self):
         if not self.open_position:
             return None
         in_price = self.open_position.price
-        return (self.session.last_price or 0 - in_price) / in_price * 100
+        if not self.session.last_price:
+            return None
+        return (self.session.last_price - in_price) / in_price * 100
 
     @property
     def initial_value(self):
