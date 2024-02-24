@@ -254,7 +254,7 @@ class SessionTerminateView(View):
 
 class MarketListView(View):
     def get(self, request):
-        markets = Market.objects.filter(trading_enabled=True).order_by('exchange_name')
+        markets = Market.objects.filter(trading_enabled=True, mainnet_enabled=True).order_by('exchange_name')
         return render(request, 'market-list.html', {'markets': markets})
 
 

@@ -8,95 +8,35 @@
                     Name
                 </th>
                 <th scope="col" class="px-6 py-3">
-                    Exchange
-                </th>
-                <th scope="col" class="px-6 py-3 whitespace-nowrap">
-                    Config used?
+                    Balance
                 </th>
                 <th scope="col" class="px-6 py-3">
-                    MainNet enabled
-                </th>
-                <th scope="col" class="px-6 py-3">
-                    TestNet enabled
+                    Equity
                 </th>
             </tr>
         </thead>
         <tbody>
             {% for market in markets %}
             <tr class="bg-white border-b dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-200    ">
-                <td class="font-medium text-gray-900 whitespace-nowrap dark:text-white px-6 py-4">
-                    <a href="{% url 'market-detail' pk=market.id %}">{{ market.friendly_name }}</a>
+                <td class="font-medium text-gray-900 whitespace-nowrap dark:text-white sm:p-5 p-3">
+                    <a href="{% url 'market-detail' pk=market.id %}">{{ market.exchange_name }} ({{ market.friendly_name }})</a>
                 </td>
-                <td class="px-6 py-4">
-                    <a href="{% url 'market-detail' pk=market.id %}">{{ market.exchange_name }}</a>
+                <td class="sm:p-5 p-3">
+                    <a href="{% url 'market-detail' pk=market.id %}">$ {{ market.usdt|floatformat:2|default:'-' }}</a>
                 </td>
-                <td class="px-6 py-4">
-                    <a href="{% url 'market-detail' pk=market.id %}">{{ market.config_enc|yesno }}</a>
-                </td>
-                <td class="px-6 py-4">
-                    <a href="{% url 'market-detail' pk=market.id %}">{{ market.mainnet_enabled }}</a>
-                </td>
-                <td class="px-6 py-4">
-                    <a href="{% url 'market-detail' pk=market.id %}">{{ market.testnet_enabled }}</a>
+                <td class="sm:p-5 p-3">
+                    <a href="{% url 'market-detail' pk=market.id %}">$ {{ market.equity|floatformat:2|default:'-'}}</a>
                 </td>
             </tr>
             </a>
             {% empty %}
             <tr class="bg-white border-b border-t dark:bg-gray-800 dark:border-gray-700">
                 <td class="hyphens-auto px-6 py-4 whitespace-nowrap">
-                    No sessions yet.
+                    No markets yet.
                 </td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
-    <nav class="flex items-center justify-between p-4" aria-label="Table navigation">
-        <span class="text-sm font-normal text-gray-500 dark:text-gray-400">Page <span
-                class="font-semibold text-gray-900 dark:text-white">{{ sessions.number }}</span> of <span
-                class="font-semibold text-gray-900 dark:text-white">{{ sessions.paginator.num_pages }}</span></span>
-        <ul class="inline-flex -space-x-px text-sm h-8">
-            {% if sessions.has_previous %}
-            <li>
-                <a href="?page=1"
-                    class="flex items-center justify-center px-3 h-8 ml-0 leading-tight text-gray-500 bg-white border border-gray-300 rounded-l-lg hover:bg-gray-100 hover:text-gray-700 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white">&laquo;
-                    First</a>
-            </li>
-            <li>
-                <a href="?page={{ sessions.previous_page }}"
-                    class="flex items-center justify-center px-3 h-8 leading-tight text-gray-500 bg-white border border-gray-300 hover:bg-gray-100 hover:text-gray-700 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white">Previous</a>
-            </li>
-            {% else %}
-            <li>
-                <a href="?page=1"
-                    class="flex items-center justify-center px-3 h-8 ml-0 leading-tight text-gray-500 bg-white border border-gray-300 rounded-l-lg hover:bg-gray-100 hover:text-gray-700 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white">&laquo;
-                    First</a>
-            </li>
-            {% endif %}
-
-            <li>
-                <a href="#" aria-current="page"
-                    class="flex items-center justify-center px-3 h-8 text-blue-600 border border-gray-300 bg-blue-50 hover:bg-blue-100 hover:text-blue-700 dark:border-gray-700 dark:bg-gray-700 dark:text-white">
-                    {{ sessions.number }}</a>
-            </li>
-
-            {% if sessions.has_next %}
-            <li>
-                <a href="?page={{sessions.next_page_number }}"
-                    class="flex items-center justify-center px-3 h-8 leading-tight text-gray-500 bg-white border border-gray-300 hover:bg-gray-100 hover:text-gray-700 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white">Next</a>
-            </li>
-            <li>
-                <a href="?page={{ sessions.paginator.num_pages }}"
-                    class="disabled flex items-center justify-center px-3 h-8 leading-tight text-gray-500 bg-white border border-gray-300 rounded-r-lg hover:bg-gray-100 hover:text-gray-700 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white">Last
-                    &raquo;</a>
-            </li>
-            {% else %}
-            <li>
-                <a href="?page={{ sessions.paginator.num_pages }}"
-                    class="disabled flex items-center justify-center px-3 h-8 leading-tight text-gray-500 bg-white border border-gray-300 rounded-r-lg hover:bg-gray-100 hover:text-gray-700 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white">Last
-                    &raquo;</a>
-            </li>
-            {% endif %}
-        </ul>
-    </nav>
 </div>
 {% endblock %}
