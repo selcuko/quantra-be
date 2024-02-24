@@ -165,7 +165,7 @@ class Session(models.Model):
     
     @property
     def analytics(self):
-        from analytics import SessionAnalytics
+        from quantapi.analytics import SessionAnalytics
         return SessionAnalytics(self)
 
     @property

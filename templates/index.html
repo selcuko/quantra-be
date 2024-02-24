@@ -50,7 +50,7 @@
                         Sessions / Open positions
                     </td>
                     <td class="whitespace-nowrap px-6 py-4">
-                        {{ analytics.session.sessions.count }} / {{ analytics.session.open_positions }}
+                        {{ analytics.session.count }} / {{ analytics.session.open_positions }}
                     </td>
                 </tr>
             </tbody>
@@ -74,7 +74,7 @@
                         Capital change
                     </th>
                     <th scope="col" class="px-6 py-3 whitespace-nowrap">
-                        Capital change percent
+                        Equity
                     </th>
                     <th scope="col" class="px-6 py-3 sm:p-2">
                         Duration
@@ -88,46 +88,46 @@
                 {% for session in sessions %}
                 <tr class="bg-white border-b dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-200    ">
                     <td class="font-medium text-gray-900 whitespace-nowrap dark:text-white px-6 py-4">
-                        <a href="{% url 'session-detail' pk=session.session.id %}">{{ session.session.symbol.name }}</a>
+                        <a href="{% url 'session-detail' pk=session.id %}">{{ session.symbol.name }}</a>
                     </td>
                     <td class="px-6 py-4">
-                        <a href="{% url 'session-detail' pk=session.session.id %}">{{ session.session.symbol.market }}</a>
+                        <a href="{% url 'session-detail' pk=session.id %}">{{ session.symbol.market }}</a>
                     </td>
                     <td class="px-6 py-4">
-                        <a href="{% url 'session-detail' pk=session.session.id %}">$ {{ session.capital_delta }}</a>
+                        <a href="{% url 'session-detail' pk=session.id %}">$ {{ session.analytics.capital_delta|default:'-' }} ( {{session.analytics.capital_delta_pct|default:'-' }}%)</a>
                     </td>
                     <td class="px-6 py-4">
-                        <a href="{% url 'session-detail' pk=session.session.id %}">% {{ session.capital_delta_pct }}</a>
+                        <a href="{% url 'session-detail' pk=session.id %}">$ {{ session.analytics.equity }}</a>
                     </td>
                     <td class="px-6 py-4">
-                        <a href="{% url 'session-detail' pk=session.session.id %}">{{ session.session.started|timesince }}</a>
+                        <a href="{% url 'session-detail' pk=session.id %}">{{ session.started|timesince }}</a>
                     </td>
-                    {% if session.session.status == 'ONGOING' %}
+                    {% if session.status == 'ONGOING' %}
                     <td class="px-6 py-4">
                         <span
                             class="nowrap bg-blue-100 text-blue-800 mr-2 px-2.5 py-0.5 rounded-full dark:bg-blue-900 dark:text-blue-300">
-                            {{ session.session.status }}
+                            {{ session.status }}
                         </span>
                     </td>
-                    {% elif session.session.status == 'CANCELLED' %}
+                    {% elif session.status == 'CANCELLED' %}
                     <td class="px-6 py-4">
                         <span
                             class="nowrap bg-red-100 text-red-800 mr-2 px-2.5 py-0.5 rounded-full dark:bg-red-900 dark:text-red-300">
-                            {{ session.session.status }}
+                            {{ session.status }}
                         </span>
                     </td>
-                    {% elif session.session.status == 'COMPLETED' %}
+                    {% elif session.status == 'COMPLETED' %}
                     <td class="px-6 py-4">
                         <span
                             class="nowrap bg-green-100 text-green-800 mr-2 px-2.5 py-0.5 rounded-full dark:bg-green-900 dark:text-green-300">
-                            {{ session.session.status }}
+                            {{ session.status }}
                         </span>
                     </td>
                     {% else %}
                     <td class="px-6 py-4">
                         <span
                             class="nowrap bg-gray-100 text-gray-800 mr-2 px-2.5 py-0.5 rounded-full dark:bg-gray-900 dark:text-gray-300">
-                            {{ session.session.status|default:'UNKNOWN' }}
+                            {{ session.status|default:'UNKNOWN' }}
                         </span>
                     </td>
                     {% endif %}
@@ -135,28 +135,27 @@
                 <tr class="bg-white border-b dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-200    ">
                     <td class="font-medium text-gray-900 whitespace-nowrap dark:text-white px-6 py-4"
                         style="width:100%">
-                        Total orders: {{ session.total_orders }} ({{ session.total_signals }} signals)
+                        orders/signals: {{ session.analytics.orders }}/{{ session.analytics.signals }}
                     </td>
                     <td class="font-medium text-gray-900 whitespace-nowrap dark:text-white px-6 py-4"
                         style="width:100%">
-                        Open position change: {{ session.open_position_delta }} ({{ session.open_position_delta_pct }}%)
+                        open pos change: {{ session.analytics.open_position_delta|default:'-' }} ({{ session.analytics.open_position_delta_pct|default:'-' }}%)
                     </td>
                     <td class="font-medium text-gray-900 whitespace-nowrap dark:text-white px-6 py-4"
                         style="width:100%">
-                        Current price: {{ session.current_price }}$ (updated {{
-                        session.session.last_kline_timestamp|timesince }} ago)
+                        price: $ {{ session.last_price|default:'-' }} ({{ session.last_kline_timestamp|timesince }} ago)
                     </td>
                     <td class="font-medium text-gray-900 whitespace-nowrap dark:text-white px-6 py-4"
                         style="width:100%">
-                        Frequency: {{ session.session.freq }}
+                        freq: {{ session.freq }}
                     </td>
                     <td class="font-medium text-gray-900 whitespace-nowrap dark:text-white px-6 py-4"
                         style="width:100%">
-                        Capital: {{ session.session.capital }} USDT
+                        capital: $ {{ session.capital }}
                     </td>
                     <td class="font-medium text-gray-900 whitespace-nowrap dark:text-white px-6 py-4"
                         style="width:100%">
-                        Assets: {{ session.session.assets }} {{ session.session.symbol.base }}
+                        assets: $ {{ session.assets }} {{ session.symbol.base }}
                     </td>
                 </tr>
                 </a>

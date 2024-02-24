@@ -7,7 +7,36 @@ class SessionAnalytics:
     """
     def __init__(self, session:Session) -> None:
         self.session = session
+
+    @property
+    def orders(self):
+        return Order.objects.filter(signal__session=self.session, status=Order.Status.FILLED).count()
     
+    @property
+    def signals(self):
+        return Signal.objects.filter(session=self.session).count()
+
+    @property
+    def open_position(self):
+        order = Order.objects.filter(signal__session=self.session, status=Order.Status.FILLED).last()
+        if order and order.signal.side == Signal.Side.BUY:
+            return order
+        return None
+
+    @property
+    def open_position_delta(self):
+        if not self.open_position:
+            return None
+        in_price = self.open_position.price
+        return self.session.last_price or 0 - in_price
+
+    @property
+    def open_position_delta_pct(self):
+        if not self.open_position:
+            return None
+        in_price = self.open_position.price
+        return (self.session.last_price or 0 - in_price) / in_price * 100
+
     @property
     def initial_value(self):
         """
@@ -44,7 +73,7 @@ class SessionAnalytics:
         return self.equity - self.initial_value
 
     @property
-    def equity_delta_percentage(self):
+    def equity_delta_pct(self):
         """
         Calculate the percentage change in equity for the session.
 
@@ -60,7 +89,7 @@ class SessionAnalytics:
         return self.session.capital - self.session.initial_capital
     
     @property
-    def capital_delta_percentage(self):
+    def capital_delta_pct(self):
         """
         Calculate the percentage change in capital for the session.
 
@@ -87,6 +116,9 @@ class TotalSessionAnalytics:
             if order and order.signal.side == Signal.Side.BUY:
                 count += 1
         return count
+    
+    def count(self):
+        return self.sessions.count()
 
 
 

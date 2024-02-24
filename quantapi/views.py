@@ -68,7 +68,7 @@ class HomeView(View):
         sa = TotalSessionAnalytics(sessions)
 
         return render(request, 'index.html', {
-            'sessions': session_ctx, 
+            'sessions': sessions, 
             'orders': recent_orders,
             'open_positions': total_open_positions,
             'analytics': { 'market': ma , 'session': sa },
