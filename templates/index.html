@@ -5,8 +5,8 @@
         display: block;
     }
 </style>
-<div class="grid lg:grid-cols-3 md:grid-cols-2">
-    <div class="border-l border-gray-200 col-span-3 row-span-1 overflow-x-auto overflow-y-auto">
+<div class="grid lg:grid-cols-1 md:grid-cols-1 sm:grid-cols-1">
+    <div class="border-l border-gray-200 col-span-1 row-span-1 overflow-x-auto overflow-y-auto">
         <table class="w-full text-sm text-left text-gray-500 dark:text-gray-400">
             <caption
                 class="p-5 text-lg font-semibold text-left text-gray-900 bg-white dark:text-white dark:bg-gray-800">
@@ -48,7 +48,7 @@
             </tbody>
         </table>
     </div>
-    <div class="lg:col-span-2 md:col-span-2 sm:col-span-3 row-span-2 relative overflow-x-auto">
+    <div class="lg:col-span-1 md:col-span-1 sm:col-span-1 row-span-1 relative overflow-x-auto">
         <table class="border-r border-gray-200 w-full text-sm text-left text-gray-500 dark:text-gray-400">
             <caption
                 class="p-5 sm:p-2 text-lg font-semibold text-left text-gray-900 bg-white dark:text-white dark:bg-gray-800">
@@ -239,69 +239,6 @@
                 <tr class="bg-white border-b border-t dark:bg-gray-800 dark:border-gray-700">
                     <td class="hyphens-auto px-6 py-4 whitespace-nowrap">
                         No orders yet.
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    <div class="border-l border-gray-200 col-span-1 row-span-1 overflow-x-auto overflow-y-auto">
-        <table class="w-full text-sm text-left text-gray-500 dark:text-gray-400">
-            <caption
-                class="p-5 text-lg font-semibold text-left text-gray-900 bg-white dark:text-white dark:bg-gray-800">
-                Recent signals
-            </caption>
-            <thead class="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
-                <tr>
-                    <th scope="col" class="px-6 py-3">
-                        Symbol
-                    </th>
-                    <th scope="col" class="px-6 py-3">
-                        Price
-                    </th>
-                    <th scope="col" class="px-6 py-3">
-                        Side
-                    </th>
-                    <th scope="col" class="px-6 py-3">
-                        Timestamp
-                    </th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for signal in signals %}
-                <tr class="bg-white border-b dark:bg-gray-800 dark:border-gray-700">
-                    <td class="hyphens-auto px-6 py-4 whitespace-nowrap">
-                        {{ signal.symbol.name }}
-                    </td>
-                    <td class="whitespace-nowrap px-6 py-4">
-                        $ {{ signal.display_price }}
-                    </td>
-                    <td class="px-6 py-4">
-                        {% if signal.side == 'BUY' %}
-                        <span
-                            class="nowrap bg-green-100 text-green-800 mr-2 px-2.5 py-0.5 rounded-full dark:bg-green-900 dark:text-green-300">
-                            {{ signal.side }}
-                        </span>
-                        {% elif signal.side == 'SELL' %}
-                        <span
-                            class="nowrap bg-red-100 text-red-800 mr-2 px-2.5 py-0.5 rounded-full dark:bg-red-900 dark:text-red-300">
-                            {{ signal.side }}
-                        </span>
-                        {% else %}
-                        <span
-                            class="nowrap bg-gray-100 text-gray-800 mr-2 px-2.5 py-0.5 rounded-full dark:bg-gray-900 dark:text-gray-300">
-                            {{ signal.side|default:'UNKNOWN' }}
-                        </span>
-                        {% endif %}
-
-                    </td>
-                    <td class="px-6 py-4 hyphens-none whitespace-nowrap">
-                        {{ signal.timestamp|date:"d-m-Y H:i:s" }}
-                </tr>
-                {% empty %}
-                <tr class="bg-white border-b border-t dark:bg-gray-800 dark:border-gray-700">
-                    <td class="hyphens-auto px-6 py-4 whitespace-nowrap">
-                        No signals yet.
                     </td>
                 </tr>
                 {% endfor %}
