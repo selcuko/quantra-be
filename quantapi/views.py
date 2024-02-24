@@ -12,6 +12,7 @@ from backtest import async_analyze
 from django.http import HttpResponse, JsonResponse, response
 from livetest import LiveLoop
 from markets.errors import InsufficientBalance, MarketDisabledTrading, SymbolNotInMarket
+from quantapi.analytics import MarketAnalytics
 from quantapi.models import (Backtest, Market, Order, Session, Signal,
                              Symbol, Strategy as StrategyModel)
 from strategy import get_strategy
@@ -27,17 +28,6 @@ def get_open_position(session):
         return last_order
     else:
         return None
-
-def calculate_session_profit(session, current_price):
-    # get capital delta from initial capital
-    if current_price:
-        current_equity = session.assets * current_price + session.capital
-        initial_equity = session.initial_capital + session.initial_assets * current_price
-        delta_equity = current_equity - initial_equity
-        delta_pct = delta_equity / initial_equity * 100
-        return delta_equity, delta_pct
-    else:
-        return 0, 0
 
 
 class HomeView(View):
@@ -74,21 +64,13 @@ class HomeView(View):
 
         recent_orders = Order.objects.filter(signal__session__in=sessions).order_by('-timestamp')[:8]
 
-        all_sessions = Session.objects.all()
-        total_delta_equity = 0
-        total_delta_pct = 0
-        for session in all_sessions:
-            current_price = session.last_price
-            delta_equity, delta_pct = calculate_session_profit(session, current_price)
-            total_delta_equity += delta_equity
-            total_delta_pct += delta_pct
+        ma = MarketAnalytics()
 
         return render(request, 'index.html', {
             'sessions': session_ctx, 
             'orders': recent_orders,
             'open_positions': total_open_positions,
-            'total_delta_equity': total_delta_equity,
-            'total_delta_pct': total_delta_pct,
+            'analytics': { 'market': ma },
             'total_open_positions': total_open_positions,
             'total_capital': sum([session.capital for session in sessions]),
         })

@@ -16,18 +16,18 @@
             <tbody>
                 <tr class="bg-white border-b">
                     <td class="hyphens-auto px-6 py-4 whitespace-nowrap">
-                        Total capital change
+                        Available capital
                     </td>
                     <td class="whitespace-nowrap px-6 py-4">
-                        {{ total_delta_equity }}$
+                        $ {{ analytics.market.capital|floatformat:2 }}
                     </td>
                 </tr>
                 <tr class="bg-white border-b">
                     <td class="hyphens-auto px-6 py-4 whitespace-nowrap">
-                        Total capital change percent
+                        Equity
                     </td>
                     <td class="whitespace-nowrap px-6 py-4">
-                        {{ total_delta_pct }}%
+                        $ {{ analytics.market.equity|floatformat:2 }}
                     </td>
                 </tr>
                 <tr class="bg-white border-b">

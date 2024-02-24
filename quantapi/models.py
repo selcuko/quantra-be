@@ -26,6 +26,12 @@ class Market(models.Model):
     mainnet_enabled = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     symbols: models.QuerySet['Symbol']
+    key_expiry_date = models.DateTimeField(null=True, blank=True, help_text='Date when the API key for this market will expire.')
+    usdt = models.FloatField(null=True, blank=True, help_text='USDT balance in this market')
+    assets = models.TextField(null=True, blank=True, help_text='Assets in this market')
+    equity = models.FloatField(null=True, blank=True, help_text='Equity in this market')
+    prices = models.TextField(null=True, blank=True, help_text='Prices of symbols in this market')
+    assets_updated_at = models.DateTimeField(null=True, blank=True, help_text='Last time assets were updated')
 
     def __str__(self):
         return str(self.friendly_name or self.exchange_name)
@@ -65,7 +71,6 @@ class Market(models.Model):
         self.config_enc = f.encrypt(json.dumps(value).encode()).decode()
 
 class Symbol(models.Model):
-    # unique constraint on (name, market)
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=['name', 'market'], name='unique_symbol')
@@ -153,6 +158,7 @@ class Session(models.Model):
     use_websocket = models.BooleanField(default=False)
     strategy_parameters = models.TextField(null=True, blank=True, help_text='JSON string of parameters for this strategy, leave blank to use defaults.')
     details = models.TextField(null=True, blank=True, help_text='JSON string of session details from market')
+    initial_price = models.FloatField(null=True, blank=True)
 
     def __str__(self):
         return f'{self.strategy} - {self.symbol} - {self.status}'

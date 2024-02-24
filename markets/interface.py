@@ -1,10 +1,13 @@
 from datetime import datetime
+import json
 from typing import TYPE_CHECKING, Literal, Optional
 
-from markets.helper import authentication_required
+from requests import get
 
+from markets.helper import authentication_required
+from django.utils import timezone
 if TYPE_CHECKING:
-    from quantapi.models import Order, Symbol
+    from quantapi.models import Order, Symbol, Market as DBMarket
 
 
 class IMarket:
@@ -16,7 +19,8 @@ class IMarket:
     capital: float
     assets: dict[str, float]
     commission: dict[str, float]
-    def __init__(self, config:Optional[dict]=None):
+    market: Optional['DBMarket']
+    def __init__(self, config:Optional[dict]=None, market:Optional['DBMarket']=None):
         """Initialize a market instance with config if provided."""
         raise NotImplementedError
     
@@ -191,4 +195,21 @@ class IMarket:
             list[list]: list of OHLCV candles
         """
         raise NotImplementedError
+
+    
+    def get_current_prices(self, save=True) -> dict:
+        raise NotImplemented
+
+    def get_equity(self, save=True) -> float:
+        raise NotImplemented
+
+    def cache_to_db(self):
+        if self.market:
+            self.market.usdt = self.capital
+            self.market.assets = json.dumps(self.assets)
+            self.market.assets_updated_at = timezone.now()
+            self.get_current_prices(save=False)
+            self.get_equity(save=False)
+            self.market.save()
+        return
 

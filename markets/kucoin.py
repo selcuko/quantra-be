@@ -27,13 +27,15 @@ class KucoinMarket(IMarket):
         self.spot_trading_enabled = False
         self.capital = 0
         self.assets = {}
-        self.market_model = market
-        if not self.market_model:
-            self.market_model = MarketModel.objects.filter(exchange_name=self.name).first()
+        self.market = market
+        self.trade = None
+        self.user = None
+        if not self.market:
+            self.market = MarketModel.objects.filter(exchange_name=self.name).first()
         self.commission = {}
         try:
             if self.authenticated:
-                self.market = Market(
+                self.kmarket = Market(
                     key=config['API_KEY'], 
                     secret=config['API_SECRET'], 
                     passphrase=config['API_PASSPHRASE'])
@@ -44,11 +46,9 @@ class KucoinMarket(IMarket):
                 self.user = User(
                     key=config['API_KEY'], 
                     secret=config['API_SECRET'], 
-                    passphrase=config['API_PASSPHRASE'])
+                    passphrase=config['API_PASSPHRASE']) 
             else:
-                self.market = Market()
-                self.trade = None
-                self.user = None
+                self.kmarket = Market()               
         except Exception as e:
             logger.fatal(f'Error while initializing {self.name}', exc_info=True)
             raise
@@ -117,7 +117,7 @@ class KucoinMarket(IMarket):
     def _prep_symbol(self, symbol:dict) -> 'Symbol':
         from quantapi.models import Symbol
         return Symbol(
-            market=self.market_model,
+            market=self.market,
             name = self._standardize_symbol(symbol['symbol']),
             base = symbol['baseCurrency'],
             quote = symbol['quoteCurrency'],
@@ -152,7 +152,7 @@ class KucoinMarket(IMarket):
         else:
             calculated_end = start + timedelta(minutes=interval_to_minutes(interval) * limit)
         try:
-            klines = self.market.get_kline(
+            klines = self.kmarket.get_kline(
                 symbol=self._format_symbol(symbol),
                 kline_type=self._format_interval(interval),
                 startAt=self._format_datetime(start),
@@ -192,7 +192,7 @@ class KucoinMarket(IMarket):
     
     def get_symbols(self) -> dict[str, 'Symbol']:
         from quantapi.models import Symbol
-        symbol_list = self.market.get_symbol_list_v2()
+        symbol_list = self.kmarket.get_symbol_list_v2()
         if not symbol_list:
             logger.error(f'No symbols found on {self.name}')
             return {}
@@ -389,4 +389,26 @@ class KucoinMarket(IMarket):
             logger.error(f'No assets found for account, spot trading disabled on {self.name}')
         if not self.capital:
             logger.error(f'No capital (USDT) found for account on {self.name}')
+    
+    @authentication_required
+    def get_current_prices(self, save=True) -> dict:
+        all_tickers = self.kmarket.get_all_tickers()
+        if not all_tickers:
+            return {}
+        prices = { self._standardize_symbol(ticker['symbol']): float(ticker['last']) for ticker in all_tickers['ticker'] if ticker['symbol'].endswith('USDT')}
+        if self.market and self.market.prices != prices:
+            self.market.prices = json.dumps(prices)
+            if save:
+                self.market.save()
+        return prices
+
+    @authentication_required
+    def get_equity(self, save=True) -> float:
+        prices = self.get_current_prices(save=False)
+        equity = self.capital + sum([ self.assets.get(asset, 0) * prices.get(asset+'-USDT', 0) for asset in self.assets ])
+        if self.market and self.market.equity != equity:
+            self.market.equity = equity
+            if save:
+                self.market.save()
+        return equity
 

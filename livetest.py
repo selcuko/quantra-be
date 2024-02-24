@@ -138,6 +138,7 @@ class LiveLoop:
         self.session.ended = datetime.now(tz=pytz.UTC)
         self.session.status = Session.Status.COMPLETED
         self.session.save()
+        self.imarket.cache_to_db()
 
     def __run_websocket(self):
         ws_uri = self.imarket.get_websocket_uri(self.symbol.name, self.freq)

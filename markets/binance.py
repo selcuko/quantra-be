@@ -379,3 +379,22 @@ class BinanceMarket(IMarket):
             logger.error('`balances` key not found in account data, revise Binance interface')
         if not self.spot_trading_enabled:
             logger.error('Spot trading is not enabled on Binance account')
+
+    @authentication_required
+    def get_current_prices(self, save=True) -> dict:
+        prices = { self._standardize_symbol(ticker['symbol']): float(ticker['price']) for ticker in self.client.get_all_tickers() if ticker['symbol'].endswith('USDT')}
+        if self.market and self.market.prices != prices:
+            self.market.prices = json.dumps(prices)
+            if save:
+                self.market.save()
+        return prices
+
+    @authentication_required
+    def get_equity(self, save=True) -> float:
+        prices = self.get_current_prices(save=False)
+        equity = self.capital + sum([ self.assets.get(asset, 0) * prices.get(asset+'-USDT', 0) for asset in self.assets ])
+        if self.market and self.market.equity != equity:
+            self.market.equity = equity
+            if save:
+                self.market.save()
+        return equity

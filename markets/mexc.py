@@ -1,7 +1,6 @@
 import hashlib
 import hmac
 import json
-from pprint import pprint
 
 
 import time
@@ -288,3 +287,31 @@ class MEXCMarket(IMarket):
         except:
             logger.error(f'Error while getting order on {self.name}', exc_info=True)
             raise
+
+    @authentication_required
+    def get_current_prices(self, save=True) -> dict:
+        uri = f'{self.url}/api/v3/ticker/price'
+        response = self.session.get(uri)
+        if not response.ok:
+            raise Exception(f'Error while fetching current prices for {self.name}: {response.text}')
+        try:
+            all_tickers = response.json()
+        except:
+            return {}
+        
+        prices = { self._standardize_symbol(ticker['symbol']): float(ticker['price']) for ticker in all_tickers if ticker['symbol'].endswith('USDT') }
+        if self.market:
+            self.market.prices = json.dumps(prices)
+            if save:
+                self.market.save()
+        return prices
+
+    @authentication_required
+    def get_equity(self, save=True):
+        prices = self.get_current_prices(save=False)
+        equity = self.capital + sum([ self.assets.get(asset, 0) * prices.get(asset+'-USDT', 0) for asset in self.assets ])
+        if self.market:
+            self.market.equity = equity
+            if save:
+                self.market.save()
+        return equity
