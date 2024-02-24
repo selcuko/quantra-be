@@ -193,6 +193,8 @@ class LiveLoop:
         
         self.session.last_kline_timestamp = self.last_kline_dt
         self.session.last_price = self.last_kline['close']
+        if not self.session.initial_price:
+            self.session.initial_price = self.last_kline['close']
         self.session.save()
 
     def can_buy(self):
