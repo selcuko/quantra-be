@@ -22,6 +22,11 @@
         class="nowrap bg-red-100 font-regular text-3xl text-red-800 mr-2 px-2.5 py-0.5 rounded-full dark:bg-red-900 dark:text-red-300">
         {{ session.status }}
     </span>
+    {% elif session.status == 'PAUSED' %}
+    <span
+        class="nowrap bg-yellow-100 font-regular text-3xl text-yellow-800 mr-2 px-2.5 py-0.5 rounded-full dark:bg-yellow-900 dark:text-yellow-300">
+        {{ session.status }}
+    </span>
     {% else %}
     <span
         class="nowrap bg-gray-100 font-regular text-3xl text-gray-800 mr-2 px-2.5 py-0.5 rounded-full dark:bg-gray-900 dark:text-gray-300">
@@ -30,6 +35,10 @@
     {% endif %}
     {% if session.status == 'ONGOING' %}
     <a class="underline text-red-600" href="terminate/">TERMINATE</a>
+    <a class="underline text-yellow-600" href="pause/">PAUSE</a>
+    {% endif %}
+    {% if session.status == 'PAUSED' %}
+    <a class="underline text-green-600" href="resume/">RESUME</a>
     {% endif %}
     {% if not session.thread %}
     !! THREAD DIED !!

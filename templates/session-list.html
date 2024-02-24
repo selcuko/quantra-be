@@ -47,8 +47,8 @@
                         <option value="CANCELLED" {% if selected_status == 'CANCELLED' %} selected{% endif %}>Cancelled
                         </option>
                         <option value="ERROR" {% if selected_status == 'ERROR' %} selected{% endif %}>Error</option>
-                        <option value="COMPLETED" {% if selected_status == 'COMPLETED' %} selected{% endif %}>Completed
-                        </option>
+                        <option value="COMPLETED" {% if selected_status == 'COMPLETED' %} selected{% endif %}>Completed</option>
+                        <option value="PAUSED" {% if selected_status == 'PAUSED' %} selected{% endif %}>Paused</option>
                         <option value="ONGOING" {% if selected_status == 'ONGOING' %} selected{% endif %}>Ongoing</option>
                     </select>
                     {% csrf_token %}
@@ -177,6 +177,12 @@
                         {{ session.status }}
                     </span>
                 </td>
+                {% elif session.status == 'PAUSED' %}
+                <td class="px-6 py-4">
+                    <span
+                        class="nowrap bg-yellow-100 text-yellow-800 mr-2 px-2.5 py-0.5 rounded-full dark:bg-yellow-900 dark:text-yellow-300">
+                        {{ session.status }}
+                    </span>
                 {% else %}
                 <td class="px-6 py-4">
                     <span

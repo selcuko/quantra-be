@@ -121,6 +121,7 @@ class Session(models.Model):
         COMPLETED = 'COMPLETED', 'Completed'
         ERROR     = 'ERROR',     'Error'
         PURGED    = 'PURGED',    'Purged'
+        PAUSED    = 'PAUSED',    'Paused'
     class Freq(models.TextChoices):
         MIN1  = '1 min',  '1 minute'
         MIN3  = '3 min',  '3 minutes'

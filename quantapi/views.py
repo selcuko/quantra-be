@@ -252,6 +252,33 @@ class SessionTerminateView(View):
         return redirect('session-detail', pk=session.pk)
 
 
+class SessionPauseView(View):
+    def get(self, request, pk):
+        session = Session.objects.get(pk=pk)
+        if not session.status == Session.Status.ONGOING:
+            return render(request, 'session-detail.html', {'session': session, 'error': {
+                'type': 'error',
+                'text': 'Session is not ongoing.'
+            }})
+        session.status = Session.Status.PAUSED
+        session.save()
+        return redirect('session-detail', pk=session.pk)
+
+
+class SessionResumeView(View):
+    def get(self, request, pk):
+        session = Session.objects.get(pk=pk)
+        if not session.status == Session.Status.PAUSED:
+            return render(request, 'session-detail.html', {'session': session, 'error': {
+                'type': 'error',
+                'text': 'Session is not paused.'
+            }})
+        session.status = Session.Status.ONGOING
+        session.save()
+        session.resume()
+        return redirect('session-detail', pk=session.pk)
+
+
 class MarketListView(View):
     def get(self, request):
         markets = Market.objects.filter(trading_enabled=True).order_by('exchange_name')

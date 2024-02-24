@@ -136,7 +136,8 @@ class LiveLoop:
             processed_ok = self.on_candle(last_kline)
         self.running = False
         self.session.ended = datetime.now(tz=pytz.UTC)
-        self.session.status = Session.Status.COMPLETED
+        if self.session.status == Session.Status.ONGOING:
+            self.session.status = Session.Status.COMPLETED
         self.session.save()
         self.imarket.cache_to_db()
 
@@ -321,7 +322,7 @@ class LiveLoop:
         self.session.refresh_from_db()
         if self.session.planned_shutdown:
             before_end = datetime.now(tz=pytz.UTC) < self.session.planned_shutdown
-        return self.will_stop or not before_end and self.session.status != Session.Status.ONGOING
+        return self.will_stop or not before_end or self.session.status != Session.Status.ONGOING
 
     def wait_next_candle(self):
         """Waits until the next candle should be available"""
