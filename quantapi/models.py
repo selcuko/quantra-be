@@ -162,6 +162,7 @@ class Session(models.Model):
     initial_price = models.FloatField(null=True, blank=True)
     buy_enabled = models.BooleanField(default=True)
     sell_enabled = models.BooleanField(default=True)
+    initiated_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f'{self.strategy} - {self.symbol} - {self.status}'

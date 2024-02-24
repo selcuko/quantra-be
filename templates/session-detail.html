@@ -6,115 +6,128 @@
     }
 </style>
 
-<h1 class="p-4 text-5xl font-extrabold dark:text-white">{{ session.symbol.name }} @ {{ session.symbol.market.exchange_name }}
-    {% if session.status == 'COMPLETED' %}
-    <span
-        class="nowrap bg-green-100 font-regular text-3xl text-green-800 mr-2 px-2.5 py-0.5 rounded-full dark:bg-green-900 dark:text-green-300">
-        {{ session.status }}
-    </span>
-    {% elif session.status == 'ONGOING' %}
-    <span
-        class="nowrap bg-blue-100 font-regular text-3xl text-blue-800 mr-2 px-2.5 py-0.5 rounded-full dark:bg-blue-900 dark:text-blue-300">
-        {{ session.status }}
-    </span>
-    {% elif session.status == 'ERROR' or session.status == 'CANCELLED' %}
-    <span
-        class="nowrap bg-red-100 font-regular text-3xl text-red-800 mr-2 px-2.5 py-0.5 rounded-full dark:bg-red-900 dark:text-red-300">
-        {{ session.status }}
-    </span>
-    {% elif session.status == 'PAUSED' %}
-    <span
-        class="nowrap bg-yellow-100 font-regular text-3xl text-yellow-800 mr-2 px-2.5 py-0.5 rounded-full dark:bg-yellow-900 dark:text-yellow-300">
-        {{ session.status }}
-    </span>
-    {% else %}
-    <span
-        class="nowrap bg-gray-100 font-regular text-3xl text-gray-800 mr-2 px-2.5 py-0.5 rounded-full dark:bg-gray-900 dark:text-gray-300">
-        {{ session.status|default:'UNKNOWN' }}
-    </span>
-    {% endif %}
-    {% if session.status == 'ONGOING' %}
-    <a class="underline text-red-600" href="terminate/">TERMINATE</a>
-    <a class="underline text-yellow-600" href="pause/">PAUSE</a>
-    {% endif %}
-    {% if session.status == 'PAUSED' %}
-    <a class="underline text-green-600" href="resume/">RESUME</a>
-    {% endif %}
-    {% if not session.thread %}
-    !! THREAD DIED !!
-    {% else %}
-    {{ session.thread }}
-    {% endif %}
-</h1>
+<div class="m-3 p-3 flex flex-col">
+    <h1 class="flex items-center text-4xl font-extrabold dark:text-white">
+        {{ session.symbol.base }} @ {{ session.symbol.market.exchange_name }}
+        {% if session.status == 'ONGOING' %}
+        <span
+            class="bg-blue-100 text-blue-800 text-xl font-semibold me-2 px-2.5 py-0.5 rounded dark:bg-blue-200 dark:text-blue-800 ms-2 h-full">ONGOING</span>
+        {% elif session.status == 'PAUSED' %}
+        <span
+            class="bg-yellow-100 text-yellow-800 text-xl font-semibold me-2 px-2.5 py-0.5 rounded dark:bg-yellow-200 dark:text-yellow-800 ms-2">PAUSED</span>
+        {% else %}
+        <span
+            class="bg-red-100 text-red-800 text-xl font-semibold me-2 px-2.5 py-0.5 rounded dark:bg-red-200 dark:text-red-800 ms-2">STOPPED</span>
+        {% endif %}
 
-<div class="grid lg:grid-cols-2 sm:grid-cols-1 grid-auto-rows: 1fr">
-    <form action="update/" method="POST">
-        {% csrf_token %}
-        <div>
-            <label for="session_buy_enabled">Allow Buy</label>
-            <input type="checkbox" name="session_buy_enabled" {% if session.buy_enabled %}checked{% endif %}>
-        </div>
-        <div>
-            <label for="session_sell_enabled">Allow Sell</label>
-            <input type="checkbox" name="session_sell_enabled" {% if session.sell_enabled %}checked{% endif %}>
-        </div>
-        <input type="submit">
-    </form>
-    
-    <div class="col-span-1 row-span-1 overflow-x-auto p-4">
-        <div class="w-full"><code class="w-full text-sm sm:text-base inline-flex text-left items-center space-x-4 bg-gray-800 text-white rounded-lg p-4 pl-6">
-            <span class="flex gap-4">
-                <span class=" text-gray-500">
-                    $ market_config =
-                </span>
-        
-                <span class="flex-1">
+    </h1>
 
-<pre>{   "exchange": <span class="text-yellow-500">"{{ market.exchange_name }}"</span>,
-    "name": <span class="text-yellow-500">"{{ market.friendly_name }}"</span>,
-    "trading_enabled": <span class="text-blue-500">{{ market.trading_enabled }}</span>,
-    "mainnet_enabled": <span class="text-blue-500">{{ market.mainnet_enabled }}</span> }</pre>
-                </span>
-            </span>
-        </code></div>
-    </div>
-    <div class="p-4 col-span-1 row-span-1 overflow-x-auto">
-        
-        <article
-        class="h-full rounded-xl bg-gradient-to-r from-green-300 via-blue-500 to-purple-600 p-0.5 shadow-xl transition hover:bg-[length:400%_400%] hover:shadow-sm hover:[animation-duration:_4s]"
-        >
-        {% if open_position %}
-        <div class="rounded-[10px] bg-white p-4 sm:p-6">
-            <span class="block text-xs text-gray-500">
-              Waiting for sell signal
-            </span>
-          
-            <a href="#">
-              <h3 class="mt-0.5 text-lg font-medium text-gray-900">
-                Bought {{ session.symbol.name }} @ {{ open_position.price }} ( % {{ open_position_delta }} )
-              </h3>
-            </a>
-          </div>
-          {% else %}
-          <div class="rounded-[10px] bg-white p-4 sm:p-6">
-            <span class="block text-xs text-gray-500">
-              Waiting for buy signal
-            </span>
-          
-            <a href="#">
-              <h3 class="mt-0.5 text-lg font-medium text-gray-900">
-                No open position
-              </h3>
-            </a>
-          </div>
+    <div class="flex rounded-md w-full pt-4 items-center justify-between">
+        <div>
+            {% if session.status == 'ONGOING' %}
+            <form action="pause/" method="POST" style="display: inline;">
+                {% csrf_token %}
+                <button type="submit" class="text-white bg-yellow-700 hover:bg-yellow-800 focus:ring-4 focus:ring-yellow-300 font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2 dark:bg-yellow-600 dark:hover:bg-yellow-700 focus:outline-none dark:focus:ring-yellow-800">
+                    Pause
+                </button>
+            </form>
+            {% elif session.status == 'PAUSED' %}
+            <form action="resume/" method="POST" style="display: inline;">
+                {% csrf_token %}
+                <button type="submit" class="text-white bg-green-700 hover:bg-green-800 focus:ring-4 focus:ring-green-300 font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2 dark:bg-green-600 dark:hover:bg-green-700 focus:outline-none dark:focus:ring-green-800">
+                    Resume
+                </button>
+            </form>
             {% endif %}
-        </article>
-    
+            {% if session.status == 'ONGOING' or session.status == 'PAUSED' %}
+            <form action="stop/" method="POST" style="display: inline;">
+                {% csrf_token %}
+                <button type="submit" class="text-white bg-red-700 hover:bg-red-800 focus:ring-4 focus:ring-red-300 font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2 dark:bg-red-600 dark:hover:bg-red-700 focus:outline-none dark:focus:ring-red-800">
+                    Terminate
+                </button>
+            </form>
+            {% endif %}
+            <!-- a vertical seperator -->
+            <form action="update/" method="POST" style="display: inline;">
+                {% csrf_token %}
+                {% if session.buy_enabled %}
+                <input type="hidden" name="session_buy_enabled" value="0">
+                <button type="submit" class="text-white bg-amber-700 hover:bg-amber-500 focus:ring-4 focus:ring-amber-300 font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2 dark:bg-amber-600 dark:hover:bg-amber-700 focus:outline-none dark:focus:ring-amber-800">
+                    Disable BUY
+                </button>
+                {% else %}
+                <input type="hidden" name="session_buy_enabled" value="1">
+                <button type="submit" class="text-white bg-green-700 hover:bg-green-800 focus:ring-4 focus:ring-green-300 font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2 dark:bg-green-600 dark:hover:bg-green-700 focus:outline-none dark:focus:ring-green-800">
+                    Enable BUY
+                </button>
+                {% endif %}
+            </form>
+            <form action="update/" method="POST" style="display: inline;">
+                {% csrf_token %}
+                {% if session.sell_enabled %}
+                <input type="hidden" name="session_sell_enabled" value="0">
+                <button type="submit" class="text-white bg-amber-700 hover:bg-amber-800 focus:ring-4 focus:ring-amber-300 font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2 dark:bg-amber-600 dark:hover:bg-amber-700 focus:outline-none dark:focus:ring-amber-800">
+                    Disable SELL
+                </button>
+                {% else %}
+                <input type="hidden" name="session_sell_enabled" value="1">
+                <button type="submit" class="text-white bg-green-700 hover:bg-green-800 focus:ring-4 focus:ring-green-300 font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2 dark:bg-green-600 dark:hover:bg-green-700 focus:outline-none dark:focus:ring-green-800">
+                    Enable SELL
+                </button>
+                {% endif %}
+        </div>
+        {% if session.thread %}
+        <code>ThreadID {{ session.thread.ident }}</code>
+        {% else %}
+        <code class="text-red">Thread died!</code>
+        {% endif %}
     </div>
-    <div>
-        <h3>Capital delta % {{ capital_delta }}</h3>
-        <h3>Current price {{ current_price }} USDT (updated {{ session.last_kline_timestamp|timesince }} ago)</h3>
+</div>
+
+<div class="m-3">
+    <div class="flow-root rounded-lg border border-gray-300 p-3 shadow-sm">
+        <dl class="-my-3 divide-y divide-gray-100 text-sm">
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">Open pos.</dt>
+                <dd class="text-gray-700 sm:col-span-2">$ {{ session.analytics.open_position_delta|floatformat:2|default:'-' }} ({{ session.analytics.open_position_delta_pct|floatformat:2|default:'-' }}%)</dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">Capital / int. cap</dt>
+                <dd class="text-gray-700 sm:col-span-2">$ {{ session.capital|floatformat:2 }} ($ {{ session.initial_capital|floatformat:2 }})</dd>
+            </div>
+
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">Assets / int. assets</dt>
+                <dd class="text-gray-700 sm:col-span-2">{{ session.assets }} {{ session.symbol.base }} ({{ session.inital_assets|default:'0' }} {{ session.symbol.base }})</dd>
+            </div>
+
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">Equity change</dt>
+                <dd class="text-gray-700 sm:col-span-2">$ {{ session.analytics.equity_delta|floatformat:2|default:'-'}} ({{ session.analytics.equity_delta_pct|floatformat:2|default:'-' }}%)</dd>
+            </div>
+
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">Total equity</dt>
+                <dd class="text-gray-700 sm:col-span-2">$ {{ session.analytics.equity|floatformat:2 }}</dd>
+            </div>
+
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">Kline freq.</dt>
+                <dd class="text-gray-700 sm:col-span-2">{{ session.freq }}</dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">Duration (last run)</dt>
+                <dd class="text-gray-700 sm:col-span-2">{{ session.initiated_at|timesince }} ({{ session.started|timesince }})</dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">Market</dt>
+                <dd class="text-gray-700 sm:col-span-2">{{ session.symbol.market.friendly_name }} ({{ session.symbol.market.exchange_name }})</dd>
+            </div>
+        </dl>
     </div>
+</div>
+
+<div class="grid grid-cols-1 grid-auto-rows: 1fr">
     <div class="border-l border-gray-200 col-span-1 row-span-1 overflow-x-auto">
         <table class="w-full text-sm text-left text-gray-500 dark:text-gray-400">
             <caption
@@ -276,13 +289,6 @@
                 {% endfor %}
             </tbody>
         </table>
-    </div>
-    <div class="p-4 col-span-1 row-span-1 overflow-x-auto">
-        <form action="manage/" method="post">
-            {% csrf_token %}
-            <input type="hidden" name="action" id="" value="force_buy"></input>
-            <input class="text-lg font-semibold underline decoration-red-500" type="submit" name="force_buy" id="" value="Force Buy"></input>
-        </form>
     </div>
 </div>
 {% endblock %}

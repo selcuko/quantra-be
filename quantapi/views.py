@@ -240,7 +240,7 @@ class SessionManageView(View):
 class SessionTerminateView(View):
     def get(self, request, pk):
         session = Session.objects.get(pk=pk)
-        if not session.status == Session.Status.ONGOING:
+        if not session.status in [Session.Status.ONGOING, Session.Status.PAUSED]:
             return render(request, 'session-detail.html', {'session': session, 'error': {
                 'type': 'error',
                 'text': 'Session is not ongoing.'
@@ -284,8 +284,10 @@ class SessionUpdateView(View):
         session = Session.objects.get(pk=pk)
         # Checkboxes are not included in POST data if they are unchecked,
         # so we explicitly check for their presence.
-        session.buy_enabled = 'session_buy_enabled' in request.POST
-        session.sell_enabled = 'session_sell_enabled' in request.POST
+        if 'session_buy_enabled' in request.POST:
+            session.buy_enabled = bool(int(request.POST.get('session_buy_enabled', 0)))
+        if 'session_sell_enabled' in request.POST:
+            session.sell_enabled = bool(int(request.POST.get('session_sell_enabled', 0)))
         session.save()
         return redirect('session-detail', pk=session.pk)
       
