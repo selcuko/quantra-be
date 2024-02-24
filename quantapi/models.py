@@ -164,6 +164,11 @@ class Session(models.Model):
         return f'{self.strategy} - {self.symbol} - {self.status}'
     
     @property
+    def analytics(self):
+        from analytics import SessionAnalytics
+        return SessionAnalytics(self)
+
+    @property
     def thread(self):
         threads = threading.enumerate()
         for thread in threads:

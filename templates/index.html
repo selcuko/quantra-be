@@ -6,7 +6,7 @@
     }
 </style>
 <div class="grid lg:grid-cols-1 md:grid-cols-1 sm:grid-cols-1">
-    <div class="border-l border-gray-200 col-span-1 row-span-1 overflow-x-auto overflow-y-auto">
+    <div class="rounded-lg m-3 p-6 bg-white border border-gray-200 shadow block border-l border-gray-200 col-span-1 row-span-1 overflow-x-auto overflow-y-auto">
         <table class="w-full text-sm text-left text-gray-500 dark:text-gray-400">
             <caption
                 class="p-5 text-lg font-semibold text-left text-gray-900 bg-white dark:text-white dark:bg-gray-800">
@@ -32,18 +32,26 @@
                 </tr>
                 <tr class="bg-white border-b">
                     <td class="hyphens-auto px-6 py-4 whitespace-nowrap">
-                        Open positions
+                        Capital in sessions
                     </td>
                     <td class="whitespace-nowrap px-6 py-4">
-                        {{ total_open_positions|length }}
+                        $ {{ analytics.session.capital|floatformat:2 }}
                     </td>
-                    <tr class="bg-white border-b">
-                        <td class="hyphens-auto px-6 py-4 whitespace-nowrap">
-                            Total capital
-                        </td>
-                        <td class="whitespace-nowrap px-6 py-4">
-                            {{ total_capital }}$
-                        </td>
+                <tr class="bg-white border-b">
+                    <td class="hyphens-auto px-6 py-4 whitespace-nowrap">
+                        Equity in sessions
+                    </td>
+                    <td class="whitespace-nowrap px-6 py-4">
+                        $ {{ analytics.session.equity|floatformat:2 }}
+                    </td>
+                </tr>
+                <tr class="bg-white border-b">
+                    <td class="hyphens-auto px-6 py-4 whitespace-nowrap">
+                        Sessions / Open positions
+                    </td>
+                    <td class="whitespace-nowrap px-6 py-4">
+                        {{ analytics.session.sessions.count }} / {{ analytics.session.open_positions }}
+                    </td>
                 </tr>
             </tbody>
         </table>
@@ -51,7 +59,7 @@
     <div class="lg:col-span-1 md:col-span-1 sm:col-span-1 row-span-1 relative overflow-x-auto">
         <table class="border-r border-gray-200 w-full text-sm text-left text-gray-500 dark:text-gray-400">
             <caption
-                class="p-5 sm:p-2 text-lg font-semibold text-left text-gray-900 bg-white dark:text-white dark:bg-gray-800">
+                class="p-5 text-lg font-semibold text-left text-gray-900 bg-white dark:text-white dark:bg-gray-800">
                 Recent sessions
             </caption>
             <thead class="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
@@ -125,22 +133,29 @@
                     {% endif %}
                 </tr>
                 <tr class="bg-white border-b dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-200    ">
-                    <td class="font-medium text-gray-900 whitespace-nowrap dark:text-white px-6 py-4" style="width:100%">
+                    <td class="font-medium text-gray-900 whitespace-nowrap dark:text-white px-6 py-4"
+                        style="width:100%">
                         Total orders: {{ session.total_orders }} ({{ session.total_signals }} signals)
                     </td>
-                    <td class="font-medium text-gray-900 whitespace-nowrap dark:text-white px-6 py-4" style="width:100%">
+                    <td class="font-medium text-gray-900 whitespace-nowrap dark:text-white px-6 py-4"
+                        style="width:100%">
                         Open position change: {{ session.open_position_delta }} ({{ session.open_position_delta_pct }}%)
                     </td>
-                    <td class="font-medium text-gray-900 whitespace-nowrap dark:text-white px-6 py-4" style="width:100%">
-                        Current price: {{ session.current_price }}$ (updated {{ session.session.last_kline_timestamp|timesince }} ago)
+                    <td class="font-medium text-gray-900 whitespace-nowrap dark:text-white px-6 py-4"
+                        style="width:100%">
+                        Current price: {{ session.current_price }}$ (updated {{
+                        session.session.last_kline_timestamp|timesince }} ago)
                     </td>
-                    <td class="font-medium text-gray-900 whitespace-nowrap dark:text-white px-6 py-4" style="width:100%">
+                    <td class="font-medium text-gray-900 whitespace-nowrap dark:text-white px-6 py-4"
+                        style="width:100%">
                         Frequency: {{ session.session.freq }}
                     </td>
-                    <td class="font-medium text-gray-900 whitespace-nowrap dark:text-white px-6 py-4" style="width:100%">
+                    <td class="font-medium text-gray-900 whitespace-nowrap dark:text-white px-6 py-4"
+                        style="width:100%">
                         Capital: {{ session.session.capital }} USDT
                     </td>
-                    <td class="font-medium text-gray-900 whitespace-nowrap dark:text-white px-6 py-4" style="width:100%">
+                    <td class="font-medium text-gray-900 whitespace-nowrap dark:text-white px-6 py-4"
+                        style="width:100%">
                         Assets: {{ session.session.assets }} {{ session.session.symbol.base }}
                     </td>
                 </tr>

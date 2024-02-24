@@ -1,6 +1,4 @@
-
-
-from quantapi.models import Session, Market
+from quantapi.models import Order, Session, Market, Signal
 
 
 class SessionAnalytics:
@@ -68,6 +66,28 @@ class SessionAnalytics:
 
         """
         return (self.capital_delta / self.session.initial_capital) * 100
+
+
+class TotalSessionAnalytics:
+    def __init__(self, sessions=None) -> None:
+        self.sessions = sessions or Session.objects.filter(status=Session.Status.ONGOING)
+        self.sessions = self.sessions.exclude(symbol__market__mainnet_enabled=False)
+    
+    def capital(self):
+        return sum([session.capital for session in self.sessions])
+    
+    def equity(self):
+        return sum([session.assets * session.last_price for session in self.sessions if session.assets and session.last_price])
+    
+    def open_positions(self):
+        # return the number of open positions for the sessions (i.e. last order was a BUY with status FILLED)
+        count = 0
+        for session in self.sessions:
+            order = Order.objects.filter(signal__session=session, status=Order.Status.FILLED).last()
+            if order and order.signal.side == Signal.Side.BUY:
+                count += 1
+        return count
+
 
 
 class MarketAnalytics:

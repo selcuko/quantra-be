@@ -12,7 +12,7 @@ from backtest import async_analyze
 from django.http import HttpResponse, JsonResponse, response
 from livetest import LiveLoop
 from markets.errors import InsufficientBalance, MarketDisabledTrading, SymbolNotInMarket
-from quantapi.analytics import MarketAnalytics
+from quantapi.analytics import MarketAnalytics, TotalSessionAnalytics
 from quantapi.models import (Backtest, Market, Order, Session, Signal,
                              Symbol, Strategy as StrategyModel)
 from strategy import get_strategy
@@ -32,7 +32,7 @@ def get_open_position(session):
 
 class HomeView(View):
     def get(self, request):
-        sessions = Session.objects.filter(status=Session.Status.ONGOING).order_by('-started')
+        sessions = Session.objects.filter(status=Session.Status.ONGOING, symbol__market__mainnet_enabled=True).order_by('-started')
         session_ctx = []
         total_open_positions = []
         for session in sessions:
@@ -65,12 +65,13 @@ class HomeView(View):
         recent_orders = Order.objects.filter(signal__session__in=sessions).order_by('-timestamp')[:8]
 
         ma = MarketAnalytics()
+        sa = TotalSessionAnalytics(sessions)
 
         return render(request, 'index.html', {
             'sessions': session_ctx, 
             'orders': recent_orders,
             'open_positions': total_open_positions,
-            'analytics': { 'market': ma },
+            'analytics': { 'market': ma , 'session': sa },
             'total_open_positions': total_open_positions,
             'total_capital': sum([session.capital for session in sessions]),
         })
