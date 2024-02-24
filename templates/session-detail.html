@@ -48,6 +48,19 @@
 </h1>
 
 <div class="grid lg:grid-cols-2 sm:grid-cols-1 grid-auto-rows: 1fr">
+    <form action="update/" method="POST">
+        {% csrf_token %}
+        <div>
+            <label for="session_buy_enabled">Allow Buy</label>
+            <input type="checkbox" name="session_buy_enabled" {% if session.buy_enabled %}checked{% endif %}>
+        </div>
+        <div>
+            <label for="session_sell_enabled">Allow Sell</label>
+            <input type="checkbox" name="session_sell_enabled" {% if session.sell_enabled %}checked{% endif %}>
+        </div>
+        <input type="submit">
+    </form>
+    
     <div class="col-span-1 row-span-1 overflow-x-auto p-4">
         <div class="w-full"><code class="w-full text-sm sm:text-base inline-flex text-left items-center space-x-4 bg-gray-800 text-white rounded-lg p-4 pl-6">
             <span class="flex gap-4">

@@ -19,7 +19,7 @@ from django.contrib import admin
 from django.urls import include, path
 from django.conf.urls.static import static
 from quantapi.views import BacktestInitView, BacktestResultView, HomeView, MarketDetailView, MarketListView, OrderManagementView, RunningThreadsView, \
-    SessionInitView, SessionListView, SessionManageView, SessionTerminateView, SessionPauseView, SessionResumeView,SessionDetailView, WatchdogView, raw_market_data
+    SessionInitView, SessionListView, SessionManageView, SessionTerminateView, SessionPauseView, SessionResumeView, SessionUpdateView,SessionDetailView, WatchdogView, raw_market_data
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -31,6 +31,7 @@ urlpatterns = [
     path('session/<int:pk>/terminate/', SessionTerminateView.as_view(), name='session-terminate'),
     path('session/<int:pk>/pause/', SessionPauseView.as_view(), name='session-pause'),
     path('session/<int:pk>/resume/', SessionResumeView.as_view(), name='session-resume'),
+    path('session/<int:pk>/update/', SessionUpdateView.as_view(), name='session-update'),
     path('session/<int:pk>/manage/', SessionManageView.as_view(), name='session-manage'),
     path('markets/', MarketListView.as_view(), name='market-list'),
     path('market/<int:pk>/', MarketDetailView.as_view(), name='market-detail'),

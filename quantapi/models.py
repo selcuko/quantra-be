@@ -160,6 +160,8 @@ class Session(models.Model):
     strategy_parameters = models.TextField(null=True, blank=True, help_text='JSON string of parameters for this strategy, leave blank to use defaults.')
     details = models.TextField(null=True, blank=True, help_text='JSON string of session details from market')
     initial_price = models.FloatField(null=True, blank=True)
+    buy_enabled = models.BooleanField(default=True)
+    sell_enabled = models.BooleanField(default=True)
 
     def __str__(self):
         return f'{self.strategy} - {self.symbol} - {self.status}'

@@ -279,6 +279,17 @@ class SessionResumeView(View):
         return redirect('session-detail', pk=session.pk)
 
 
+class SessionUpdateView(View):
+    def post(self, request, pk):
+        session = Session.objects.get(pk=pk)
+        # Checkboxes are not included in POST data if they are unchecked,
+        # so we explicitly check for their presence.
+        session.buy_enabled = 'session_buy_enabled' in request.POST
+        session.sell_enabled = 'session_sell_enabled' in request.POST
+        session.save()
+        return redirect('session-detail', pk=session.pk)
+      
+
 class MarketListView(View):
     def get(self, request):
         markets = Market.objects.filter(trading_enabled=True, mainnet_enabled=True).order_by('exchange_name')
