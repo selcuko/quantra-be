@@ -91,7 +91,7 @@
                         <a href="{% url 'session-detail' pk=session.id %}">{{ session.symbol.name }}</a>
                     </td>
                     <td class="px-6 py-4">
-                        <a href="{% url 'session-detail' pk=session.id %}">{{ session.symbol.market }}</a>
+                        <a href="{% url 'session-detail' pk=session.id %}">{{ session.symbol.market.exchange_name }} ({{ session.symbol.market.friendly_name }})</a>
                     </td>
                     <td class="px-6 py-4">
                         <a href="{% url 'session-detail' pk=session.id %}">$ {{ session.analytics.equity_delta|floatformat:2|default:'-'}} ({{ session.analytics.equity_delta_pct|floatformat:2|default:'-' }}%)</a>
