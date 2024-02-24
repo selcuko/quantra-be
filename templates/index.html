@@ -71,7 +71,7 @@
                         Market
                     </th>
                     <th scope="col" class="px-6 py-3 whitespace-nowrap">
-                        Capital change
+                        Equity change
                     </th>
                     <th scope="col" class="px-6 py-3 whitespace-nowrap">
                         Equity
@@ -94,10 +94,10 @@
                         <a href="{% url 'session-detail' pk=session.id %}">{{ session.symbol.market }}</a>
                     </td>
                     <td class="px-6 py-4">
-                        <a href="{% url 'session-detail' pk=session.id %}">$ {{ session.analytics.capital_delta|floatformat:2|default:'-' }} ( {{session.analytics.capital_delta_pct|floatformat:2|default:'-' }}%)</a>
+                        <a href="{% url 'session-detail' pk=session.id %}">$ {{ session.analytics.equity_delta|floatformat:2|default:'-'}} ({{ session.analytics.equity_delta_pct|floatformat:2|default:'-' }}%)</a>
                     </td>
                     <td class="px-6 py-4">
-                        <a href="{% url 'session-detail' pk=session.id %}">$ {{ session.analytics.equity|floatformat:2|default:'-' }}</a>
+                        <a href="{% url 'session-detail' pk=session.id %}">$ {{ session.analytics.equity|floatformat:2 }}</a>
                     </td>
                     <td class="px-6 py-4">
                         <a href="{% url 'session-detail' pk=session.id %}">{{ session.started|timesince }}</a>
@@ -139,7 +139,7 @@
                     </td>
                     <td class="font-medium text-gray-900 whitespace-nowrap dark:text-white px-6 py-4"
                         style="width:100%">
-                        open pos change: $ {{ session.analytics.open_position_delta|floatformat:2|default:'-' }} ({{ session.analytics.open_position_delta_pct|default:'-' }}%)
+                        open pos change: $ {{ session.analytics.open_position_delta|floatformat:2|default:'-' }} ({{ session.analytics.open_position_delta_pct|floatformat:2|default:'-' }}%)
                     </td>
                     <td class="font-medium text-gray-900 whitespace-nowrap dark:text-white px-6 py-4"
                         style="width:100%">
@@ -151,11 +151,11 @@
                     </td>
                     <td class="font-medium text-gray-900 whitespace-nowrap dark:text-white px-6 py-4"
                         style="width:100%">
-                        capital: $ {{ session.capital|floatformat:2|default:'-' }}
+                        int.capt: $ {{ session.initial_capital|floatformat:2|default:'-' }}
                     </td>
                     <td class="font-medium text-gray-900 whitespace-nowrap dark:text-white px-6 py-4"
                         style="width:100%">
-                        assets: $ {{ session.assets }} {{ session.symbol.base }}
+                        assets: {{ session.assets }} {{ session.symbol.base }}
                     </td>
                 </tr>
                 </a>
