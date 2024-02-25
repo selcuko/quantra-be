@@ -8,6 +8,7 @@ from typing import Literal
 
 import pytz
 from kucoin.client import Market, Trade, User
+import requests
 
 from logger import logger
 from markets import IMarket
@@ -15,24 +16,23 @@ from markets.errors import InsufficientBalance, SymbolNotInMarket
 from markets.helper import authentication_required, float_to_precision
 from models import interval_to_minutes
 from quantapi.models import Order, Symbol, Market as MarketModel
+from websockets.sync.client import connect
 
 
 class KucoinMarket(IMarket):
     name = 'KUCOIN'
+    
     def __init__(self, config=None, market=None) -> None:
         if not config:
             config = {}
         self.authenticated = bool(config.get('API_KEY') and config.get('API_SECRET') and config.get('API_PASSPHRASE'))
-        self.testnet = False # KuCoin does not offer a TestNet at the moment (2023-09-22)
+        self.testnet = False  # KuCoin does not offer a TestNet at the moment (2023-09-22)
         self.spot_trading_enabled = False
         self.capital = 0
         self.assets = {}
-        self.market = market
-        self.trade = None
-        self.user = None
-        if not self.market:
-            self.market = MarketModel.objects.filter(exchange_name=self.name).first()
+        self.market = market or MarketModel.objects.filter(exchange_name=self.name).first()
         self.commission = {}
+        
         try:
             if self.authenticated:
                 self.kmarket = Market(
@@ -52,12 +52,107 @@ class KucoinMarket(IMarket):
         except Exception as e:
             logger.fatal(f'Error while initializing {self.name}', exc_info=True)
             raise
+        
         self.symbols = self.get_symbols()
+        
         if self.authenticated:
             self.get_account()
+        
+        self.stop_websocket_stream = False
     
     def __str__(self) -> str:
         return f'{self.name} (Authenticated: {self.authenticated})'
+
+    def get_websocket_token(self) -> str:
+        uri = 'https://api.kucoin.com/api/v1/bullet-public'
+        response = requests.post(uri)
+        if response.status_code != 200:
+            raise ValueError(f'Error while getting websocket token for {self.name}: {response.status_code} {response.text}')
+        token = response.json().get('data', {}).get('token')
+        if not token:
+            raise ValueError(f'Error while getting websocket token for {self.name}: {response.json()}')
+        return token
+    
+    def format_ws_candle(self, candle:dict) -> dict:      
+        return {
+            'time': candle['start'].astimezone(pytz.UTC),
+            'start': candle['start'].astimezone(pytz.UTC),
+            'end': candle['end'].astimezone(pytz.UTC),
+            'open': float(candle['open']),
+            'high': float(candle['high']),
+            'low': float(candle['low']),
+            'close': float(candle['close']),
+        }
+
+    def init_websocket(self, symbol:str, interval:str, callback:typing.Callable):
+        token = self.get_websocket_token()
+        conn_id = uuid.uuid4().hex
+        ws_uri = f'wss://ws-api-spot.kucoin.com/?token={token}&[connectId={conn_id}]'
+        interval_m = interval_to_minutes(interval)
+        ws = connect(ws_uri)
+        welcome = ws.recv()
+        if not json.loads(welcome)['type'] == 'welcome':
+            raise ValueError(f'Error while initializing websocket for {self.name}: {welcome}')
+        sub = {
+            "id": str(uuid.uuid4()),
+            "type": "subscribe",
+            "topic": f'/market/ticker:{symbol}',
+            "privateChannel": False,
+            "response": True 
+        }
+        ws.send(json.dumps(sub))
+        ack = json.loads(ws.recv())
+        if not ack.get('type') == 'ack':
+            raise ValueError(f'Error while subscribing to {symbol} on {self.name}: {ack}')
+        candle_interval = timedelta(minutes=interval_m)
+        current_candle_start = datetime.now().replace(second=0, microsecond=0)
+        current_candle_start -= timedelta(minutes=current_candle_start.minute % interval_m)
+        current_candle = None
+        last_ping = datetime.now()
+        while not self.stop_websocket_stream:
+            if last_ping < datetime.now() - timedelta(seconds=30):
+                ws.send(json.dumps({'id': str(uuid.uuid4()), 'type': 'ping'}))
+                last_ping = datetime.now()
+            try:
+                msg = json.loads(ws.recv(timeout=10))
+            except TimeoutError:
+                continue
+            if msg.get('type') == 'pong':
+                continue
+            ts = msg.get('data', {}).get('time')
+            dt = datetime.utcfromtimestamp(ts / 1000)
+            if current_candle is None:
+                current_candle = {
+                    'start': current_candle_start,
+                    'end': current_candle_start + candle_interval,
+                    'open': None,
+                    'high': None,
+                    'low': None,
+                    'close': None
+                }
+            if dt >= current_candle['end']:
+                current_candle = self.format_ws_candle(current_candle)
+                callback(current_candle)
+                current_candle_start += candle_interval
+                current_candle['start'] = current_candle_start
+                current_candle['end'] = current_candle_start + candle_interval
+                current_candle['open'] = None
+                current_candle['high'] = None
+                current_candle['low'] = None
+                current_candle['close'] = None
+            price = msg.get('data', {}).get('price')
+            if current_candle['open'] is None and price != 0:
+                current_candle['open'] = price
+            if current_candle['high'] is None or price > current_candle['high']:
+                current_candle['high'] = price
+            if current_candle['low'] is None or price < current_candle['low']:
+                current_candle['low'] = price
+            if price != 0:
+                current_candle['close'] = price
+
+        
+        
+
 
     def has_symbol(self, symbol:str) -> bool:
         if not self.symbols:
@@ -126,7 +221,6 @@ class KucoinMarket(IMarket):
             spot_trading_enabled = symbol['enableTrading'],
             margin_trading_enabled = symbol['isMarginEnabled'],
             details=json.dumps(symbol))
-
 
     def _prep_order(self, order:dict, symbol:'Symbol') -> 'Order':
         from quantapi.models import Order

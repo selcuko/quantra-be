@@ -4,7 +4,7 @@ import typing
 import uuid
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Literal, Optional
+from typing import Callable, Literal, Optional
 
 import pytz
 import requests
@@ -18,6 +18,8 @@ from models import interval_to_minutes
 from quantapi.models import Market
 if typing.TYPE_CHECKING:
     from quantapi.models import Symbol, Order
+from websockets.sync.client import connect
+
 
 class BinanceMarket(IMarket):
     name = 'BINANCE'
@@ -50,6 +52,8 @@ class BinanceMarket(IMarket):
         self.symbols = self.get_symbols()
         if self.authenticated:
             self.get_account()
+        
+        self.stop_websocket_strem = False
 
     def __str__(self) -> str:
         return f'{self.name} (Authenticated: {self.authenticated})'
@@ -72,8 +76,8 @@ class BinanceMarket(IMarket):
         candle = payload['k']
         return {
             'time': datetime.fromtimestamp(candle['t']/1000, tz=pytz.UTC).replace(second=0, microsecond=0),
-            'start': candle['t'],
-            'end': candle['T'],
+            'start': datetime.fromtimestamp(candle['t']/1000, tz=pytz.UTC).replace(second=0, microsecond=0),
+            'end': datetime.fromtimestamp(candle['T']/1000, tz=pytz.UTC).replace(second=0, microsecond=0),
             'open': float(candle['o']),
             'high': float(candle['h']),
             'low': float(candle['l']),
@@ -86,6 +90,19 @@ class BinanceMarket(IMarket):
             'taker_buy_quote_asset_volume': float(candle['Q']),
         }
 
+    def init_websocket(self, symbol:str, interval:str, callback:Callable):
+        ws_uri = self.get_websocket_uri(symbol, interval)
+        try:
+            ws = connect(ws_uri)
+            while not self.stop_websocket_strem:
+                data = json.loads(ws.recv())
+                candle = self.format_ws_candle(data)
+                if candle['last']:
+                    callback(candle)
+        except:
+            logger.error(f'Error while initializing websocket for {symbol} on {self.name}', exc_info=True)
+            raise
+                
     def _standardize_klines(self, klines:list[list]) -> list[list]:
         return [[ self._standardize_datetime(kline[0]),
                   float(kline[1]),

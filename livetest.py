@@ -93,7 +93,7 @@ class LiveLoop:
         self.will_stop = False
         self.running = True
         if kwargs.get('websocket'):
-            self.thread = threading.Thread(target=self.__run_websocket, name=f'LL:{self.symbol.base}:{self.freq.replace(" ", "")}@{self.market.exchange_name}')
+            self.thread = threading.Thread(target=self.__run_websocket, name=f'LLWS:{self.symbol.base}:{self.freq.replace(" ", "")}@{self.market.exchange_name}')
             self.session.use_websocket = True
         else:
             self.thread = threading.Thread(target=self.__run_polling, name=f'LL:{self.symbol.base}:{self.freq.replace(" ", "")}@{self.market.exchange_name}')
@@ -142,19 +142,10 @@ class LiveLoop:
         self.imarket.cache_to_db()
 
     def __run_websocket(self):
-        ws_uri = self.imarket.get_websocket_uri(self.symbol.name, self.freq)
         try:
-            ws = connect(ws_uri)
-            while True:
-                if self.should_stop():
-                    break
-                payload_str = ws.recv()
-                payload = json.loads(payload_str)
-                candle = self.imarket.format_ws_candle(payload)
-                if candle['last']:
-                    self.on_candle(candle)
+            self.imarket.init_websocket(self.symbol.name, self.freq, self.on_candle)
         except Exception as e:
-            logger.error(f'Failed to connect to websocket {ws_uri}, exiting', exc_info=True)
+            logger.error(f'Failed to connect to websocket {self.symbol.base} @ {self.market.exchange_name}, exiting', exc_info=True)
             self.session.status = Session.Status.ERROR
             self.session.details = repr(e)
         self.running = False

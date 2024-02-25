@@ -1,10 +1,6 @@
 from datetime import datetime
 import json
-from typing import TYPE_CHECKING, Literal, Optional
-
-from requests import get
-
-from markets.helper import authentication_required
+from typing import TYPE_CHECKING, Callable, Literal, Optional
 from django.utils import timezone
 if TYPE_CHECKING:
     from quantapi.models import Order, Symbol, Market as DBMarket
@@ -32,11 +28,11 @@ class IMarket:
         """
         raise NotImplementedError(f'{self.name} does not implement json()')
 
-    def get_websocket_uri(self, symbol:'Symbol|str', interval:str) -> str:
-        """Get websocket uri for given symbol and interval
+    def init_websocket(self, symbol:str, interval:str, callback:Callable):
+        """Blocking (sync) function to initialize a websocket for given symbol and interval. Run in a thread!
 
         Args:
-            symbol (ExchangeSymbol | str): symbol object or symbol name
+            symbol (str): symbol name
             interval (str): in "1 min" format
 
         Returns:
