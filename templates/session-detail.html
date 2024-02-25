@@ -75,6 +75,7 @@
                     Enable SELL
                 </button>
                 {% endif %}
+            </form>
         </div>
         {% if session.thread %}
         <code>ThreadID {{ session.thread.ident }}</code>
@@ -130,6 +131,87 @@
     </div>
 </div>
 
+<div class="block max-w m-3 p-6 bg-white border border-gray-200 rounded-lg shadow dark:bg-gray-800 dark:border-gray-700 grid md:grid-cols-2 grid-cols-1">
+    <div class="grid-cols-1 p-3">
+        <form class="max-w mx-auto" {% if not buy_enabled %}disabled="disabled"{% endif %} method="POST" action="update/">
+            {% csrf_token %}
+            <div class="flex flex-row justify-between">
+                <h3>Buy {{ session.symbol.base }} with session capital</h3>
+                {% if not buy_enabled %}
+                <span class="bg-red-100 text-red-800 text-xs font-medium me-2 px-2.5 py-0.5 rounded dark:bg-red-900 dark:text-red-300">Disabled: Low Capital</span>
+                {% endif %}</div>
+            
+            
+            <div class="mb-5">
+              
+                <div class="relative mb-6">
+                    <label for="labels-range-input" class="sr-only">Labels range</label>
+                    <input id="labels-range-input" type="range" value="5" min="5" step="0.01" max="{{ session.capital }}" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700">
+                    <span class="text-sm text-gray-500 dark:text-gray-400 absolute start-0 -bottom-6">Min ($ 5)</span>
+                    <span class="text-sm text-gray-500 dark:text-gray-400 absolute start-1/4 -translate-x-1/2 rtl:translate-x-1/2 -bottom-6">25%</span>
+                    <span class="text-sm text-gray-500 dark:text-gray-400 absolute start-2/4 -translate-x-1/2 rtl:translate-x-1/2 -bottom-6">50%</span>
+                    <span class="text-sm text-gray-500 dark:text-gray-400 absolute start-3/4 -translate-x-1/2 rtl:translate-x-1/2 -bottom-6">75%</span>
+                    <span class="text-sm text-gray-500 dark:text-gray-400 absolute end-0 -bottom-6">Max ($ {{ session.capital|floatformat:2 }})</span>
+                </div>
+            </div>
+            <br>
+            <div class="mb-5">
+              <label for="password" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Amount (USDT)</label>
+              <input type="number" value="0" id="session-buy" name="session_buy" step="0.01" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" required />
+            </div>
+            <button type="submit" class="text-white bg-green-700 hover:bg-green-800 focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm w-full sm:w-auto px-5 py-2.5 text-center">Buy</button>
+          </form>
+    </div>
+
+<div class="grid-cols-1 p-3">
+
+    <form class="max-w mx-auto" {% if not buy_enabled %}disabled="disabled"{% endif %} method="POST" action="update/">
+        {% csrf_token %}
+        <div class="flex flex-row justify-between">
+            <h3>Sell {{ session.symbol.base }} from session</h3>
+            {% if not sell_enabled %}
+            <span class="bg-red-100 text-red-800 text-xs font-medium me-2 px-2.5 py-0.5 rounded dark:bg-red-900 dark:text-red-300">Disabled: No Assets</span>
+            {% endif %}</div>
+        
+        
+        <div class="mb-5">
+          
+            <div class="relative mb-6">
+                <label for="labels-range-input" class="sr-only">Labels range</label>
+                <input id="sell-range" type="range" value="0" min="0" step="0.00000000001" max="{{ session.assets }}" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700">
+                <span class="text-sm text-gray-500 dark:text-gray-400 absolute start-0 -bottom-6">Min (0 {{ session.symbol.base }})</span>
+                <span class="text-sm text-gray-500 dark:text-gray-400 absolute start-1/4 -translate-x-1/2 rtl:translate-x-1/2 -bottom-6">25%</span>
+                <span class="text-sm text-gray-500 dark:text-gray-400 absolute start-2/4 -translate-x-1/2 rtl:translate-x-1/2 -bottom-6">50%</span>
+                <span class="text-sm text-gray-500 dark:text-gray-400 absolute start-3/4 -translate-x-1/2 rtl:translate-x-1/2 -bottom-6">75%</span>
+                <span class="text-sm text-gray-500 dark:text-gray-400 absolute end-0 -bottom-6">Max ({{ session.assets }} {{ session.symbol.base }})</span>
+            </div>
+        </div>
+        <br>
+        <div class="mb-5">
+          <label for="password" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Amount ({{ session.symbol.base }})</label>
+          <input type="number" value="0" name="session_sell" step="0.00000000001" id="session-sell" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" required />
+        </div>
+        <button type="submit" class="text-white bg-red-700 hover:bg-red-800 focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm w-full sm:w-auto px-5 py-2.5 text-center">Sell</button>
+      </form>
+</div>
+
+  
+</div>
+<script>
+    const rangeInput = document.getElementById('labels-range-input');
+const currentValue = document.getElementById('session-buy');
+
+rangeInput.addEventListener('input', () => {
+    currentValue.value = rangeInput.value;
+});
+const rangeInputSell = document.getElementById('sell-range');
+const currentValueSell = document.getElementById('session-sell');
+
+rangeInputSell.addEventListener('input', () => {
+    currentValueSell.value = rangeInputSell.value;
+});
+
+</script>
 <div class="grid grid-cols-1 grid-auto-rows: 1fr">
     <div class="border-l border-gray-200 col-span-1 row-span-1 overflow-x-auto">
         <table class="w-full text-sm text-left text-gray-500 dark:text-gray-400">

@@ -114,7 +114,9 @@ class SessionDetailView(View):
             'open_position': open_position, 
             'current_price': current_price, 
             'capital_delta': capital_delta,
-            'open_position_delta': open_position_delta
+            'open_position_delta': open_position_delta,
+            'buy_enabled': session.capital > 5,
+            'sell_enabled': session.assets > 0,
             })
 
 
@@ -288,6 +290,36 @@ class SessionUpdateView(View):
             session.buy_enabled = bool(int(request.POST.get('session_buy_enabled', 0)))
         if 'session_sell_enabled' in request.POST:
             session.sell_enabled = bool(int(request.POST.get('session_sell_enabled', 0)))
+        if 'session_buy' in request.POST:
+            iface = session.symbol.market.get_interface()
+            amt = float(request.POST.get('session_buy'))
+            order = iface.place_market_order(session.symbol.name, 'buy', funds=amt)
+            ts = datetime.now()
+            while not order.status == Order.Status.FILLED and datetime.now() - ts < timedelta(seconds=10):
+                order.refresh_from_market(iface)
+            if not order.status == Order.Status.FILLED:
+                request.session['error'] = {
+                    'type': 'error',
+                    'text': f'Order {order.oid} not filled. {order.status}'
+                }
+            else:
+                session.capital -= order.deal_funds
+                session.assets += order.deal_size
+        if 'session_sell' in request.POST:
+            iface = session.symbol.market.get_interface()
+            amt = float(request.POST.get('session_sell'))
+            order = iface.place_market_order(session.symbol.name, 'sell', quantity=amt)
+            ts = datetime.now()
+            while not order.status == Order.Status.FILLED and datetime.now() - ts < timedelta(seconds=10):
+                order.refresh_from_market(iface)
+            if not order.status == Order.Status.FILLED:
+                request.session['error'] = {
+                    'type': 'error',
+                    'text': f'Order {order.oid} not filled. {order.status}'
+                }
+            else:
+                session.capital += order.deal_funds
+                session.assets -= order.deal_size
         session.save()
         return redirect('session-detail', pk=session.pk)
       
