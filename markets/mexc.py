@@ -5,7 +5,7 @@ import json
 
 import time
 from datetime import datetime, timedelta
-from typing import Literal, Optional
+from typing import Callable, Literal
 from urllib.parse import urlencode
 import uuid
 
@@ -18,6 +18,7 @@ from markets.errors import InsufficientBalance, RejectedOrder
 from markets.helper import authentication_required, float_to_precision
 from models import interval_to_minutes
 from quantapi.models import Market, Order, Symbol
+from websockets.sync.client import connect
 
 
 class MEXCMarket(IMarket):
@@ -45,6 +46,69 @@ class MEXCMarket(IMarket):
 
         self.get_symbols()
         self.get_account()
+
+        self.stop_websocket_stream = False
+    
+    def format_ws_candle(self, candle):
+        return {
+                'time': datetime.fromtimestamp(candle['t'], pytz.UTC).replace(second=0, microsecond=0),
+                'start': datetime.fromtimestamp(candle['t'], pytz.UTC).replace(second=0, microsecond=0),
+                'end': datetime.fromtimestamp(candle['T'], pytz.UTC).replace(second=0, microsecond=0),
+                'volume': float(candle['a']),
+                'close': float(candle['c']),
+                'high': float(candle['h']),
+                'low': float(candle['l']),
+                'open': float(candle['o']),
+                'quantity': float(candle['v']),
+            }
+
+    def interval_to_ws(self, interval:str):
+        return {
+            '1 min': 'Min1',
+            '3 min': 'Min3',
+            '5 min': 'Min5',
+            '15 min': 'Min15',
+            '30 min': 'Min30',
+            '1 hour': 'Min60',
+            '4 hour': 'Hour4',
+            '8 hour': 'Hour8',
+            '1 day': 'Day1',
+            '1 week': 'Week1',
+            '1 month': 'Month1'
+        }[interval]
+
+
+    def init_websocket(self, symbol:str, interval:str, callback:Callable):
+        ws_uri = 'wss://wbs.mexc.com/ws'
+        ws = connect(ws_uri)
+        topic = f'spot@public.kline.v3.api@{self._format_symbol(symbol)}@{self.interval_to_ws(interval)}'
+        sub = {
+            'method': 'SUBSCRIPTION',
+            'params': [topic]
+        }
+        ws.send(json.dumps(sub))
+        ack = json.loads(ws.recv())
+        if not ack.get('msg') == topic:
+            raise Exception(f'Error while subscribing to {topic}: {ack}')
+        last_ping = datetime.now()
+        last_kline = None
+        while not self.stop_websocket_stream:
+            if (datetime.now() - last_ping).seconds > 30:
+                ws.send('{"method": "PING"}')
+                last_ping = datetime.now()
+            try:
+                response = json.loads(ws.recv(timeout=10))
+            except TimeoutError:
+                continue
+            if response.get('msg') == 'PONG':
+                continue
+            candle = self.format_ws_candle(response['d']['k'])
+            if last_kline and candle['end'] > last_kline:
+                callback(candle)
+                last_kline = candle['end']
+            if not last_kline:
+                last_kline = candle['end']
+        
 
     def has_symbol(self, symbol: str) -> bool:
         if not self.symbols:

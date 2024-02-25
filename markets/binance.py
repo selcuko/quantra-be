@@ -95,7 +95,11 @@ class BinanceMarket(IMarket):
         try:
             ws = connect(ws_uri)
             while not self.stop_websocket_strem:
-                data = json.loads(ws.recv())
+                ws.pong()
+                try:
+                    data = json.loads(ws.recv())
+                except TimeoutError:
+                    continue
                 candle = self.format_ws_candle(data)
                 if candle['last']:
                     callback(candle)
