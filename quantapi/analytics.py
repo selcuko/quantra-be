@@ -39,7 +39,10 @@ class SessionAnalytics:
         in_price = self.open_position.price
         if not self.session.last_price:
             return None
-        return (self.session.last_price - in_price) / in_price * 100
+        try:
+            return (self.session.last_price - in_price) / in_price * 100
+        except ZeroDivisionError:
+            return None
 
     @property
     def initial_value(self):

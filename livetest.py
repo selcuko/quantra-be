@@ -100,6 +100,10 @@ class LiveLoop:
         self.thread.start()
         self.session.started = datetime.now(tz=pytz.UTC)
         self.session.thread_id = self.thread.ident
+        if self.last_kline:
+            self.session.last_price = self.last_kline['close']
+            self.session.last_kline_timestamp = self.last_kline_dt
+
         self.session.save()
 
     def stop(self):

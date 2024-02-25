@@ -97,13 +97,6 @@ class SessionDetailView(View):
         market = session.symbol.market
         message = request.session.pop('message', None)
         open_position = self.get_open_position(session)
-        current_price = session.last_price or 0
-        open_position_delta = None
-        if open_position:
-            capital_delta = (session.assets * current_price - session.initial_capital) / session.initial_capital * 100 if session.initial_capital else 0
-            open_position_delta = (current_price - open_position.price) / current_price * 100
-        else:
-            capital_delta = (session.capital - session.initial_capital) / session.initial_capital * 100 if session.initial_capital else 0
         return render(request, 'session-detail.html', {
             'session': session, 
             'error': error, 
@@ -112,9 +105,6 @@ class SessionDetailView(View):
             'market': market, 
             'message': message, 
             'open_position': open_position, 
-            'current_price': current_price, 
-            'capital_delta': capital_delta,
-            'open_position_delta': open_position_delta,
             'buy_enabled': session.capital > 5,
             'sell_enabled': session.assets > 0,
             })
@@ -295,6 +285,8 @@ class SessionUpdateView(View):
             amt = float(request.POST.get('session_buy'))
             order = iface.place_market_order(session.symbol.name, 'buy', funds=amt)
             order.force = True
+            signal = Signal.objects.create(session=session, side='BUY', price=-1, timestamp=datetime.now(pytz.UTC))
+            order.signal = signal
             order.save()
             ts = datetime.now()
             while not order.status == Order.Status.FILLED and datetime.now() - ts < timedelta(seconds=10):
@@ -312,6 +304,8 @@ class SessionUpdateView(View):
             amt = float(request.POST.get('session_sell'))
             order = iface.place_market_order(session.symbol.name, 'sell', quantity=amt)
             order.force = True
+            signal = Signal.objects.create(session=session, side='SELL', price=-1, timestamp=datetime.now(pytz.UTC))
+            order.signal = signal
             order.save()
             ts = datetime.now()
             while not order.status == Order.Status.FILLED and datetime.now() - ts < timedelta(seconds=10):
