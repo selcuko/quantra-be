@@ -87,16 +87,16 @@ class LiveLoop:
         """Fire and forget function to start the live loop and keep it running in a seperate thread."""
         if self.running and self.thread:
             raise RuntimeError(f'Live loop is already running in thread {self.thread.name}, id={self.thread.ident}')
-        if kwargs.get('polling') == kwargs.get('websocket') == True:
-            raise RuntimeError('You must choose either polling or websocket')
         self.precheck()
         self.will_stop = False
         self.running = True
-        if kwargs.get('websocket'):
+        if kwargs.get('match_engine'):
+            self.thread = threading.Thread(target=self.__run_match_engine, name=f'LLME:{self.symbol.base}:{self.freq.replace(" ", "")}@{self.market.exchange_name}')
+        elif kwargs.get('websocket'):
             self.thread = threading.Thread(target=self.__run_websocket, name=f'LLWS:{self.symbol.base}:{self.freq.replace(" ", "")}@{self.market.exchange_name}')
             self.session.use_websocket = True
         else:
-            self.thread = threading.Thread(target=self.__run_polling, name=f'LL:{self.symbol.base}:{self.freq.replace(" ", "")}@{self.market.exchange_name}')
+            self.thread = threading.Thread(target=self.__run_polling, name=f'LLAPI:{self.symbol.base}:{self.freq.replace(" ", "")}@{self.market.exchange_name}')
         self.thread.start()
         self.session.started = datetime.now(tz=pytz.UTC)
         self.session.thread_id = self.thread.ident
@@ -150,6 +150,18 @@ class LiveLoop:
             self.imarket.init_websocket(self.symbol.name, self.freq, self.on_candle)
         except Exception as e:
             logger.error(f'Failed to connect to websocket {self.symbol.base} @ {self.market.exchange_name}, exiting', exc_info=True)
+            self.session.status = Session.Status.ERROR
+            self.session.details = repr(e)
+        self.running = False
+        self.session.ended = datetime.now(tz=pytz.UTC)
+        self.session.status = Session.Status.COMPLETED if self.session.status == Session.Status.ONGOING else self.session.status
+        self.session.save()
+    
+    def __run_match_engine(self):
+        try:
+            self.imarket.init_match_engine(self.symbol.name, self.freq, self.on_candle)
+        except Exception as e:
+            logger.error(f'Failed to connect to match engine {self.symbol.base} @ {self.market.exchange_name}, exiting', exc_info=True)
             self.session.status = Session.Status.ERROR
             self.session.details = repr(e)
         self.running = False

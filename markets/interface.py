@@ -28,6 +28,18 @@ class IMarket:
         """
         raise NotImplementedError(f'{self.name} does not implement json()')
 
+    def init_match_engine(self, symbol:str, interval:str, callback:Callable):
+        """Blocking (sync) function to initialize a match engine for given symbol and interval. Run in a thread!
+
+        Args:
+            symbol (str): symbol name
+            interval (str): in "1 min" format
+
+        Returns:
+            str: websocket uri
+        """
+        raise NotImplementedError(f'{self.name} does not implement init_match_engine()')
+
     def init_websocket(self, symbol:str, interval:str, callback:Callable):
         """Blocking (sync) function to initialize a websocket for given symbol and interval. Run in a thread!
 

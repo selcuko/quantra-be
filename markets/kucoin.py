@@ -14,6 +14,7 @@ from logger import logger
 from markets import IMarket
 from markets.errors import InsufficientBalance, SymbolNotInMarket
 from markets.helper import authentication_required, float_to_precision
+from match import MatchEngine
 from models import interval_to_minutes
 from quantapi.models import Order, Symbol, Market as MarketModel
 from websockets.sync.client import connect
@@ -150,10 +151,37 @@ class KucoinMarket(IMarket):
             if price != 0:
                 current_candle['close'] = price
 
-        
-        
+    def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable):
+        token = self.get_websocket_token()
+        conn_id = uuid.uuid4().hex
+        ws_uri = f'wss://ws-api-spot.kucoin.com/?token={token}&[connectId={conn_id}]'
+        ws = connect(ws_uri)
+        welcome = ws.recv()
+        sub = {
+            "id": str(uuid.uuid4()),
+            "type": "subscribe",
+            "topic": f'/market/match:{symbol}',
+            "privateChannel": False,
+            "response": True 
+        }
+        ws.send(json.dumps(sub))
+        ack = json.loads(ws.recv())
+        if not ack.get('type') == 'ack':
+            raise ValueError(f'Error while subscribing to {symbol} on {self.name}: {ack}')
+        last_ping = datetime.now()
+        engine = MatchEngine(interval, callback)
 
-
+        while True:
+            if last_ping < datetime.now() - timedelta(seconds=30):
+                ws.send(json.dumps({'id': str(uuid.uuid4()), 'type': 'ping'}))
+                last_ping = datetime.now()
+            data = json.loads(ws.recv())
+            if data.get('type') == 'pong':
+                continue
+            if not data.get('subject') == 'trade.l3match':
+                continue
+            engine.on_match(data.get('data'))
+        
     def has_symbol(self, symbol:str) -> bool:
         if not self.symbols:
             self.symbols = self.get_symbols()

@@ -1,4 +1,5 @@
 import json
+import re
 import threading
 from datetime import datetime, timedelta
 
@@ -62,7 +63,7 @@ class HomeView(View):
                 'open_position_delta_pct': open_position_delta_pct,
             })
 
-        recent_orders = Order.objects.filter(signal__session__in=sessions).order_by('-timestamp')[:8]
+        recent_orders = Order.objects.all().order_by('-timestamp')[:8]
 
         ma = MarketAnalytics()
         sa = TotalSessionAnalytics(sessions)
@@ -161,6 +162,7 @@ class SessionInitView(View):
 
     def post(self, request, *args, **kwargs):
         form_data = request.POST
+        print(form_data)
         markets = Market.objects.filter(trading_enabled=True).order_by('exchange_name')
         try:
             market = Market.objects.get(pk=form_data['market'])
@@ -180,7 +182,7 @@ class SessionInitView(View):
             planned_shutdown = form_data.get('planned_shutdown', None)
             if planned_shutdown and not planned_shutdown > datetime.now(pytz.UTC):
                 raise ValueError('Planned shutdown must be in the future')
-            use_websocket = form_data.get('websocket', False)
+            candle_source = form_data.get('candle_source', 'trade')
         except Exception as e:
             return render(request, 'session-init.html', {'markets': markets, 'form_error': repr(e)})
         try:
@@ -199,7 +201,9 @@ class SessionInitView(View):
                 session_type=session_type,
                 use_heikin_ashi=form_data.get('candle_type', 'standard') == 'heikin_ashi',
             )
-            if use_websocket:
+            if candle_source == 'trade':
+                ll.run(match_engine=True)
+            elif candle_source == 'websocket':
                 ll.run(websocket=True)
             else:
                 ll.run(polling=True)

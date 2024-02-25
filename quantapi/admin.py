@@ -21,9 +21,9 @@ class SymbolAdmin(admin.ModelAdmin):
 
 
 class SessionAdmin(admin.ModelAdmin):
-    list_display = ('__str__', 'freq', 'status', 'started', 'ended', 'session_type', 'last_heartbeat', 'use_websocket', 'use_heikin_ashi')
+    list_display = ('__str__', 'freq', 'status', 'started', 'ended', 'session_type', 'last_heartbeat', 'candle_source', 'use_heikin_ashi')
     search_fields = ('symbol__name', 'symbol__market__exchange_name')
-    list_filter = ('freq', 'status', 'session_type', 'use_heikin_ashi', 'use_websocket')
+    list_filter = ('freq', 'status', 'session_type', 'use_heikin_ashi', 'candle_source')
     readonly_fields = ('started', 'ended', 'last_heartbeat', 'symbol')
 
 

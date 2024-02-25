@@ -41,23 +41,36 @@
           <select name="type" id="type" class="mb-6 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" 
           >
             <option value="" disabled selected>Select session type</option>
-            <option value="live.sandbox" selected>Testnet</option>
-            <option value="live.mainnet">Mainnet</option>
+            <option value="live.sandbox">Testnet</option>
+            <option value="live.mainnet" selected>Mainnet</option>
           </select>
         </div>
         <div>
           <label for="capital">Capital limit</label>
-          <input type="number" step="0.01" min="0" value="1000" placeholder="Capital limit" name="capital" id="" class="mb-6 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" >
+          <input type="number" step="0.01" min="0" value="100" placeholder="Capital limit" name="capital" id="" class="mb-6 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" >
         </div>
         <div>
           <label for="assets">Asset limit</label>
           <input type="number" value="0" min="0" step="0.0000001" placeholder="Asset limit" name="assets" id="" class="mb-6 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" >
         </div>
-        <div>
-          <label for="websocket">Use websocket</label>
-          <input type="checkbox" name="websocket">
+
+        <label for="kline_source">Candle source: </label>
+        <div class="inline-flex rounded-md shadow-sm" role="group">
+          
+          <input type="hidden" name="kline_source" value="trade">
+          <button id="trade" type="button" class="button px-4 py-2 text-sm font-medium border border-gray-200 rounded-s-lg focus:z-10 focus:ring-blue-700 bg-blue-500 hover:bg-blue-600 text-gray-900">
+            Trade
+          </button>
+          <button id="websocket" type="button" class="button px-4 py-2 text-sm font-medium border-t border-b border-gray-200 focus:z-10">
+            Websocket
+          </button>
+          <button id="rest" type="button" class="button px-4 py-2 text-sm font-medium border border-gray-200 rounded-e-lg focus:z-10">
+            REST
+          </button>
         </div>
-        <button type="submit" class="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm w-full sm:w-auto px-5 py-2.5 text-center dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800">Submit</button>
+        <br>
+        <button type="submit" class="p-5 my-5 text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm w-full sm:w-auto px-5 py-2.5 text-center dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800">Submit</button>
+
         <br>
         <div>
           <label for="candle_type">Candle type</label>
@@ -95,4 +108,25 @@
         <button type="submit" class="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm w-full sm:w-auto px-5 py-2.5 text-center dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800">Submit</button>
       </form>
 </section>
+<script>
+  const buttons = document.querySelectorAll('.button');
+  const input = document.querySelector('input[name=kline_source]');
+
+buttons.forEach(button => {
+  button.addEventListener('click', () => {
+    buttons.forEach(btn => {
+      btn.setAttribute('aria-pressed', 'false');
+      btn.classList.remove('bg-blue-500');
+      btn.classList.remove('hover:bg-blue-600');
+      btn.classList.remove('text-gray-900');
+    });
+    button.setAttribute('aria-pressed', 'true');
+    button.classList.add('bg-blue-500');
+    button.classList.add('hover:bg-blue-600');
+    button.classList.add('text-gray-900');
+    input.value = button.id;
+  });
+});
+
+</script>
 {% endblock %}

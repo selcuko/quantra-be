@@ -111,6 +111,10 @@ class Symbol(models.Model):
 
 
 class Session(models.Model):
+    class CandleSource(models.TextChoices):
+        TRADE = 'TRADE', 'Trade'
+        WEBSOCKET = 'WEBSOCKET', 'Websocket'
+        REST  = 'REST',  'REST'
     class Type(models.TextChoices):
         BACKTEST     = 'backtest',     'Backtest'
         LIVE_BASIC   = 'live.basic',   'Live Basic'
@@ -156,7 +160,7 @@ class Session(models.Model):
     assets = models.FloatField()
     thread_id = models.BigIntegerField(null=True, blank=True)
     use_heikin_ashi = models.BooleanField(default=False)
-    use_websocket = models.BooleanField(default=False)
+    candle_source = models.CharField(max_length=30, choices=CandleSource.choices, default=CandleSource.TRADE)
     strategy_parameters = models.TextField(null=True, blank=True, help_text='JSON string of parameters for this strategy, leave blank to use defaults.')
     details = models.TextField(null=True, blank=True, help_text='JSON string of session details from market')
     initial_price = models.FloatField(null=True, blank=True)
@@ -198,10 +202,14 @@ class Session(models.Model):
             freq=self.freq,
             end=self.planned_shutdown,
             session=self)
-        if self.use_websocket:
+        if self.candle_source == Session.CandleSource.WEBSOCKET:
             ll.run(websocket=True)
-        else:
+        elif self.candle_source == Session.CandleSource.REST:
             ll.run(polling=True)
+        elif self.candle_source == Session.CandleSource.TRADE:
+            ll.run(match_engine=True)
+        else:
+            raise ValueError(f'Invalid candle source: {self.candle_source}')
         return ll
 
     def stop(self):
@@ -211,6 +219,12 @@ class Session(models.Model):
             self.planned_shutdown = datetime.now(pytz.utc)
         else:
             raise ValueError(f'Session status should be ONGOING to stop, not {self.status}')
+
+    def recent_order_error(self):
+        # return True if if there is an order with status ERROR in the last 5 orders
+        orders = Order.objects.filter(signal__session=self).order_by('-timestamp')[:5]
+        orders = orders.filter(status=Order.Status.ERROR)
+        return orders.exists()
 
 
 class Strategy(models.Model):

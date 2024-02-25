@@ -30,7 +30,7 @@ class SessionAnalytics:
         in_price = self.open_position.price
         if not self.session.last_price:
             return None
-        return self.session.last_price - in_price
+        return (self.session.last_price - in_price) * self.session.assets
 
     @property
     def open_position_delta_pct(self):
@@ -113,7 +113,7 @@ class TotalSessionAnalytics:
         return sum([session.capital for session in self.sessions])
     
     def equity(self):
-        return sum([session.assets * session.last_price for session in self.sessions if session.assets and session.last_price])
+        return self.capital() + sum([session.assets * session.last_price for session in self.sessions if session.assets and session.last_price])
     
     def open_positions(self):
         # return the number of open positions for the sessions (i.e. last order was a BUY with status FILLED)
@@ -126,6 +126,17 @@ class TotalSessionAnalytics:
     
     def count(self):
         return self.sessions.count()
+    
+    def equity_delta(self):
+        initial_asset_value = sum([session.initial_assets * session.initial_price for session in self.sessions if session.initial_assets and session.initial_price])
+        initial_total_value = sum([session.initial_capital + initial_asset_value for session in self.sessions])
+        return self.equity() - initial_total_value
+    
+    def equity_delta_pct(self):
+        try:
+            return (self.equity_delta() / self.equity()) * 100
+        except ZeroDivisionError:
+            return None
 
 
 
