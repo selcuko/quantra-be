@@ -10,7 +10,7 @@ class BacktestAdmin(admin.ModelAdmin):
 
 class MarketAdmin(admin.ModelAdmin):
     list_display = ('exchange_name', 'friendly_name', 'testnet_enabled', 'trading_enabled', 'mainnet_enabled')
-    search_fields = ('exchange_name', 'name', 'description')
+    search_fields = ('exchange_name', 'friendly_name')
     list_filter = ('exchange_name', 'testnet_enabled', 'trading_enabled', 'mainnet_enabled')
 
 
@@ -22,21 +22,21 @@ class SymbolAdmin(admin.ModelAdmin):
 
 class SessionAdmin(admin.ModelAdmin):
     list_display = ('__str__', 'freq', 'status', 'started', 'ended', 'session_type', 'last_heartbeat', 'use_websocket', 'use_heikin_ashi')
-    search_fields = ('symbol__name', )
+    search_fields = ('symbol__name', 'symbol__market__exchange_name')
     list_filter = ('freq', 'status', 'session_type', 'use_heikin_ashi', 'use_websocket')
     readonly_fields = ('started', 'ended', 'last_heartbeat', 'symbol')
 
 
 class SignalAdmin(admin.ModelAdmin):
     list_display = ('__str__', 'side', 'symbol', 'price', 'timestamp')
-    search_fields = ('session',)
+    search_fields = ('session__symbol__name', 'session__symbol__market__exchange_name')
     readonly_fields = ('session', 'symbol')
     list_filter = ('side',)
 
 
 class OrderAdmin(admin.ModelAdmin):
     list_display = ('__str__', 'oid', 'status', 'order_type', 'symbol', 'timestamp', 'force')
-    search_fields = ('signal__session',)
+    search_fields = ('signal__session__symbol__name', 'signal__session__symbol__market__exchange_name')
     list_filter = ('status', 'order_type', 'force')
 
 
