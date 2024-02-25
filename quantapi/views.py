@@ -294,6 +294,8 @@ class SessionUpdateView(View):
             iface = session.symbol.market.get_interface()
             amt = float(request.POST.get('session_buy'))
             order = iface.place_market_order(session.symbol.name, 'buy', funds=amt)
+            order.force = True
+            order.save()
             ts = datetime.now()
             while not order.status == Order.Status.FILLED and datetime.now() - ts < timedelta(seconds=10):
                 order.refresh_from_market(iface)
@@ -309,6 +311,8 @@ class SessionUpdateView(View):
             iface = session.symbol.market.get_interface()
             amt = float(request.POST.get('session_sell'))
             order = iface.place_market_order(session.symbol.name, 'sell', quantity=amt)
+            order.force = True
+            order.save()
             ts = datetime.now()
             while not order.status == Order.Status.FILLED and datetime.now() - ts < timedelta(seconds=10):
                 order.refresh_from_market(iface)
