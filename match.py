@@ -30,7 +30,7 @@ class MatchEngine:
         self.callback = callback
 
     def update_candle(self, data):
-        ts = datetime.fromtimestamp(int(data['time']) / 100000000, pytz.UTC).replace(second=0, microsecond=0)
+        ts = datetime.fromtimestamp(int(data['time']) / 1000000000, pytz.UTC).replace(second=0, microsecond=0)
         vol = float(Decimal(data['size']) * Decimal(data['price']))
         price = float(data['price'])
 
