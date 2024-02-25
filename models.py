@@ -6,7 +6,7 @@ import pandas as pd
 from logger import logger
 
 
-def interval_to_minutes(interval):
+def interval_to_minutes(interval:str) -> int:
     try:
         return {
             '1 min': 1,
