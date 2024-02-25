@@ -34,7 +34,7 @@ class MatchEngine:
         vol = float(Decimal(data['size']) * Decimal(data['price']))
         price = float(data['price'])
 
-        if self.candle and ts < self.candle['end']:
+        if self.candle and ts > self.candle['end']:
             self.callback(self.candle)
             self.candle = {}
         if not self.candle:
