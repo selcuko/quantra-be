@@ -14,6 +14,7 @@ from logger import logger
 from markets.errors import KlineFetchFailed, RejectedOrder
 from markets.helper import authentication_required, float_to_precision
 from markets.interface import IMarket
+from match import MatchEngine
 from models import interval_to_minutes
 from quantapi.models import Market
 if typing.TYPE_CHECKING:
@@ -89,6 +90,29 @@ class BinanceMarket(IMarket):
             'taker_buy_base_asset_volume': float(candle['V']),
             'taker_buy_quote_asset_volume': float(candle['Q']),
         }
+
+    def format_match(self, payload:dict) -> dict:
+        return {
+            'time': datetime.fromtimestamp(payload['E']/1000, tz=pytz.UTC).replace(second=0, microsecond=0),
+            'price': float(payload['p']),
+            'size': float(payload['q']),
+            'maker': payload['m'],
+        }
+
+    def init_match_engine(self, symbol:str, interval:str, callback:Callable):
+        ws_uri = f'wss://stream.binance.com:9443/ws/{self._format_symbol(symbol).lower()}@trade'
+        ws = connect(ws_uri)
+        me = MatchEngine(interval, callback)
+        last_ping = datetime.now()
+        while not self.stop_websocket_strem:
+            if (datetime.now() - last_ping) > timedelta(seconds=30):
+                ws.pong()
+                last_ping = datetime.now()
+            try:
+                data = json.loads(ws.recv())
+                me.on_match(self.format_match(data))
+            except TimeoutError:
+                continue
 
     def init_websocket(self, symbol:str, interval:str, callback:Callable):
         ws_uri = self.get_websocket_uri(symbol, interval)

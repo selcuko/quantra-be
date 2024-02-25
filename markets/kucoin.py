@@ -151,6 +151,14 @@ class KucoinMarket(IMarket):
             if price != 0:
                 current_candle['close'] = price
 
+    def format_match(self, data):
+        return {
+            'time': datetime.fromtimestamp(int(data['time']) / 1000000000, pytz.UTC),
+            'price': float(data['price']),
+            'size': float(data['size']),
+            'maker': data['side'] == 'buy',
+        }
+
     def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable):
         token = self.get_websocket_token()
         conn_id = uuid.uuid4().hex
@@ -180,7 +188,7 @@ class KucoinMarket(IMarket):
                 continue
             if not data.get('subject') == 'trade.l3match':
                 continue
-            engine.on_match(data.get('data'))
+            engine.on_match(self.format_match(data.get('data')))
         
     def has_symbol(self, symbol:str) -> bool:
         if not self.symbols:

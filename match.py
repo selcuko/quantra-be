@@ -30,9 +30,9 @@ class MatchEngine:
         self.callback = callback
 
     def update_candle(self, data):
-        ts = datetime.fromtimestamp(int(data['time']) / 1000000000, pytz.UTC).replace(second=0, microsecond=0)
-        vol = float(Decimal(data['size']) * Decimal(data['price']))
-        price = float(data['price'])
+        ts = data.get('time').astimezone(pytz.UTC).replace(second=0, microsecond=0)
+        vol = data['size'] * data['price']
+        price = data['price']
 
         if self.candle and ts >= self.candle['end']:
             self.callback(self.candle)

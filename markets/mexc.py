@@ -16,6 +16,7 @@ from logger import logger
 from markets import IMarket
 from markets.errors import InsufficientBalance, RejectedOrder
 from markets.helper import authentication_required, float_to_precision
+from match import MatchEngine
 from models import interval_to_minutes
 from quantapi.models import Market, Order, Symbol
 from websockets.sync.client import connect
@@ -77,6 +78,42 @@ class MEXCMarket(IMarket):
             '1 month': 'Month1'
         }[interval]
 
+
+    def format_match(self, data):
+        return {
+            'time': datetime.fromtimestamp(int(data['t']) / 1000, pytz.UTC).replace(second=0, microsecond=0),
+            'size': float(data['v']),
+            'price': float(data['p']),
+            'maker': True if data['S'] == 1 else False,
+        }
+
+    def init_match_engine(self, symbol:str, interval:str, callback:Callable):
+        ws_uri = 'wss://wbs.mexc.com/ws'
+        ws = connect(ws_uri)
+        topic = f'spot@public.deals.v3.api@{self._format_symbol(symbol)}'
+        sub = {
+            'method': 'SUBSCRIPTION',
+            'params': [topic]
+        }
+        ws.send(json.dumps(sub))
+        ack = json.loads(ws.recv())
+        if not ack.get('msg') == topic:
+            raise Exception(f'Error while subscribing to {topic}: {ack}')
+        last_ping = datetime.now()
+        me = MatchEngine(interval, callback)
+        while not self.stop_websocket_stream:
+            if (datetime.now() - last_ping).seconds > 30:
+                ws.send('{"method": "PING"}')
+                last_ping = datetime.now()
+            try:
+                response = json.loads(ws.recv(timeout=10))
+            except TimeoutError:
+                continue
+            if response.get('msg') == 'PONG':
+                continue
+            deals = response['d']['deals']
+            for deal in deals:
+                me.on_match(self.format_match(deal))
 
     def init_websocket(self, symbol:str, interval:str, callback:Callable):
         ws_uri = 'wss://wbs.mexc.com/ws'
