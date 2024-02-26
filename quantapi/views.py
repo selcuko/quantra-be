@@ -278,13 +278,14 @@ class SessionResumeView(View):
 class SessionUpdateView(View):
     def post(self, request, pk):
         session = Session.objects.get(pk=pk)
+        print(request.POST)
         # Checkboxes are not included in POST data if they are unchecked,
         # so we explicitly check for their presence.
         if 'session_buy_enabled' in request.POST:
             session.buy_enabled = bool(int(request.POST.get('session_buy_enabled', 0)))
         if 'session_sell_enabled' in request.POST:
             session.sell_enabled = bool(int(request.POST.get('session_sell_enabled', 0)))
-        if 'session_buy' in request.POST:
+        if 'session_buy' in request.POST and request.POST.get('session_buy', 0) > 0:
             iface = session.symbol.market.get_interface()
             amt = float(request.POST.get('session_buy'))
             order = iface.place_market_order(session.symbol.name, 'buy', funds=amt)
@@ -303,7 +304,7 @@ class SessionUpdateView(View):
             else:
                 session.capital -= order.deal_funds
                 session.assets += order.deal_size
-        if 'session_sell' in request.POST:
+        if 'session_sell' in request.POST and request.POST.get('session_sell', 0) > 0:
             iface = session.symbol.market.get_interface()
             amt = float(request.POST.get('session_sell'))
             order = iface.place_market_order(session.symbol.name, 'sell', quantity=amt)
