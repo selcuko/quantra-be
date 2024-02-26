@@ -285,12 +285,12 @@ class SessionUpdateView(View):
             session.buy_enabled = bool(int(request.POST.get('session_buy_enabled', 0)))
         if 'session_sell_enabled' in request.POST:
             session.sell_enabled = bool(int(request.POST.get('session_sell_enabled', 0)))
-        if 'session_buy' in request.POST and request.POST.get('session_buy', 0) > 0:
+        if 'session_buy' in request.POST and float(request.POST.get('session_buy', 0)) > 0:
             iface = session.symbol.market.get_interface()
             amt = float(request.POST.get('session_buy'))
             order = iface.place_market_order(session.symbol.name, 'buy', funds=amt)
             order.force = True
-            signal = Signal.objects.create(session=session, side='BUY', price=-1, timestamp=datetime.now(pytz.UTC))
+            signal = Signal.objects.create(session=session, side='BUY', price=order.display_price, timestamp=datetime.now(pytz.UTC))
             order.signal = signal
             order.save()
             ts = datetime.now()
@@ -304,12 +304,12 @@ class SessionUpdateView(View):
             else:
                 session.capital -= order.deal_funds
                 session.assets += order.deal_size
-        if 'session_sell' in request.POST and request.POST.get('session_sell', 0) > 0:
+        if 'session_sell' in request.POST and float(request.POST.get('session_sell', 0)) > 0:
             iface = session.symbol.market.get_interface()
             amt = float(request.POST.get('session_sell'))
             order = iface.place_market_order(session.symbol.name, 'sell', quantity=amt)
             order.force = True
-            signal = Signal.objects.create(session=session, side='SELL', price=-1, timestamp=datetime.now(pytz.UTC))
+            signal = Signal.objects.create(session=session, side='SELL', price=order.display_price, timestamp=datetime.now(pytz.UTC))
             order.signal = signal
             order.save()
             ts = datetime.now()

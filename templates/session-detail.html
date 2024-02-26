@@ -228,6 +228,12 @@ rangeInputSell.addEventListener('input', () => {
                         Price
                     </th>
                     <th scope="col" class="px-6 py-3">
+                        Amount USDT
+                    </th>
+                    <th scope="col" class="px-6 py-3">
+                        Amount {{ session.symbol.base }}
+                    </th>
+                    <th scope="col" class="px-6 py-3">
                         Side
                     </th>
                     <th scope="col" class="px-6 py-3">
@@ -246,6 +252,12 @@ rangeInputSell.addEventListener('input', () => {
                     </td>
                     <td class="whitespace-nowrap px-6 py-4">
                         $ {{ order.display_price }}
+                    </td>
+                    <td class="whitespace-nowrap px-6 py-4">
+                        $ {{ order.deal_funds }}
+                    </td>
+                    <td class="whitespace-nowrap px-6 py-4">
+                        {{ order.deal_size }}
                     </td>
                     <td class="px-6 py-4">
                         {% if order.signal.side == 'BUY' %}

@@ -198,6 +198,9 @@
                         Price
                     </th>
                     <th scope="col" class="px-6 py-3">
+                        Amount
+                    </th>
+                    <th scope="col" class="px-6 py-3">
                         Side
                     </th>
                     <th scope="col" class="px-6 py-3">
@@ -220,6 +223,8 @@
                     <td class="whitespace-nowrap px-6 py-4">
                         $ {{ order.display_price|floatformat:2 }}
                     </td>
+                    <td class="whitespace-nowrap px-6 py-4">
+                        $ {{ order.deal_funds|floatformat:2 }}
                     <td class="px-6 py-4">
                         {% if order.signal.side == 'BUY' %}
                         <span
