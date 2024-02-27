@@ -20,6 +20,7 @@ from quantapi.models import Market
 if typing.TYPE_CHECKING:
     from quantapi.models import Symbol, Order
 from websockets.sync.client import connect
+from websockets.exceptions import ConnectionClosedOK, ConnectionClosed
 
 
 class BinanceMarket(IMarket):
@@ -54,7 +55,7 @@ class BinanceMarket(IMarket):
         if self.authenticated:
             self.get_account()
         
-        self.stop_websocket_strem = False
+        self.stop_websocket_stream = False
 
     def __str__(self) -> str:
         return f'{self.name} (Authenticated: {self.authenticated})'
@@ -104,21 +105,33 @@ class BinanceMarket(IMarket):
         ws = connect(ws_uri)
         me = MatchEngine(interval, callback)
         last_ping = datetime.now()
-        while not self.stop_websocket_strem:
+        retries = 0
+        while not self.stop_websocket_stream:
             if (datetime.now() - last_ping) > timedelta(seconds=30):
                 ws.pong()
                 last_ping = datetime.now()
             try:
-                data = json.loads(ws.recv())
+                data = json.loads(ws.recv(timeout=10))
+                retries = 0
                 me.on_match(self.format_match(data))
             except TimeoutError:
+                continue
+            except (ConnectionClosed, ConnectionClosedOK):
+                ws = connect(ws_uri)
+                continue
+            except:
+                logger.error(f'Error while initializing match engine for {symbol} on {self.name}', exc_info=True)
+                if retries > 5:
+                    raise
+                retries += 1
+                ws = connect(ws_uri)
                 continue
 
     def init_websocket(self, symbol:str, interval:str, callback:Callable):
         ws_uri = self.get_websocket_uri(symbol, interval)
         try:
             ws = connect(ws_uri)
-            while not self.stop_websocket_strem:
+            while not self.stop_websocket_stream:
                 ws.pong()
                 try:
                     data = json.loads(ws.recv())

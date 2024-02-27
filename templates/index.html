@@ -230,7 +230,7 @@
                         $ {{ order.deal_funds|floatformat:2 }}
                     </td>
                     <td class="whitespace-nowrap px-6 py-4">
-                        {{ order.deal_size|floatformat:2 }}
+                        {{ order.deal_size }} {{ order.symbol.base }}
                     </td>
                     <td class="px-6 py-4">
                         {% if order.signal.side == 'BUY' %}

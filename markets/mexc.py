@@ -20,6 +20,8 @@ from match import MatchEngine
 from models import interval_to_minutes
 from quantapi.models import Market, Order, Symbol
 from websockets.sync.client import connect
+from websockets.client import ClientConnection
+from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
 
 
 class MEXCMarket(IMarket):
@@ -87,7 +89,7 @@ class MEXCMarket(IMarket):
             'maker': True if data['S'] == 1 else False,
         }
 
-    def init_match_engine(self, symbol:str, interval:str, callback:Callable):
+    def get_match_engine_ws(self, symbol:str) -> ClientConnection:
         ws_uri = 'wss://wbs.mexc.com/ws'
         ws = connect(ws_uri)
         topic = f'spot@public.deals.v3.api@{self._format_symbol(symbol)}'
@@ -99,6 +101,10 @@ class MEXCMarket(IMarket):
         ack = json.loads(ws.recv())
         if not ack.get('msg') == topic:
             raise Exception(f'Error while subscribing to {topic}: {ack}')
+        return ws
+
+    def init_match_engine(self, symbol:str, interval:str, callback:Callable):
+        ws = self.get_match_engine_ws(symbol)
         last_ping = datetime.now()
         me = MatchEngine(interval, callback)
         while not self.stop_websocket_stream:
@@ -108,6 +114,16 @@ class MEXCMarket(IMarket):
             try:
                 response = json.loads(ws.recv(timeout=10))
             except TimeoutError:
+                continue
+            except (ConnectionClosed, ConnectionClosedOK):
+                ws = self.get_match_engine_ws(symbol)
+                continue
+            except:
+                logger.error(f'Error while initializing match engine for {symbol} on {self.name}', exc_info=True)
+                if retries > 5:
+                    raise
+                retries += 1
+                ws = self.get_match_engine_ws(symbol)
                 continue
             if response.get('msg') == 'PONG':
                 continue

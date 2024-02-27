@@ -18,6 +18,8 @@ from match import MatchEngine
 from models import interval_to_minutes
 from quantapi.models import Order, Symbol, Market as MarketModel
 from websockets.sync.client import connect
+from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
+from websockets.client import ClientConnection
 
 
 class KucoinMarket(IMarket):
@@ -159,7 +161,7 @@ class KucoinMarket(IMarket):
             'maker': data['side'] == 'buy',
         }
 
-    def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable):
+    def get_match_engine_socket(self, symbol:str) -> ClientConnection:
         token = self.get_websocket_token()
         conn_id = uuid.uuid4().hex
         ws_uri = f'wss://ws-api-spot.kucoin.com/?token={token}&[connectId={conn_id}]'
@@ -176,14 +178,33 @@ class KucoinMarket(IMarket):
         ack = json.loads(ws.recv())
         if not ack.get('type') == 'ack':
             raise ValueError(f'Error while subscribing to {symbol} on {self.name}: {ack}')
+        return ws
+
+    def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable):
+        ws = self.get_match_engine_socket(symbol)
         last_ping = datetime.now()
         engine = MatchEngine(interval, callback)
+        retries = 0
 
         while True:
             if last_ping < datetime.now() - timedelta(seconds=30):
                 ws.send(json.dumps({'id': str(uuid.uuid4()), 'type': 'ping'}))
                 last_ping = datetime.now()
-            data = json.loads(ws.recv())
+            try:
+                data = json.loads(ws.recv(timeout=10))
+                retries = 0
+            except TimeoutError:
+                continue
+            except (ConnectionClosed, ConnectionClosedOK):
+                ws = self.get_match_engine_socket(symbol)
+                continue
+            except:
+                logger.error(f'Error while initializing match engine for {symbol} on {self.name}', exc_info=True)
+                if retries > 5:
+                    raise
+                retries += 1
+                ws = self.get_match_engine_socket(symbol)
+                continue
             if data.get('type') == 'pong':
                 continue
             if not data.get('subject') == 'trade.l3match':
