@@ -440,7 +440,7 @@ class BinanceMarket(IMarket):
 
     @authentication_required
     def get_current_prices(self, save=True) -> dict:
-        prices = { self._standardize_symbol(ticker['symbol']): float(ticker['price']) for ticker in self.client.get_all_tickers() if ticker['symbol'].endswith('USDT')}
+        prices = { self._standardize_symbol(ticker['symbol']): float(ticker['price']) for ticker in self.client.get_all_tickers() if ticker['symbol'].endswith('USDT') and ticker['price'] }
         if self.market and self.market.prices != prices:
             self.market.prices = json.dumps(prices)
             if save:

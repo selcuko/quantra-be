@@ -416,7 +416,7 @@ class MEXCMarket(IMarket):
         except:
             return {}
         
-        prices = { self._standardize_symbol(ticker['symbol']): float(ticker['price']) for ticker in all_tickers if ticker['symbol'].endswith('USDT') }
+        prices = { self._standardize_symbol(ticker['symbol']): float(ticker['price']) for ticker in all_tickers if ticker['symbol'].endswith('USDT') and ticker['price'] }
         if self.market:
             self.market.prices = json.dumps(prices)
             if save:

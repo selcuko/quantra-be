@@ -546,7 +546,7 @@ class KucoinMarket(IMarket):
         all_tickers = self.kmarket.get_all_tickers()
         if not all_tickers:
             return {}
-        prices = { self._standardize_symbol(ticker['symbol']): float(ticker['last']) for ticker in all_tickers['ticker'] if ticker['symbol'].endswith('USDT')}
+        prices = { self._standardize_symbol(ticker['symbol']): float(ticker['last']) for ticker in all_tickers['ticker'] if ticker['symbol'].endswith('USDT') and ticker['last'] }
         if self.market and self.market.prices != prices:
             self.market.prices = json.dumps(prices)
             if save:
