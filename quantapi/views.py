@@ -63,7 +63,7 @@ class HomeView(View):
                 'open_position_delta_pct': open_position_delta_pct,
             })
 
-        recent_orders = Order.objects.all().order_by('-timestamp')[:8]
+        recent_orders = Order.objects.filter(session__in=sessions, status=Order.Status.FILLED).order_by('-timestamp')[:8]
 
         ma = MarketAnalytics()
         sa = TotalSessionAnalytics(sessions)

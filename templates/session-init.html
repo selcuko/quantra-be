@@ -313,7 +313,7 @@
     fetch(`/market/${marketId}/raw/`)
       .then(response => response.json())
       .then(data => {
-        if (data.price) {
+        if (data.assets[symbol]) {
           assets = data.assets[symbol]
           assetRange.max = assets;
           assetsInput.max = assets;
