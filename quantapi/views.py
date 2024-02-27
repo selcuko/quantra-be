@@ -343,8 +343,14 @@ class MarketDetailView(View):
 
 def raw_market_data(request, pk):
     market = Market.objects.get(pk=pk)
-    interface = market.get_interface()
-    return JsonResponse(interface.assets)
+    return JsonResponse({
+        'assets': json.loads(market.assets) if market.assets else {},
+        'prices': json.loads(market.prices) if market.prices else {},
+        'capital': market.usdt,
+        'equity': market.equity,
+        'updated': market.assets_updated_at,
+        'available_capital': market.available_capital,
+    })
 
 
 class SearchSymbolView(View):
@@ -433,3 +439,29 @@ class OrderManagementView(View):
             order = interface.place_market_order(symbol.name, 'buy', quantity=amount)
             return HttpResponse(f'Order {order.oid} placed. {order.details}')
         return HttpResponse('Invalid side')
+
+
+class PriceView(View):
+    def get(self, request):
+        response = {
+            'message': 'OK',
+            'price': None,
+            'updated': None,
+        }
+        params = request.GET
+        symbol = params.get('symbol', '').upper()
+        market_id = params.get('market')
+        if not (symbol and market_id):
+            response['message'] = 'Invalid symbol or market'
+            return JsonResponse(response)
+        if not '-' in symbol:
+            symbol = symbol + '-USDT'
+
+        market = Market.objects.get(pk=market_id)
+        prices = json.loads(market.prices)
+        if not symbol in prices:
+            response['message'] = f'No price found for {symbol}'
+            return JsonResponse(response)
+        response['price'] = prices[symbol]
+        response['updated'] = market.assets_updated_at
+        return JsonResponse(response)

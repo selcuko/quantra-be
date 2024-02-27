@@ -50,6 +50,12 @@ class Market(models.Model):
                 return self.mainnet_enabled and self.trading_enabled
             case _:
                 return False
+
+    @property
+    def available_capital(self):
+        capital_in_sessions = Session.objects.filter(symbol__market=self, status=Session.Status.ONGOING).aggregate(models.Sum('capital'))['capital__sum'] or 0
+        return max(self.usdt - capital_in_sessions, 0)
+
     @property
     def config(self):
         """Decrypt config_enc and return dict"""
