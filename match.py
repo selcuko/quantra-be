@@ -35,11 +35,12 @@ class MatchEngine:
         ts = data.get('time').astimezone(pytz.UTC).replace(second=0, microsecond=0)
         vol = data['size'] * data['price']
         price = data['price']
+        maker = data.get('maker', None)
 
         if self.candle and ts >= self.candle['end']:
             self.callback(self.candle)
             self.candle = {}
-        if not self.candle:
+        if not self.candle.get('time'):
             start, end = get_start_end_dates(ts, self.interval)
             self.candle['time'] = start
             self.candle['open'] = price
@@ -48,11 +49,27 @@ class MatchEngine:
             self.candle['volume'] = vol
             self.candle['start'] = start
             self.candle['end'] = end
+            if maker:
+                self.candle['buy_vol'] = vol
+                self.candle['buy_count'] = 1
+            elif maker is False:
+                self.candle['sell_vol'] = vol
+                self.candle['sell_count'] = 1
         else:
             self.candle['high'] = max(self.candle['high'], price)
             self.candle['low'] = min(self.candle['low'], price)
             self.candle['close'] = price
             self.candle['volume'] += vol
+            self.candle['buy_vol'] = self.candle.get('buy_vol', 0)
+            self.candle['buy_count'] = self.candle.get('buy_count', 0)
+            self.candle['sell_vol'] = self.candle.get('sell_vol', 0)
+            self.candle['sell_count'] = self.candle.get('sell_count', 0)
+            if maker:
+                self.candle['buy_vol'] += vol
+                self.candle['buy_count'] += 1
+            elif maker is False:
+                self.candle['sell_vol'] += vol
+                self.candle['sell_count'] += 1
 
     def on_match(self, data):
         self.update_candle(data)
