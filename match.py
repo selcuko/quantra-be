@@ -1,6 +1,6 @@
 
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Callable
 
@@ -12,13 +12,15 @@ from models import interval_to_minutes
 def get_start_end_dates(ts, interval):
     if interval < 60:
         start = ts.replace(minute=ts.minute - ts.minute % interval, second=0, microsecond=0)
-        try:
-            end = start.replace(minute=start.minute + interval)
-        except ValueError:
-            end = start.replace(hour=start.hour + 1, minute=(start.minute + interval) % 60)
+        end = start + timedelta(minutes=interval)
+    elif interval >= 1440:
+        start = ts.replace(hour=0, minute=0, second=0, microsecond=0)
+        end = start + timedelta(days=1)
     else:
         start = ts.replace(minute=0, second=0, microsecond=0)
-        end = start.replace(hour=start.hour + interval // 60)
+        end = start + timedelta(minutes=interval)
+        if end.hour == 0 and end.minute == 0:  # Handle end of day case
+            end = end.replace(day=end.day + 1)
     return start, end
 
 
