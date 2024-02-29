@@ -108,6 +108,7 @@ class TotalSessionAnalytics:
     def __init__(self, sessions=None) -> None:
         self.sessions = sessions or Session.objects.filter(status=Session.Status.ONGOING)
         self.sessions = self.sessions.exclude(symbol__market__mainnet_enabled=False)
+        self.market_analytics = MarketAnalytics()
     
     def capital(self):
         return sum([session.capital for session in self.sessions])
@@ -134,7 +135,7 @@ class TotalSessionAnalytics:
     
     def equity_delta_pct(self):
         try:
-            return (self.equity_delta() / self.equity()) * 100
+            return (self.equity_delta() / self.market_analytics.equity()) * 100
         except ZeroDivisionError:
             return None
 
