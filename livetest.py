@@ -159,7 +159,7 @@ class LiveLoop:
     
     def __run_match_engine(self):
         try:
-            self.imarket.init_match_engine(self.symbol.name, self.freq, self.on_candle)
+            self.imarket.init_match_engine(self.symbol.name, self.freq, self.on_candle, self.session)
         except Exception as e:
             logger.error(f'Failed to connect to match engine {self.symbol.base} @ {self.market.exchange_name}, exiting', exc_info=True)
             self.session.status = Session.Status.ERROR
@@ -170,6 +170,9 @@ class LiveLoop:
         self.session.save()
 
     def on_candle(self, candle):
+        if self.session.status != Session.Status.ONGOING:
+            print('Session is not ongoing, skipping candle')
+            return
         try:
             self.last_kline_dt = candle['time']
         except KeyError:

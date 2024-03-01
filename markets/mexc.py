@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from typing import Callable, Literal
 from urllib.parse import urlencode
 import uuid
+from quantapi.models import Session
 
 import pytz
 import requests
@@ -103,11 +104,17 @@ class MEXCMarket(IMarket):
             raise Exception(f'Error while subscribing to {topic}: {ack}')
         return ws
 
-    def init_match_engine(self, symbol:str, interval:str, callback:Callable):
+    def init_match_engine(self, symbol:str, interval:str, callback:Callable, session:Session=None):
         ws = self.get_match_engine_ws(symbol)
         last_ping = datetime.now()
         me = MatchEngine(interval, callback)
+        last_stop_check = datetime.now()
         while not self.stop_websocket_stream:
+            if (datetime.now() - last_stop_check) > timedelta(minutes=interval_to_minutes(interval)):
+                last_stop_check = datetime.now()
+                session.refresh_from_db()
+            if session.status != Session.Status.ONGOING:
+                break
             if (datetime.now() - last_ping).seconds > 30:
                 ws.send('{"method": "PING"}')
                 last_ping = datetime.now()

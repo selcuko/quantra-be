@@ -5,6 +5,7 @@ import uuid
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Literal
+from quantapi.models import Session
 
 import pytz
 from kucoin.client import Market, Trade, User
@@ -180,13 +181,19 @@ class KucoinMarket(IMarket):
             raise ValueError(f'Error while subscribing to {symbol} on {self.name}: {ack}')
         return ws
 
-    def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable):
+    def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable, session:Session=None):
         ws = self.get_match_engine_socket(symbol)
         last_ping = datetime.now()
         engine = MatchEngine(interval, callback)
         retries = 0
 
-        while True:
+        last_stop_check = datetime.now()
+        while not self.stop_websocket_stream:
+            if (datetime.now() - last_stop_check) > timedelta(minutes=interval_to_minutes(interval)):
+                last_stop_check = datetime.now()
+                session.refresh_from_db()
+            if session.status != Session.Status.ONGOING:
+                break
             if last_ping < datetime.now() - timedelta(seconds=30):
                 ws.send(json.dumps({'id': str(uuid.uuid4()), 'type': 'ping'}))
                 last_ping = datetime.now()

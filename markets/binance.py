@@ -16,7 +16,7 @@ from markets.helper import authentication_required, float_to_precision
 from markets.interface import IMarket
 from match import MatchEngine
 from models import interval_to_minutes
-from quantapi.models import Market
+from quantapi.models import Market, Session
 if typing.TYPE_CHECKING:
     from quantapi.models import Symbol, Order
 from websockets.sync.client import connect
@@ -100,13 +100,19 @@ class BinanceMarket(IMarket):
             'maker': payload['m'],
         }
 
-    def init_match_engine(self, symbol:str, interval:str, callback:Callable):
+    def init_match_engine(self, symbol:str, interval:str, callback:Callable, session:Session):
         ws_uri = f'wss://stream.binance.com:9443/ws/{self._format_symbol(symbol).lower()}@trade'
         ws = connect(ws_uri)
         me = MatchEngine(interval, callback)
         last_ping = datetime.now()
         retries = 0
+        last_stop_check = datetime.now()
         while not self.stop_websocket_stream:
+            if (datetime.now() - last_stop_check) > timedelta(minutes=interval_to_minutes(interval)):
+                last_stop_check = datetime.now()
+                session.refresh_from_db()
+            if session.status != Session.Status.ONGOING:
+                break
             if (datetime.now() - last_ping) > timedelta(seconds=30):
                 ws.pong()
                 last_ping = datetime.now()
