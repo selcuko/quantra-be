@@ -133,6 +133,7 @@
     </div>
 </div>
 
+{% if session.status == 'ONGOING' %}
 <div class="block max-w m-3 p-6 bg-white border border-gray-200 rounded-lg shadow dark:bg-gray-800 dark:border-gray-700 grid md:grid-cols-2 grid-cols-1">
     <div class="grid-cols-1 p-3">
         <form class="max-w mx-auto" {% if not buy_enabled %}disabled="disabled"{% endif %} method="POST" action="update/">
@@ -199,6 +200,7 @@
 
   
 </div>
+{% endif %}
 <script>
     const rangeInput = document.getElementById('labels-range-input');
 const currentValue = document.getElementById('session-buy');
