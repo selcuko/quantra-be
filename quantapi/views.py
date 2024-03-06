@@ -11,8 +11,10 @@ from django.views import View
 from regex import F
 from backtest import async_analyze
 from django.http import HttpResponse, JsonResponse, response
+from coingecko import CoinGecko
 from livetest import LiveLoop
 from markets.errors import InsufficientBalance, MarketDisabledTrading, SymbolNotInMarket
+from models import SymbolMetrics
 from quantapi.analytics import MarketAnalytics, TotalSessionAnalytics
 from quantapi.models import (Backtest, Market, Order, Session, Signal,
                              Symbol, Strategy as StrategyModel)
@@ -465,3 +467,15 @@ class PriceView(View):
         response['price'] = prices[symbol]
         response['updated'] = market.assets_updated_at
         return JsonResponse(response)
+
+
+
+class SymbolView(View):
+    def get(self, request, name):
+        name = name.upper().replace('-USDT', '')
+        cg = CoinGecko()
+        global_metrics = cg.coin(name)['market_data']
+        return render(request, 'symbol-detail.html', {
+            'symbol': name,
+            'metrics': SymbolMetrics(global_metrics),
+        })

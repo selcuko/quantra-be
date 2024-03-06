@@ -19,7 +19,7 @@ from django.contrib import admin
 from django.urls import include, path
 from django.conf.urls.static import static
 from quantapi.views import BacktestInitView, BacktestResultView, HomeView, MarketDetailView, MarketListView, OrderManagementView, PriceView, RunningThreadsView, \
-    SessionInitView, SessionListView, SessionManageView, SessionTerminateView, SessionPauseView, SessionResumeView, SessionUpdateView,SessionDetailView, WatchdogView, raw_market_data
+    SessionInitView, SessionListView, SessionManageView, SessionTerminateView, SessionPauseView, SessionResumeView, SessionUpdateView,SessionDetailView, SymbolView, WatchdogView, raw_market_data
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -42,6 +42,7 @@ urlpatterns = [
     path('watchdog/', WatchdogView.as_view(), name='watchdog'),
     path('orders/', OrderManagementView.as_view(), name='order-management'),
     path('price/', PriceView.as_view(), name='price'),
+    path('symbol/<slug:name>', SymbolView.as_view(), name='symbol'),
 ]
 if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

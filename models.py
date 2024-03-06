@@ -139,3 +139,26 @@ class OHLCVDataset(pd.DataFrame):
 
     def copy(self, *args, **kwargs) -> "OHLCVDataset":
         return OHLCVDataset(super().copy(*args, **kwargs), pass_thru=True)
+
+
+class SymbolMetrics:
+    def __init__(self, market_data) -> None:
+        self.atl = {
+            'price': market_data['atl']['usd'],
+            'percentage': market_data['atl_change_percentage'],
+            'date': market_data['atl_date'],
+        }
+        self.ath = {
+            'price': market_data['ath']['usd'],
+            'percentage': market_data['ath_change_percentage'],
+            'date': market_data['ath_date'],
+        }
+        self.volume = market_data['total_volume']['usd']
+        self.day = {
+            'high': market_data['high_24h']['usd'],
+            'low': market_data['low_24h']['usd'],
+            'change': market_data['price_change_24h'],
+            'change_percentage': market_data['price_change_percentage_24h'],
+        }
+        self.total_supply = market_data['total_supply']
+        self.updated = market_data['last_updated']
