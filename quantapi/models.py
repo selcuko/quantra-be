@@ -286,6 +286,7 @@ class Order(models.Model):
     status = models.CharField(max_length=30, choices=Status.choices)
     force = models.BooleanField(default=False)
     details = models.TextField(null=True, blank=True)
+    request = models.TextField(null=True, blank=True)
 
     def __str__(self) -> str:
         try:

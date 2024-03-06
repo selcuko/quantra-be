@@ -35,9 +35,24 @@ class SignalAdmin(admin.ModelAdmin):
 
 
 class OrderAdmin(admin.ModelAdmin):
-    list_display = ('__str__', 'oid', 'status', 'order_type', 'symbol', 'timestamp', 'force')
+    list_display = ('__str__', 'oid', 'status', 'order_type', 'symbol', 'deal_funds', 'timestamp', 'force')
     search_fields = ('signal__session__symbol__name', 'signal__session__symbol__market__exchange_name')
-    list_filter = ('status', 'order_type', 'force')
+    list_filter = ('status', 'order_type', 'force', 'signal__side')
+    readonly_fields = ('signal_display', 'session_display', 'symbol_display')
+
+    def signal_display(self, obj):
+        return obj.signal
+
+    def session_display(self, obj):
+        return obj.signal.session
+
+    def symbol_display(self, obj):
+        return obj.signal.session.symbol
+
+    signal_display.short_description = 'Signal'
+    session_display.short_description = 'Session'
+    symbol_display.short_description = 'Symbol'
+
 
 
 class NotificationAdmin(admin.ModelAdmin):

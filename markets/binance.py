@@ -11,7 +11,7 @@ import requests
 from binance.client import Client
 
 from logger import logger
-from markets.errors import KlineFetchFailed, RejectedOrder
+from markets.errors import InsufficientBalance, KlineFetchFailed, RejectedOrder
 from markets.helper import authentication_required, float_to_precision
 from markets.interface import IMarket
 from match import MatchEngine
@@ -311,6 +311,8 @@ class BinanceMarket(IMarket):
         except Exception as e:
             if 'filter failure' in str(e).lower():
                 raise RejectedOrder(f'Order was rejected by the exchange: {e}')
+            elif 'insufficient' in str(e).lower():
+                raise InsufficientBalance(f'Insufficient funds to place order on {self.name}')
             raise
         order = self._prep_order(_order_payload, symbol)
         amount_txt = f'{funds} USDT' if funds else f'{quantity} {symbol.base}'
@@ -326,6 +328,13 @@ class BinanceMarket(IMarket):
                 order = self.get_order(symbol, order)
             if order.status not in ['FILLED', 'CANCELED', 'EXPIRED', 'REJECTED']:
                 raise Exception(f'Order {order.oid} on {self.name} is still {order.status} after {MAX_TRY} tries')
+        order.request = json.dumps({
+            'side': side,
+            'symbol': symbol.name,
+            'funds': funds,
+            'quantity': quantity,
+            'client_oid': client_oid,
+        })
         return order
 
     @authentication_required

@@ -173,6 +173,7 @@ class LiveLoop:
         if self.session.status != Session.Status.ONGOING:
             print('Session is not ongoing, skipping candle')
             return
+        self.imarket.cache_to_db()
         try:
             self.last_kline_dt = candle['time']
         except KeyError:
@@ -236,8 +237,8 @@ class LiveLoop:
                         logger.warning(f'Order not filled, status is {last_order.status} (oid={last_order.oid}))')
                 except InsufficientBalance:
                     self.imarket.get_account()
-                    self.session.capital = self.imarket.capital
-                    self.session.assets = self.imarket.assets.get(self.symbol.base, 0)
+                    self.session.capital = max(self.imarket.capital, 0)
+                    self.session.assets = max(self.imarket.assets.get(self.symbol.base, 0), 0)
                     self.session.save()
                     logger.warning(f'Insufficient balance, assets updated to {self.session.assets} and capital updated to {self.session.capital}')
                     return self.buy(last_kline)
@@ -295,8 +296,8 @@ class LiveLoop:
                         logger.warning(f'Order not filled, status is {last_order.status}, oid={last_order.oid}')
                 except InsufficientBalance:
                     self.imarket.get_account()
-                    self.session.capital = self.imarket.capital
-                    self.session.assets = self.imarket.assets.get(self.symbol.base, 0)
+                    self.session.capital = max(self.imarket.capital, 0)
+                    self.session.assets = max(self.imarket.assets.get(self.symbol.base, 0), 0)
                     self.session.save()
                     logger.warning(f'Insufficient balance, assets updated to {self.session.assets} and capital updated to {self.session.capital}')
                     return self.sell(last_kline)

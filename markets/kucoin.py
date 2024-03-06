@@ -394,9 +394,16 @@ class KucoinMarket(IMarket):
                     order = self.get_order(symbol, order)
                 if order.status not in ['FILLED', 'CANCELED', 'EXPIRED', 'REJECTED', 'CLOSED']:
                     raise Exception(f'Order {order.oid} on {self.name} is still {order.status} after {MAX_TRY} tries')
+            order.request = json.dumps({
+                'side': side,
+                'symbol': symbol.name,
+                'funds': funds,
+                'quantity': quantity,
+                'client_oid': client_oid,
+            })
             return order
         except Exception as e:
-            if "Balance insufficient!" in str(e):
+            if 'insufficient' in str(e).lower():
                 raise InsufficientBalance(f'Balance insufficient for market order on {self.name}') from e
             logger.error(f'Error while placing market order on {self.name}', exc_info=True)
             raise
