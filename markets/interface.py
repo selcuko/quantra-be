@@ -3,14 +3,14 @@ import json
 from typing import TYPE_CHECKING, Callable, Literal, Optional
 from django.utils import timezone
 if TYPE_CHECKING:
-    from quantapi.models import Order, Symbol, Market as DBMarket
+    from quantapi.models import Order, MarketSymbol, Market as DBMarket
 
 
 class IMarket:
     authenticated: bool
     testnet: bool
     name: str
-    symbols: dict[str, 'Symbol']
+    symbols: dict[str, 'MarketSymbol']
     spot_trading_enabled: bool
     capital: float
     assets: dict[str, float]
@@ -78,7 +78,7 @@ class IMarket:
         """
         raise NotImplementedError
 
-    def place_market_order(self, symbol:'Symbol|str', side:Literal['buy', 'sell'], funds:Optional[float]=None, quantity:Optional[float]=None, validate=True) -> 'Order':
+    def place_market_order(self, symbol:'MarketSymbol|str', side:Literal['buy', 'sell'], funds:Optional[float]=None, quantity:Optional[float]=None, validate=True) -> 'Order':
         """Place a market order, fetch the order back from market
 
         Args:
@@ -93,7 +93,7 @@ class IMarket:
         """
         raise NotImplementedError
 
-    def place_limit_order(self, symbol:'Symbol|str', side:Literal['buy', 'sell'], price:float, quantity:float, validate=True) -> 'Order':
+    def place_limit_order(self, symbol:'MarketSymbol|str', side:Literal['buy', 'sell'], price:float, quantity:float, validate=True) -> 'Order':
         """Place a limit order, fetch the order back from market
 
         Args:
@@ -108,7 +108,7 @@ class IMarket:
         """
         raise NotImplementedError
 
-    def get_order(self, symbol:'Symbol|str', order:'Order|int') -> 'Order':
+    def get_order(self, symbol:'MarketSymbol|str', order:'Order|int') -> 'Order':
         """Get order from market
 
         Args:
@@ -120,7 +120,7 @@ class IMarket:
         """
         raise NotImplementedError
 
-    def get_orders(self, symbol:'Symbol|str') -> list['Order']:
+    def get_orders(self, symbol:'MarketSymbol|str') -> list['Order']:
         """Get all orders for given symbol
 
         Args:
@@ -131,7 +131,7 @@ class IMarket:
         """
         raise NotImplementedError
 
-    def get_open_orders(self, symbol:'Symbol|str') -> list['Order']:
+    def get_open_orders(self, symbol:'MarketSymbol|str') -> list['Order']:
         """Get all open orders
 
         Args:
@@ -142,7 +142,7 @@ class IMarket:
         """
         raise NotImplementedError
 
-    def cancel_order(self, symbol:'Symbol|str', order:'Order|int') -> 'Order':
+    def cancel_order(self, symbol:'MarketSymbol|str', order:'Order|int') -> 'Order':
         """Cancel an order given symbol
 
         Args:
@@ -154,7 +154,7 @@ class IMarket:
         """           
         raise NotImplementedError     
 
-    def cancel_all_orders(self, symbol:Optional['Symbol|str']) -> list['Order']:
+    def cancel_all_orders(self, symbol:Optional['MarketSymbol|str']) -> list['Order']:
         """Cancel all orders for given symbol
 
         Args:
@@ -165,7 +165,7 @@ class IMarket:
         """
         raise NotImplementedError
 
-    def get_klines(self, symbol:'Symbol|str', interval:str, start:datetime, end:Optional[datetime]=None, limit:int=1000, retry=0) -> list[list]:
+    def get_klines(self, symbol:'MarketSymbol|str', interval:str, start:datetime, end:Optional[datetime]=None, limit:int=1000, retry=0) -> list[list]:
         """Get historical candle data.
 
         Args:
@@ -181,7 +181,7 @@ class IMarket:
         """
         raise NotImplementedError
 
-    def get_symbols(self) -> list['Symbol']:
+    def get_symbols(self) -> list['MarketSymbol']:
         """Get a list of symbols present in this market
 
         Returns:
@@ -189,7 +189,7 @@ class IMarket:
         """
         raise NotImplementedError
 
-    def get_last_klines(self, symbol:'Symbol|str', interval:str, limit:int=100, retry=1, silent=True) -> list[list]:
+    def get_last_klines(self, symbol:'MarketSymbol|str', interval:str, limit:int=100, retry=1, silent=True) -> list[list]:
         """Get last n candles for given symbol
 
         Args:

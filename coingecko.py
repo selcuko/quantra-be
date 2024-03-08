@@ -27,6 +27,12 @@ class CoinGecko:
         self.handle_failed_request(response)
         return response.json()
 
+    def coins_list_market(self, vs_currency:str='usd', order:str='market_cap_desc', per_page:int=100, page:int=1, sparkline:bool=False, price_change_percentage:str='1h,24h,7d'):
+        uri = self.url + f'coins/markets?vs_currency={vs_currency}&order={order}&per_page={per_page}&page={page}&sparkline={sparkline}&price_change_percentage={price_change_percentage}'
+        response = self.session.get(uri)
+        self.handle_failed_request(response)
+        return response.json()
+
     def coin_id(self, name:str):
         name = name.lower()
         name = name.replace('-usdt', '')
@@ -50,6 +56,6 @@ class CoinGecko:
 if __name__ == '__main__':
     token = 'REDACTED'
     gc = CoinGecko(token)
-    xrp = gc.coin('XRP-USDT')
-    with open('xrp.json', 'w') as f:
+    xrp = gc.coins_list_market()
+    with open('cg-list-market.json', 'w') as f:
         f.write(json.dumps(xrp, indent=4))

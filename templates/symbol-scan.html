@@ -1,0 +1,84 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% block title %}{{ symbol.name }}{% endblock %}
+{% block content %}
+<!-- Incomplete -->
+<section class="p-4">
+    <h1
+        class="mb-4 text-2xl font-extrabold leading-none tracking-tight text-gray-900 md:text-3xl lg:text-4xl">
+        Coin
+        <span class="underline underline-offset-3 decoration-8 decoration-blue-400 dark:decoration-blue-600">
+            Scanner
+        </span>
+    </h1>
+
+
+    <aside id="default-sidebar" class="z-40 w-1/3 transition-transform -translate-x-full sm:translate-x-0"
+        aria-label="Sidebar">
+        <div class="flow-root rounded-lg border border-gray-300 p-3 shadow-sm">
+            <dl class="-my-3 divide-y divide-gray-100 text-sm">
+                <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                    <dt class="font-medium text-gray-900">Min conv</dt>
+                    <dd class="text-gray-700 sm:col-span-2">
+                        less than
+                        <input id="min-conv-max" type="text"
+                            class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                        greater than
+                        <input id="min-conv-min" type="text"
+                            class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                    </dd>
+                </div>
+                <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                    <dt class="font-medium text-gray-900">Max conv</dt>
+                    <dd class="text-gray-700 sm:col-span-2">
+                        less than
+                        <input id="max-conv-max" type="text"
+                            class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                        greater than
+                        <input id="max-conv-min" type="text"
+                            class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                    </dd>
+                </div>
+                <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                    <dt class="font-medium text-gray-900">Total volume</dt>
+                    <dd class="text-gray-700 sm:col-span-2">
+                        less than
+                        <input id="volume-max" type="text"
+                            class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                        greater than
+                        <input id="volume-min" type="text"
+                            class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                    </dd>
+                </div>
+                <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                    <dt class="font-medium text-gray-900">Supply %</dt>
+                    <dd class="text-gray-700 sm:col-span-2">
+                        less than
+                        <input id="supply-max" type="text"
+                            class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                        greater than
+                        <input id="supply-min" type="text"
+                            class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                    </dd>
+                </div>
+                <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                    <dt class="font-medium text-gray-900">Market cap</dt>
+                    <dd class="text-gray-700 sm:col-span-2">
+                        less than
+                        <input id="marketcap-max" type="text"
+                            class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                        greater than
+                        <input id="marketcap-min" type="text"
+                            class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                    </dd>
+                </div>
+            </dl>
+        </div>
+    </aside>
+</section>
+
+<script>
+    
+</script>
+
+{% endblock %}

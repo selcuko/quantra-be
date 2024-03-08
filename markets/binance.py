@@ -18,7 +18,7 @@ from match import MatchEngine
 from models import interval_to_minutes
 from quantapi.models import Market, Session
 if typing.TYPE_CHECKING:
-    from quantapi.models import Symbol, Order
+    from quantapi.models import MarketSymbol, Order
 from websockets.sync.client import connect
 from websockets.exceptions import ConnectionClosedOK, ConnectionClosed
 
@@ -68,7 +68,7 @@ class BinanceMarket(IMarket):
             'spot_trading_enabled': self.spot_trading_enabled,
         }
 
-    def get_websocket_uri(self, symbol:'Symbol|str', interval:str) -> str:
+    def get_websocket_uri(self, symbol:'MarketSymbol|str', interval:str) -> str:
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         symbol_name = self._format_symbol(symbol.name).lower()
@@ -198,7 +198,7 @@ class BinanceMarket(IMarket):
             self.symbols = self.get_symbols()
         return (symbol_name) in self.symbols
 
-    def _get_symbol_from_name(self, symbol_name:str) -> 'Symbol':
+    def _get_symbol_from_name(self, symbol_name:str) -> 'MarketSymbol':
         try:
             _symbol = symbol_name
             return self.symbols[_symbol]
@@ -206,9 +206,9 @@ class BinanceMarket(IMarket):
             logger.error(f'Symbol {symbol_name} is not present in {self.name}: {self.symbols.keys()}')
             raise ValueError(f'Symbol {symbol_name} is not present in {self.name}')
 
-    def _prep_symbol(self, symbol:dict) -> 'Symbol':
-        from quantapi.models import Symbol
-        exc_symbol = Symbol(
+    def _prep_symbol(self, symbol:dict) -> 'MarketSymbol':
+        from quantapi.models import MarketSymbol
+        exc_symbol = MarketSymbol(
                 market = self.market,
                 name = self._standardize_symbol(symbol['symbol']),
                 base = symbol['baseAsset'],
@@ -220,7 +220,7 @@ class BinanceMarket(IMarket):
                 details=json.dumps(symbol))
         return exc_symbol
 
-    def _prep_order(self, order:dict, symbol:'Symbol') -> 'Order':
+    def _prep_order(self, order:dict, symbol:'MarketSymbol') -> 'Order':
         from quantapi.models import Order
         order_time = order.get('time') or order.get('workingTime') or order.get('transactTime') or order.get('updateTime') or 0
         return Order(
@@ -283,15 +283,15 @@ class BinanceMarket(IMarket):
                 raise KlineFetchFailed(error)
         return klines
 
-    def get_symbols(self) -> dict[str, 'Symbol']:
-        from quantapi.models import Symbol
+    def get_symbols(self) -> dict[str, 'MarketSymbol']:
+        from quantapi.models import MarketSymbol
         self.symbols = { self._standardize_symbol(symbol['symbol']): self._prep_symbol(symbol) for symbol in self.client.get_exchange_info()['symbols']}
         self.symbols = { key: value for key, value in self.symbols.items() if value.quote == 'USDT'}
-        Symbol.objects.bulk_create(self.symbols.values(), ignore_conflicts=True)
+        MarketSymbol.objects.bulk_create(self.symbols.values(), ignore_conflicts=True)
         return self.symbols
 
     @authentication_required
-    def place_market_order(self, symbol:'Symbol|str', side:Literal['buy', 'sell'], funds:Optional[float]=None, quantity:Optional[float]=None, validate=True) -> 'Order':
+    def place_market_order(self, symbol:'MarketSymbol|str', side:Literal['buy', 'sell'], funds:Optional[float]=None, quantity:Optional[float]=None, validate=True) -> 'Order':
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         client_oid = uuid.uuid4().hex
@@ -338,7 +338,7 @@ class BinanceMarket(IMarket):
         return order
 
     @authentication_required
-    def place_limit_order(self, symbol:'Symbol|str', side:Literal['buy', 'sell'], price:float, quantity:float, validate=True) -> 'Order':
+    def place_limit_order(self, symbol:'MarketSymbol|str', side:Literal['buy', 'sell'], price:float, quantity:float, validate=True) -> 'Order':
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         client_oid = uuid.uuid4().hex
@@ -365,7 +365,7 @@ class BinanceMarket(IMarket):
             raise
 
     @authentication_required
-    def get_order(self, symbol:'Symbol|str', order:'Order|str') -> 'Order':
+    def get_order(self, symbol:'MarketSymbol|str', order:'Order|str') -> 'Order':
         from quantapi.models import Order
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
@@ -381,7 +381,7 @@ class BinanceMarket(IMarket):
             raise
 
     @authentication_required
-    def get_orders(self, symbol:'Symbol|str') -> list['Order']:
+    def get_orders(self, symbol:'MarketSymbol|str') -> list['Order']:
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         try:
@@ -392,7 +392,7 @@ class BinanceMarket(IMarket):
             raise
 
     @authentication_required
-    def get_open_orders(self, symbol:'Symbol|str') -> list['Order']:
+    def get_open_orders(self, symbol:'MarketSymbol|str') -> list['Order']:
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         try:
@@ -403,7 +403,7 @@ class BinanceMarket(IMarket):
             raise
 
     @authentication_required
-    def cancel_order(self, symbol:'Symbol|str', order:'Order|int') -> 'Order':
+    def cancel_order(self, symbol:'MarketSymbol|str', order:'Order|int') -> 'Order':
         from quantapi.models import Order
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
@@ -421,7 +421,7 @@ class BinanceMarket(IMarket):
             raise
 
     @authentication_required
-    def cancel_all_orders(self, symbol:'Symbol|str') -> list['Order']:
+    def cancel_all_orders(self, symbol:'MarketSymbol|str') -> list['Order']:
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         try:

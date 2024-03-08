@@ -1,10 +1,11 @@
 {% extends 'base.html' %}
+{% load humanize %}
 {% block title %}{{ symbol.name }}{% endblock %}
 {% block content %}
 
 <div class="m-3 p-3 flex flex-col">
     <h1 class="flex items-center text-4xl font-extrabold dark:text-white">
-        {{ symbol.base }} @ {{ symbol.market.exchange_name }}
+        {{ symbol }}
     </h1>
 </div>
 
@@ -12,13 +13,85 @@
     <div class="flow-root rounded-lg border border-gray-300 p-3 shadow-sm">
         <dl class="-my-3 divide-y divide-gray-100 text-sm">
             <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">Updated</dt>
+                <dd class="text-gray-700 sm:col-span-2">{{ metrics.updated|timesince }}</dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">Total volume</dt>
+                <dd class="text-gray-700 sm:col-span-2">$ {{ metrics.volume|intcomma }}</dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">All-time high</dt>
+                <dd class="text-gray-700 sm:col-span-2">$ {{ metrics.ath.price|intcomma }}</dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">All-time low</dt>
+                <dd class="text-gray-700 sm:col-span-2">$ {{ metrics.atl.price|intcomma }}</dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900 flex no-wrap items-center" data-tooltip-target="tooltip-min-conv">
+                    Min convergence
+                    <svg class="w-6 h-6 text-gray-800 dark:text-white" aria-hidden="true"
+                        xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M10 11h2v5m-2 0h4m-2.6-8.5h0M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                    </svg>
+                </dt>
+                <dd class="text-gray-700 sm:col-span-2">{{ metrics.min_conv }}</dd>
+                <div id="tooltip-min-conv" role="tooltip"
+                    class="absolute z-10 invisible inline-block px-3 py-2 text-sm font-medium text-white transition-opacity duration-300 bg-gray-900 rounded-lg shadow-sm opacity-0 tooltip dark:bg-gray-700">
+                    Indicates how close the current price is to the all-time low. Formula: min convergence = (price -
+                    ATL) / (ATH - ATL)
+                    <div class="tooltip-arrow" data-popper-arrow></div>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900 flex no-wrap items-center" data-tooltip-target="tooltip-max-conv">
+                    Max convergence
+                    <svg class="w-6 h-6 text-gray-800 dark:text-white" aria-hidden="true"
+                        xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M10 11h2v5m-2 0h4m-2.6-8.5h0M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                    </svg>
+                </dt>
+                <dd class="text-gray-700 sm:col-span-2">{{ metrics.max_conv }}</dd>
+                <div id="tooltip-max-conv" role="tooltip"
+                    class="absolute z-10 invisible inline-block px-3 py-2 text-sm font-medium text-white transition-opacity duration-300 bg-gray-900 rounded-lg shadow-sm opacity-0 tooltip dark:bg-gray-700">
+                    Indicates how close the current price is to the all-time high. Formula: max convergence = (ATH -
+                    price) / (ATH - ATL)
+                    <div class="tooltip-arrow" data-popper-arrow></div>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">Current price</dt>
+                <dd class="text-gray-700 sm:col-span-2">$ {{ metrics.price|intcomma }}</dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">Total supply</dt>
+                <dd class="text-gray-700 sm:col-span-2">{{ metrics.total_supply|intcomma }} {{ symbol }}</dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">Circulating supply</dt>
+                <dd class="text-gray-700 sm:col-span-2">{{ metrics.circulating_supply|intcomma }} {{ symbol }}</dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">Supply %</dt>
+                <dd class="text-gray-700 sm:col-span-2">{{ metrics.supply_ratio|floatformat }}%</dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">Market cap</dt>
+                <dd class="text-gray-700 sm:col-span-2">$ {{ metrics.market_cap|intcomma }}</dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
                 <dt class="font-medium text-gray-900">Total volume</dt>
                 <dd class="text-gray-700 sm:col-span-2">$ {{ metrics.volume }}</dd>
             </div>
-            
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">Total volume</dt>
+                <dd class="text-gray-700 sm:col-span-2">$ {{ metrics.volume }}</dd>
+            </div>
         </dl>
     </div>
 </div>
-
 
 {% endblock %}

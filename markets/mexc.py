@@ -19,7 +19,7 @@ from markets.errors import InsufficientBalance, RejectedOrder
 from markets.helper import authentication_required, float_to_precision
 from match import MatchEngine
 from models import interval_to_minutes
-from quantapi.models import Market, Order, Symbol
+from quantapi.models import Market, Order, MarketSymbol
 from websockets.sync.client import connect
 from websockets.client import ClientConnection
 from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
@@ -281,8 +281,8 @@ class MEXCMarket(IMarket):
         return self._standardize_klines(kline_data)
 
     def _prep_symbol(self, symbol):
-        from quantapi.models import Symbol
-        return Symbol(
+        from quantapi.models import MarketSymbol
+        return MarketSymbol(
             market = self.market,
             name = self._standardize_symbol(symbol['symbol']),
             base = symbol['baseAsset'],
@@ -305,7 +305,7 @@ class MEXCMarket(IMarket):
             raise
         self.symbols = { self._standardize_symbol(symbol['symbol']): self._prep_symbol(symbol) for symbol in symbols if symbol['quoteAsset'] == 'USDT' }
         self.symbols = { key: value for key, value in self.symbols.items() if value.quote == 'USDT'}
-        Symbol.objects.bulk_create(self.symbols.values(), ignore_conflicts=True)
+        MarketSymbol.objects.bulk_create(self.symbols.values(), ignore_conflicts=True)
         return self.symbols
 
     def get_last_klines(self, symbol, interval, limit=100):
@@ -343,7 +343,7 @@ class MEXCMarket(IMarket):
         )
 
     @authentication_required
-    def place_market_order(self, symbol: Symbol | str, side: Literal['buy', 'sell'], funds: float | None = None, quantity: float | None = None, validate=True) -> Order:
+    def place_market_order(self, symbol: MarketSymbol | str, side: Literal['buy', 'sell'], funds: float | None = None, quantity: float | None = None, validate=True) -> Order:
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         client_oid = uuid.uuid4().hex
@@ -398,7 +398,7 @@ class MEXCMarket(IMarket):
             raise
 
     @authentication_required
-    def get_order(self, symbol:Symbol|str, order:Order|str):
+    def get_order(self, symbol:MarketSymbol|str, order:Order|str):
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         if isinstance(order, Order):

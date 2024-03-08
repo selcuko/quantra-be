@@ -14,7 +14,7 @@ from markets import IMarket
 from markets.errors import InsufficientBalance, MarketAPIError, RejectedOrder
 from models import OHLCVDataset, interval_to_minutes
 from quantapi.models import (Market, Order, Session, Signal,
-                             Symbol, Strategy as StrategyModel)
+                             MarketSymbol, Strategy as StrategyModel)
 from strategy import Strategy, get_strategy
 from testman import TestManager
 from django.utils import timezone
@@ -39,7 +39,7 @@ class LiveLoop:
         self.use_heikin_ashi = use_heikin_ashi
         logger.info(f'Initializing live loop for {symbol} on {market.exchange_name}')
 
-        self.symbol = Symbol.objects.get(name=symbol, market=market)
+        self.symbol = MarketSymbol.objects.get(name=symbol, market=market)
         if not (strategy_model := StrategyModel.objects.filter(name=strategy.name).first()):
             strategy_model = StrategyModel.objects.create(name=strategy.name, parameters=json.dumps(strategy.params))
         strategy_model.save()
@@ -369,7 +369,7 @@ class LiveLoop:
 
 
 def run_livetest(symbol:str, market:IMarket, strategy:Callable, freq='15 min', end:Optional[datetime]=None):
-    _symbol = Symbol.objects.get_or_create(name=symbol, market=market.name)[0]
+    _symbol = MarketSymbol.objects.get_or_create(name=symbol, market=market.name)[0]
     session = Session.objects.create(
         symbol=_symbol,
         session_type=Session.Type.LIVE_BASIC,

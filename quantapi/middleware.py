@@ -19,4 +19,4 @@ class WhitelistedUserMiddleware:
         elif WhitelistedUser.objects.filter(user=request.user, allowed=True).exists():
             return self.get_response(request)
         else:
-            return self.get_response(request)
+            return HttpResponseForbidden('You are not allowed to access this page')

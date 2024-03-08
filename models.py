@@ -1,3 +1,4 @@
+from datetime import datetime
 import os
 from typing import Literal
 
@@ -143,6 +144,7 @@ class OHLCVDataset(pd.DataFrame):
 
 class SymbolMetrics:
     def __init__(self, market_data) -> None:
+        self.price = market_data['current_price']['usd']
         self.atl = {
             'price': market_data['atl']['usd'],
             'percentage': market_data['atl_change_percentage'],
@@ -161,4 +163,11 @@ class SymbolMetrics:
             'change_percentage': market_data['price_change_percentage_24h'],
         }
         self.total_supply = market_data['total_supply']
-        self.updated = market_data['last_updated']
+        self.circulating_supply = market_data['circulating_supply']
+        self.supply_ratio = (self.circulating_supply / self.total_supply) * 100 if self.total_supply else None
+        self.max_supply = market_data['max_supply']
+        self.market_cap = market_data['market_cap']['usd']
+        self.max_conv = (self.price - self.atl['price']) / (self.ath['price'] - self.atl['price']) if self.ath['price'] != self.atl['price'] else None
+        self.min_conv = (self.ath['price'] - self.price) / (self.ath['price'] - self.atl['price']) if self.ath['price'] != self.atl['price'] else None
+
+        self.updated = datetime.fromisoformat(market_data['last_updated'])

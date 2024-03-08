@@ -25,7 +25,7 @@ class Market(models.Model):
     testnet_enabled = models.BooleanField(default=False)
     mainnet_enabled = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
-    symbols: models.QuerySet['Symbol']
+    symbols: models.QuerySet['MarketSymbol']
     key_expiry_date = models.DateTimeField(null=True, blank=True, help_text='Date when the API key for this market will expire.')
     usdt = models.FloatField(null=True, blank=True, help_text='USDT balance in this market')
     assets = models.TextField(null=True, blank=True, help_text='Assets in this market')
@@ -76,11 +76,12 @@ class Market(models.Model):
         f = Fernet(key)
         self.config_enc = f.encrypt(json.dumps(value).encode()).decode()
 
-class Symbol(models.Model):
+class MarketSymbol(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=['name', 'market'], name='unique_symbol')
         ]
+    symbol = models.ForeignKey('GlobalSymbol', on_delete=models.PROTECT, related_name='symbols', null=True, blank=True)
     market = models.ForeignKey(Market, on_delete=models.PROTECT, related_name='symbols')
     base = models.CharField(max_length=30)
     quote = models.CharField(max_length=30)
@@ -150,7 +151,7 @@ class Session(models.Model):
     freq = models.CharField(max_length=30)
     started = models.DateTimeField(auto_now_add=True)
     ended = models.DateTimeField(null=True, blank=True)
-    symbol = models.ForeignKey(Symbol, on_delete=models.PROTECT, related_name='sessions')
+    symbol = models.ForeignKey(MarketSymbol, on_delete=models.PROTECT, related_name='sessions')
     strategy = models.ForeignKey('Strategy', on_delete=models.PROTECT, related_name='sessions', null=True, blank=True)
     planned_shutdown = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=30, choices=Status.choices)
@@ -436,3 +437,37 @@ class WhitelistedUser(models.Model):
 
     def __str__(self) -> str:
         return f'{self.user.username} {self.allowed}'
+
+
+class GlobalSymbol(models.Model):
+    class DataSource(models.TextChoices):
+        COINGECKO =     'COINGECKO',     'CoinGecko'
+        COINMARKETCAP = 'COINMARKETCAP', 'CoinMarketCap'
+
+    cid = models.CharField(max_length=60, unique=True)
+    name = models.CharField(max_length=60, unique=True)
+    display = models.CharField(max_length=60, unique=True)
+    base = models.CharField(max_length=30, unique=True)
+    quote = models.CharField(max_length=30, default='USDT')
+    data_source = models.CharField(max_length=30, choices=DataSource.choices, default=DataSource.COINGECKO)
+    payload = models.TextField(null=True, blank=True)
+    image = models.URLField(null=True, blank=True)
+
+    ath = models.FloatField(null=True, blank=True)
+    atl = models.FloatField(null=True, blank=True)
+    ath_date = models.DateTimeField(null=True, blank=True)
+    atl_date = models.DateTimeField(null=True, blank=True)
+    volume = models.FloatField(null=True, blank=True, help_text='Total volume in USD')
+    market_cap = models.FloatField(null=True, blank=True, help_text='Market capitalization in USD')
+    circulating_supply = models.FloatField(null=True, blank=True)
+    total_supply = models.FloatField(null=True, blank=True)
+    max_supply = models.FloatField(null=True, blank=True)
+    supply_ratio = models.FloatField(null=True, blank=True, help_text='Circulating supply / Total supply')
+    last_updated = models.DateTimeField(null=True, blank=True, auto_now=True, help_text='Last time this symbol was updated')
+    price_change_24h = models.FloatField(null=True, blank=True, help_text='Price change in the last 24 hours')
+    price_change_percentage_24h = models.FloatField(null=True, blank=True, help_text='Price change percentage in the last 24 hours')
+    high_24h = models.FloatField(null=True, blank=True, help_text='Highest price in the last 24 hours')
+    low_24h = models.FloatField(null=True, blank=True, help_text='Lowest price in the last 24 hours')
+
+    def __str__(self):
+        return f'{self.name} {self.data_source}'

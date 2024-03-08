@@ -14,7 +14,7 @@ class MarketAdmin(admin.ModelAdmin):
     list_filter = ('exchange_name', 'testnet_enabled', 'trading_enabled', 'mainnet_enabled')
 
 
-class SymbolAdmin(admin.ModelAdmin):
+class MarketSymbolAdmin(admin.ModelAdmin):
     list_display = ('name', 'market', 'base', 'quote', 'spot_trading_enabled', 'margin_trading_enabled')
     search_fields = ('name', 'base', 'quote')
     list_filter = ('market__exchange_name', 'quote', 'spot_trading_enabled', 'margin_trading_enabled')
@@ -67,7 +67,7 @@ class NotificationAdmin(admin.ModelAdmin):
             notification.send()
 
 admin.site.register(Market, MarketAdmin)
-admin.site.register(Symbol, SymbolAdmin)
+admin.site.register(MarketSymbol, MarketSymbolAdmin)
 admin.site.register(Session, SessionAdmin)
 admin.site.register(Signal, SignalAdmin)
 admin.site.register(Order, OrderAdmin)

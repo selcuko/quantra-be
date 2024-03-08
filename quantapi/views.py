@@ -17,7 +17,7 @@ from markets.errors import InsufficientBalance, MarketDisabledTrading, SymbolNot
 from models import SymbolMetrics
 from quantapi.analytics import MarketAnalytics, TotalSessionAnalytics
 from quantapi.models import (Backtest, Market, Order, Session, Signal,
-                             Symbol, Strategy as StrategyModel)
+                             MarketSymbol, Strategy as StrategyModel)
 from strategy import get_strategy
 
 
@@ -172,7 +172,7 @@ class SessionInitView(View):
             symbol_name = form_data['symbol'].upper().replace('-', '').replace('/', '').replace('USDT', '') + '-USDT'
             if not imarket.has_symbol(symbol_name):
                 raise SymbolNotInMarket(f'Symbol {symbol_name} not found in market {market.exchange_name}')
-            symbol = Symbol.objects.get(name=symbol_name, market=market)
+            symbol = MarketSymbol.objects.get(name=symbol_name, market=market)
             if not symbol.spot_trading_enabled:
                 raise MarketDisabledTrading(f'{market.exchange_name} does not allow {symbol.name} in SPOT trading')
             if not market.is_valid_session_type((session_type := form_data['type'])):
@@ -339,7 +339,7 @@ class MarketDetailView(View):
     def get(self, request, pk):
         market = Market.objects.get(pk=pk)
         interface = market.get_interface()
-        symbols = Symbol.objects.filter(market=market)
+        symbols = MarketSymbol.objects.filter(market=market)
         return render(request, 'market-detail.html', {'market': market, 'symbols': symbols, 'interface': interface})
     
 
@@ -358,7 +358,7 @@ def raw_market_data(request, pk):
 class SearchSymbolView(View):
     def post(self, request):
         symbol = request.POST.get('symbol')
-        query = Symbol.objects.filter(Q(name__icontains=symbol) | Q(market__name__icontains=symbol))
+        query = MarketSymbol.objects.filter(Q(name__icontains=symbol) | Q(market__name__icontains=symbol))
         return [symbol.name for symbol in query]
 
 
@@ -431,7 +431,7 @@ class OrderManagementView(View):
         market = Market.objects.get(pk=payload['market'])
         symbol_name = payload['symbol']
         symbol_name = symbol_name.upper().replace('-', '').replace('/', '').replace('USDT', '') + '-USDT'
-        symbol = Symbol.objects.get(name=symbol_name, market=market)
+        symbol = MarketSymbol.objects.get(name=symbol_name, market=market)
         interface = market.get_interface()
         amount = float(payload['amount'])
         if payload['side'] == 'SELL':
@@ -468,6 +468,22 @@ class PriceView(View):
         response['updated'] = market.assets_updated_at
         return JsonResponse(response)
 
+
+
+class CoinScanView(View):
+    def get(self, request):
+        return render(request, 'symbol-scan.html')
+    
+    def post(self, request):
+        payload = request.POST
+        query = {}
+        cg = CoinGecko()
+        if 'volume-min' in payload:
+            query['volume_min'] = int(payload['volume-min'])
+        if 'volume-max' in payload:
+            query['volume_max'] = int(payload['volume-max'])
+        cg.coin()
+        # TODO: incomplete
 
 
 class SymbolView(View):
