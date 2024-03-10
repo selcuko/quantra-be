@@ -468,6 +468,7 @@ class GlobalSymbol(models.Model):
     price_change_percentage_24h = models.FloatField(null=True, blank=True, help_text='Price change percentage in the last 24 hours')
     high_24h = models.FloatField(null=True, blank=True, help_text='Highest price in the last 24 hours')
     low_24h = models.FloatField(null=True, blank=True, help_text='Lowest price in the last 24 hours')
+    data_updated = models.DateTimeField(null=True, blank=True, help_text='Last time this symbol was updated in the data source')
 
     def __str__(self):
         return f'{self.name} {self.data_source}'

@@ -66,6 +66,14 @@ class NotificationAdmin(admin.ModelAdmin):
         for notification in queryset:
             notification.send()
 
+
+class GlobalSymbolAdmin(admin.ModelAdmin):
+    list_display = ['name', 'volume', 'data_updated', 'data_source']
+    search_fields = ['name', 'data_source']
+    list_filter = ['data_source']
+
+
+admin.site.register(GlobalSymbol, GlobalSymbolAdmin)
 admin.site.register(Market, MarketAdmin)
 admin.site.register(MarketSymbol, MarketSymbolAdmin)
 admin.site.register(Session, SessionAdmin)
