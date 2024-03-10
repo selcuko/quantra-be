@@ -444,14 +444,14 @@ class GlobalSymbol(models.Model):
         COINGECKO =     'COINGECKO',     'CoinGecko'
         COINMARKETCAP = 'COINMARKETCAP', 'CoinMarketCap'
 
-    cid = models.CharField(max_length=60, unique=True)
-    name = models.CharField(max_length=60, unique=True)
-    display = models.CharField(max_length=60, unique=True)
-    base = models.CharField(max_length=30, unique=True)
-    quote = models.CharField(max_length=30, default='USDT')
+    cid = models.CharField(max_length=200, unique=True)
+    name = models.CharField(max_length=200)
+    display = models.CharField(max_length=200)
+    base = models.CharField(max_length=200)
+    quote = models.CharField(max_length=200, default='USDT')
     data_source = models.CharField(max_length=30, choices=DataSource.choices, default=DataSource.COINGECKO)
     payload = models.TextField(null=True, blank=True)
-    image = models.URLField(null=True, blank=True)
+    image = models.URLField(null=True, blank=True, max_length=1024, help_text='URL to image of this symbol')
 
     ath = models.FloatField(null=True, blank=True)
     atl = models.FloatField(null=True, blank=True)
@@ -462,13 +462,63 @@ class GlobalSymbol(models.Model):
     circulating_supply = models.FloatField(null=True, blank=True)
     total_supply = models.FloatField(null=True, blank=True)
     max_supply = models.FloatField(null=True, blank=True)
-    supply_ratio = models.FloatField(null=True, blank=True, help_text='Circulating supply / Total supply')
     last_updated = models.DateTimeField(null=True, blank=True, auto_now=True, help_text='Last time this symbol was updated')
     price_change_24h = models.FloatField(null=True, blank=True, help_text='Price change in the last 24 hours')
     price_change_percentage_24h = models.FloatField(null=True, blank=True, help_text='Price change percentage in the last 24 hours')
     high_24h = models.FloatField(null=True, blank=True, help_text='Highest price in the last 24 hours')
     low_24h = models.FloatField(null=True, blank=True, help_text='Lowest price in the last 24 hours')
     data_updated = models.DateTimeField(null=True, blank=True, help_text='Last time this symbol was updated in the data source')
+    supply_ratio = models.FloatField(null=True, blank=True, help_text='Circulating supply / Total supply')
+    ath_prox = models.FloatField(null=True, blank=True, help_text='Proximity to all time high')
+    atl_prox = models.FloatField(null=True, blank=True, help_text='Proximity to all time low')
+
+    @property
+    def price(self):
+        return json.loads(self.payload).get('current_price')
+
+    def calculate(self):
+        self.supply_ratio = (self.circulating_supply / self.total_supply) if self.circulating_supply and self.total_supply else None
+        self.ath_prox = ((self.ath - self.price) / (self.ath - self.atl)) if self.ath != self.atl and self.ath and self.atl and self.price else None
+        self.atl_prox = ((self.price - self.atl) / (self.ath - self.atl)) if self.ath != self.atl and self.ath and self.atl and self.price else None
+
+    def save(self, *args, **kwargs):
+        self.calculate()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f'{self.name} {self.data_source}'
+    
+    @staticmethod
+    def batch_to_json(symbols):
+        return [s.to_json() for s in symbols]
+    
+    def to_json(self):
+        return {
+            'cid': self.cid,
+            'name': self.name,
+            'display': self.display,
+            'base': self.base,
+            'quote': self.quote,
+            'data_source': self.data_source,
+            'payload': self.payload,
+            'image': self.image,
+            'ath': self.ath,
+            'atl': self.atl,
+            'ath_date': self.ath_date,
+            'atl_date': self.atl_date,
+            'volume': self.volume,
+            'market_cap': self.market_cap,
+            'circulating_supply': self.circulating_supply,
+            'total_supply': self.total_supply,
+            'max_supply': self.max_supply,
+            'supply_ratio': self.supply_ratio,
+            'last_updated': self.last_updated,
+            'price_change_24h': self.price_change_24h,
+            'price_change_percentage_24h': self.price_change_percentage_24h,
+            'high_24h': self.high_24h,
+            'low_24h': self.low_24h,
+            'data_updated': self.data_updated,
+            'ath_prox': self.ath_prox,
+            'atl_prox': self.atl_prox,
+            'supply_ratio': self.supply_ratio,
+        }

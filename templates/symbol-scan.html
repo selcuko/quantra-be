@@ -3,49 +3,47 @@
 {% block title %}{{ symbol.name }}{% endblock %}
 {% block content %}
 <!-- Incomplete -->
-<section class="p-4">
-    <h1
-        class="mb-4 text-2xl font-extrabold leading-none tracking-tight text-gray-900 md:text-3xl lg:text-4xl">
-        Coin
-        <span class="underline underline-offset-3 decoration-8 decoration-blue-400 dark:decoration-blue-600">
-            Scanner
-        </span>
-    </h1>
-
-
-    <aside id="default-sidebar" class="z-40 w-1/3 transition-transform -translate-x-full sm:translate-x-0"
+<h1 class="m-4 text-2xl font-extrabold leading-none tracking-tight text-gray-900 md:text-3xl lg:text-4xl">
+    Coin
+    <span class="underline underline-offset-3 decoration-8 decoration-blue-400 dark:decoration-blue-600">
+        Scanner
+    </span>
+</h1>
+<section class="p-4 flex">
+    <aside id="default-sidebar" class="sticky top-0 w-1/4 transition-transform"
         aria-label="Sidebar">
+        {% csrf_token %}
         <div class="flow-root rounded-lg border border-gray-300 p-3 shadow-sm">
             <dl class="-my-3 divide-y divide-gray-100 text-sm">
                 <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
-                    <dt class="font-medium text-gray-900">Min conv</dt>
+                    <dt class="font-medium text-gray-900">ATL proximity</dt>
                     <dd class="text-gray-700 sm:col-span-2">
-                        less than
-                        <input id="min-conv-max" type="text"
+                        max
+                        <input id="atl-prox-max" type="text"
                             class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
-                        greater than
-                        <input id="min-conv-min" type="text"
+                        min
+                        <input id="atl-prox-min" type="text"
                             class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
                     </dd>
                 </div>
                 <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
-                    <dt class="font-medium text-gray-900">Max conv</dt>
+                    <dt class="font-medium text-gray-900">ATH proximity</dt>
                     <dd class="text-gray-700 sm:col-span-2">
-                        less than
-                        <input id="max-conv-max" type="text"
+                        max
+                        <input id="ath-prox-max" type="text"
                             class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
-                        greater than
-                        <input id="max-conv-min" type="text"
+                        min
+                        <input id="ath-prox-min" type="text"
                             class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
                     </dd>
                 </div>
                 <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
                     <dt class="font-medium text-gray-900">Total volume</dt>
                     <dd class="text-gray-700 sm:col-span-2">
-                        less than
+                        max
                         <input id="volume-max" type="text"
                             class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
-                        greater than
+                        min
                         <input id="volume-min" type="text"
                             class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
                     </dd>
@@ -53,10 +51,10 @@
                 <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
                     <dt class="font-medium text-gray-900">Supply %</dt>
                     <dd class="text-gray-700 sm:col-span-2">
-                        less than
+                        max
                         <input id="supply-max" type="text"
                             class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
-                        greater than
+                        min
                         <input id="supply-min" type="text"
                             class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
                     </dd>
@@ -64,10 +62,10 @@
                 <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
                     <dt class="font-medium text-gray-900">Market cap</dt>
                     <dd class="text-gray-700 sm:col-span-2">
-                        less than
+                        max
                         <input id="marketcap-max" type="text"
                             class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
-                        greater than
+                        min
                         <input id="marketcap-min" type="text"
                             class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
                     </dd>
@@ -75,10 +73,139 @@
             </dl>
         </div>
     </aside>
+
+
+    <div class="overflow-x-auto p-3 w-3/4">
+        <table class="w-full text-sm text-left rtl:text-right text-gray-500 dark:text-gray-400 whitespace-nowrap">
+            <thead class="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
+                <tr>
+                    <th scope="col" class="p-3">
+                        Symbol
+                    </th>
+                    <th scope="col" class="p-3">
+                        Volume
+                    </th>
+                    <th scope="col" class="p-3">
+                        Market cap
+                    </th>
+                    <th scope="col" class="p-3">
+                        ATH/ATL proximity
+                    </th>
+                    <th scope="col" class="p-3">
+                        Supply ratio
+                    </th>
+                    <th scope="col" class="p-3">
+                        Price change 24h
+                    </th>
+                    <th scope="col" class="p-3">
+                        High/low 24h
+                    </th>
+                </tr>
+            </thead>
+            <tbody id="symbol-list">
+                <tr class="bg-white dark:bg-gray-800">
+                    <th scope="row"
+                        class="p-3 font-medium text-gray-900 whitespace-nowrap dark:text-white flex flex-row items-center">
+                        <p>Symbols not loaded.</p>
+                    </th>
+            </tbody>
+        </table>
+    </div>
 </section>
 
 <script>
-    
+    let symbols = [];
+    const symbolTable = document.getElementById('symbol-list');
+    const atlProxMax = document.getElementById('atl-prox-max');
+    const atlProxMin = document.getElementById('atl-prox-min');
+    const athProxMax = document.getElementById('ath-prox-max');
+    const athProxMin = document.getElementById('ath-prox-min');
+    const volumeMax = document.getElementById('volume-max');
+    const volumeMin = document.getElementById('volume-min');
+    const supplyMax = document.getElementById('supply-max');
+    const supplyMin = document.getElementById('supply-min');
+    const marketcapMax = document.getElementById('marketcap-max');
+    const marketcapMin = document.getElementById('marketcap-min');
+    const inputs = [volumeMax, volumeMin, supplyMax, supplyMin, marketcapMax, marketcapMin, atlProxMax, atlProxMin, athProxMax, athProxMin];
+    const csrf_token = document.getElementsByName('csrfmiddlewaretoken')[0].value;
+
+    let debounceTimeout;
+
+    // fetch symbols on input change
+    inputs.forEach(input => {
+        input.addEventListener('input', () => {
+            clearTimeout(debounceTimeout);
+            debounceTimeout = setTimeout(fetchSymbols, 150);
+        });
+    });
+
+    // fetch symbols on page load
+    fetchSymbols();
+
+    function fetchSymbols() {
+        fetch('', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrf_token
+            },
+            body: JSON.stringify({
+                csrfmiddleware_token: csrf_token,
+                atlProxMax: atlProxMax.value,
+                atlProxMin: atlProxMin.value,
+                athProxMax: athProxMax.value,
+                athProxMin: athProxMin.value,
+                volumeMax: volumeMax.value,
+                volumeMin: volumeMin.value,
+                supplyMax: supplyMax.value,
+                supplyMin: supplyMin.value,
+                marketcapMax: marketcapMax.value,
+                marketcapMin: marketcapMin.value,
+            }),
+        }).then(response => {
+            if (response.ok) {
+                return response.json();
+            }
+            throw new Error('Request failed.');
+        }).then(data => {
+            symbols = data;
+            renderSymbols();
+        }).catch(error => {
+            console.log(error);
+        });
+    }
+
+    function renderSymbols() {
+        symbolTable.innerHTML = '';
+        symbols.forEach(symbol => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <th scope="row" class="p-3 font-medium text-gray-900 whitespace-nowrap dark:text-white flex flex-row items-center">
+                    <a href="/symbol/${symbol.base}" class="hover:text-blue-500 whitespace-nowrap flex items-center"><img src="${symbol.image}" alt="${symbol.base}" class="w-6 h-6 mr-3"> ${symbol.base}</a>
+                </th>
+                <td class="p-3">
+                    $ ${symbol.volume ? symbol.volume.toLocaleString() : '---'}
+                </td>
+                <td class="p-3">
+                    $ ${symbol.market_cap ? symbol.market_cap.toLocaleString() : '---'}
+                </td>
+                <td class="p-3">
+                    ${symbol.ath_prox ? symbol.ath_prox.toFixed(2) : '---'} / ${symbol.atl_prox ? symbol.atl_prox.toFixed(2) : '---'}
+                </td>
+                <td class="p-3">
+                    ${symbol.supply_ratio ? symbol.supply_ratio.toFixed(2) : '---'}
+                </td>
+                <td class="p-3">
+                    ${symbol.price_change_24h ? symbol.price_change_24h.toFixed(2) : '---'}%
+                </td>
+                <td class="p-3">
+                    $ ${symbol.high_24h ? symbol.high_24h : '---'} / $ ${symbol.low_24h ? symbol.low_24h : '---'}
+                </td>
+            `;
+            symbolTable.appendChild(tr);
+        });
+    }
+
 </script>
 
 {% endblock %}

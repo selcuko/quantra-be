@@ -1,5 +1,4 @@
 import json
-import re
 import threading
 from datetime import datetime, timedelta
 
@@ -8,16 +7,15 @@ from django.core.paginator import Paginator
 from django.db.models import Q
 from django.shortcuts import redirect, render
 from django.views import View
-from regex import F
 from backtest import async_analyze
-from django.http import HttpResponse, JsonResponse, response
+from django.http import HttpResponse, JsonResponse
 from coingecko import CoinGecko
 from livetest import LiveLoop
 from markets.errors import InsufficientBalance, MarketDisabledTrading, SymbolNotInMarket
 from models import SymbolMetrics
 from quantapi.analytics import MarketAnalytics, TotalSessionAnalytics
-from quantapi.models import (Backtest, Market, Order, Session, Signal,
-                             MarketSymbol, Strategy as StrategyModel)
+from quantapi.models import (Backtest, GlobalSymbol, Market, Order, Session, Signal,
+                             MarketSymbol)
 from strategy import get_strategy
 
 
@@ -475,15 +473,33 @@ class CoinScanView(View):
         return render(request, 'symbol-scan.html')
     
     def post(self, request):
-        payload = request.POST
+        payload = json.loads(request.body.decode('utf-8'))
         query = {}
-        cg = CoinGecko()
-        if 'volume-min' in payload:
-            query['volume_min'] = int(payload['volume-min'])
-        if 'volume-max' in payload:
-            query['volume_max'] = int(payload['volume-max'])
-        cg.coin()
-        # TODO: incomplete
+        print(payload)
+        if payload.get('volumeMin'):
+            query['volume__gte'] = int(payload['volumeMin'])
+        if payload.get('volumeMax'):
+            query['volume__lte'] = int(payload['volumeMax'])
+        if payload.get('atlProxMax'):
+            query['atl_prox__lte'] = float(payload['atlProxMax'])
+        if payload.get('atlProxMin'):
+            query['atl_prox__gte'] = float(payload['atlProxMin'])
+        if payload.get('athProxMax'):
+            query['ath_prox__lte'] = float(payload['athProxMax'])
+        if payload.get('athProxMin'):
+            query['ath_prox__gte'] = float(payload['athProxMin'])
+        if payload.get('supplyMax'):
+            query['supply_ratio__lte'] = float(payload['supplyMax'])
+        if payload.get('supplyMin'):
+            query['supply_ratio__gte'] = float(payload['supplyMin'])
+        if payload.get('marketcapMin'):
+            query['market_cap__gte'] = int(payload['marketcapMin'])
+        if payload.get('marketcapMax'):
+            query['market_cap__lte'] = int(payload['marketcapMax'])
+
+        symbols = GlobalSymbol.objects.filter(**query).exclude(volume__isnull=True).order_by('-volume')[:50]
+        print('returning', len(symbols))
+        return JsonResponse(GlobalSymbol.batch_to_json(symbols), safe=False)
 
 
 class SymbolView(View):

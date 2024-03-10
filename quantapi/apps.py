@@ -33,6 +33,18 @@ def continue_sessions():
     threading.Thread(target=watchdog_loop, daemon=True).start()
 
 
+def symbol_metrics_update_loop():
+    from quantapi.management.commands.update_symbol_metrics import Command
+    while True:
+        try:
+            Command().handle()
+        except:
+            logger.error('Failed to update symbol metrics.', exc_info=True)
+        finally:
+            # update every 5 minutes
+            threading.Event().wait(300)
+
+
 class QuantapiConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'quantapi'
@@ -43,6 +55,7 @@ class QuantapiConfig(AppConfig):
         import sys
         if 'runserver' in sys.argv or 'quant.wsgi' in sys.argv:
             threading.Thread(target=continue_sessions, daemon=True).start()
+            threading.Thread(target=symbol_metrics_update_loop, daemon=True).start()
         
 
             

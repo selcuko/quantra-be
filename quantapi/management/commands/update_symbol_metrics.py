@@ -1,4 +1,4 @@
-from ast import Global
+import json
 from django.core.management.base import BaseCommand, CommandError
 from quantapi.models import MarketSymbol, GlobalSymbol
 from coingecko import CoinGecko
@@ -13,37 +13,59 @@ class Command(BaseCommand):
             global_coins = []
 
             for coin in all_coins:
-                try:
-                    gs, created = GlobalSymbol.objects.get_or_create(
-                    data_source=GlobalSymbol.DataSource.COINGECKO,
+                gs = GlobalSymbol(
                     cid=coin['id'],
-                    name=coin['symbol'].upper()+'-USD',
-                    defaults={
-                        'base': coin['symbol'].upper(),
-                        'display': coin['name'],
-                        'image': coin['image'],
-                        'market_cap': coin['market_cap'],
-                        'volume': coin['total_volume'],
-                        'high_24h': coin['high_24h'],
-                        'low_24h': coin['low_24h'],
-                        'price_change_24h': coin['price_change_24h'],
-                        'price_change_percentage_24h': coin['price_change_percentage_24h'],
-                        'circulating_supply': coin['circulating_supply'],
-                        'total_supply': coin['total_supply'],
-                        'max_supply': coin['max_supply'],
-                        'ath': coin['ath'],
-                        'ath_date': coin['ath_date'],
-                        'atl': coin['atl'],
-                        'atl_date': coin['atl_date'],
-                        'data_updated': coin['last_updated'],
-                        'payload': coin
-                    }
+                    name=coin['symbol'].upper().replace('-USD', '') +'-USD',
+                    base=coin['symbol'].upper().replace('-USD', ''),
+                    image=coin.get('image'),
+                    market_cap=coin.get('market_cap'),
+                    volume=coin.get('total_volume'),
+                    high_24h=coin.get('high_24h'),
+                    low_24h=coin.get('low_24h'),
+                    price_change_24h=coin.get('price_change_24h'),
+                    price_change_percentage_24h=coin.get('price_change_percentage_24h'),
+                    circulating_supply=coin.get('circulating_supply'),
+                    total_supply=coin.get('total_supply'),
+                    max_supply=coin.get('max_supply'),
+                    ath=coin.get('ath'),
+                    ath_date=coin.get('ath_date'),
+                    atl=coin.get('atl'),
+                    atl_date=coin.get('atl_date'),
+                    data_updated=coin.get('last_updated'),
+                    payload=json.dumps(coin),
+                    data_source=GlobalSymbol.DataSource.COINGECKO
                 )
-                    if not created:
-                        print(f'{gs.name} already exists')
-                except Exception as e:
-                    print(f'Failed to create {coin["symbol"]}')
-                print(f'Created {gs.name}')
+                gs.calculate()
+                if not gs.cid:
+                    print(f'Coin {gs.name} not found in CoinGecko API. Skipping...')
+                    continue
+                global_coins.append(gs)
+            
+            # check if there are duplicate symbols (cid)
+            cid_map = {}
+            for s in global_coins:
+                if s.cid in cid_map:
+                    print(f'Duplicate symbol found: {s.cid} - {s.name}. Skipping...')
+                    continue
+                cid_map[s.cid] = s
+
+            GlobalSymbol.objects.bulk_create(cid_map.values(), update_conflicts=True, unique_fields=['cid'], update_fields=[
+                'market_cap',
+                'volume',
+                'high_24h',
+                'low_24h',
+                'price_change_24h',
+                'price_change_percentage_24h',
+                'circulating_supply',
+                'total_supply',
+                'max_supply',
+                'ath',
+                'ath_date',
+                'atl',
+                'atl_date',
+                'data_updated',
+                'payload'
+            ])
         except KeyboardInterrupt:
             print('Keyboard interrupt detected. Exiting...')
         except Exception as e:
