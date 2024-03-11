@@ -38,6 +38,13 @@ class LogTailFormatter(logging.Formatter):
         return formatter.format(record)
 
 
+class DetailPrefixFilter(logging.Filter):
+    def filter(self, record):
+        if hasattr(record, 'session'):
+            record.msg = f"{record.session!s} {record.msg}"
+        return True
+
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 colored_formatter = ColoredFormatter()
@@ -66,10 +73,13 @@ if LOGTAIL_TOKEN:
 class NotificationHandler(logging.Handler):
     def emit(self, record):
         from quantapi.models import Notification
-        if record.levelno <= logging.WARNING:
+        if record.levelno <= logging.INFO and 0:
             return
+        message = record.getMessage()
+        if hasattr(record, 'loop'):
+            message = f"[{record.loop!s}] {message}"
         n = Notification.objects.create(
-            message=record.getMessage(),
+            message=message,
             severity=record.levelname,
             notification_type=Notification.Type.LOG,
         )

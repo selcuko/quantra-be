@@ -15,7 +15,7 @@ import random
 from binance.client import Client
 from binance.client import AsyncClient
 
-from livetest import LiveLoop
+from liveloop import LiveLoop
 from quantapi.models import Market
 from strategy import get_strategy
 

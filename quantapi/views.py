@@ -10,7 +10,7 @@ from django.views import View
 from backtest import async_analyze
 from django.http import HttpResponse, JsonResponse
 from coingecko import CoinGecko
-from livetest import LiveLoop
+from liveloop import LiveLoop
 from markets.errors import InsufficientBalance, MarketDisabledTrading, SymbolNotInMarket
 from models import SymbolMetrics
 from quantapi.analytics import MarketAnalytics, TotalSessionAnalytics

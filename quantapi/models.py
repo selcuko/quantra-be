@@ -162,11 +162,12 @@ class Session(models.Model):
         LIVE_SANDBOX = 'live.sandbox', 'Live Testnet'
         LIVE_MAINNET = 'live.mainnet', 'Live Mainnet'
     class Status(models.TextChoices):
-        ONGOING   = 'ONGOING',   'Ongoing'
-        COMPLETED = 'COMPLETED', 'Completed'
-        ERROR     = 'ERROR',     'Error'
-        PURGED    = 'PURGED',    'Purged'
-        PAUSED    = 'PAUSED',    'Paused'
+        ONGOING    = 'ONGOING',    'Ongoing'
+        COMPLETED  = 'COMPLETED',  'Completed'
+        ERROR      = 'ERROR',      'Error'
+        PURGED     = 'PURGED',     'Purged'
+        PAUSED     = 'PAUSED',     'Paused'
+        TERMINATED = 'TERMINATED', 'Terminated'
     class Freq(models.TextChoices):
         MIN1  = '1 min',  '1 minute'
         MIN3  = '3 min',  '3 minutes'
@@ -232,7 +233,7 @@ class Session(models.Model):
             raise ValueError('Session must be saved before resuming')
         if not self.strategy:
             raise ValueError('Session must have a strategy to resume')
-        from livetest import LiveLoop
+        from liveloop import LiveLoop
         strategy = get_strategy(self.strategy.name)
         ll = LiveLoop(
             symbol=self.symbol.name,
