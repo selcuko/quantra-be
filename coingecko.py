@@ -41,14 +41,13 @@ class CoinGecko:
         while not last_page:
             try:
                 coins = self.coins_list_market(vs_currency=vs_currency, order=order, per_page=250, page=page)
+                time.sleep(1)
             except:
-                print(f'Failed to get page {page}, sleeping for 5 seconds')
                 time.sleep(5)
                 continue
             all_coins += coins
             if len(coins) < 250:
                 last_page = True
-            print(f'Page {page} has {len(coins)} coins')
             page += 1
         return all_coins
 

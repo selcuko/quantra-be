@@ -6,9 +6,9 @@ import json
 import time
 from datetime import datetime, timedelta
 from typing import Callable, Literal
+import typing
 from urllib.parse import urlencode
 import uuid
-from quantapi.models import Session
 
 import pytz
 import requests
@@ -19,10 +19,11 @@ from markets.errors import InsufficientBalance, RejectedOrder
 from markets.helper import authentication_required, float_to_precision
 from match import MatchEngine
 from models import interval_to_minutes
-from quantapi.models import Market, Order, MarketSymbol
 from websockets.sync.client import connect
 from websockets.client import ClientConnection
 from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
+if typing.TYPE_CHECKING:
+    from quantapi.models import Market, Order, MarketSymbol, Session
 
 
 class MEXCMarket(IMarket):
@@ -104,7 +105,8 @@ class MEXCMarket(IMarket):
             raise Exception(f'Error while subscribing to {topic}: {ack}')
         return ws
 
-    def init_match_engine(self, symbol:str, interval:str, callback:Callable, session:Session=None):
+    def init_match_engine(self, symbol:str, interval:str, callback:Callable, session:'Session'=None):
+        from quantapi.models import Session
         ws = self.get_match_engine_ws(symbol)
         last_ping = datetime.now()
         me = MatchEngine(interval, callback)
@@ -334,7 +336,7 @@ class MEXCMarket(IMarket):
             client_oid = order.get('clientOrderId'),
             order_type = order.get('type', 'MARKET'),
             price = order.get('price'),
-            timestamp = self._standardize_datetime(order_time),
+            market_timestamp = self._standardize_datetime(order_time),
             deal_funds = float(order.get('origQuoteOrderQty', 0)),
             deal_size = float(order.get('executedQty', 0)),
             funds = float(order.get('origQuoteOrderQty', 0)),
@@ -343,7 +345,7 @@ class MEXCMarket(IMarket):
         )
 
     @authentication_required
-    def place_market_order(self, symbol: MarketSymbol | str, side: Literal['buy', 'sell'], funds: float | None = None, quantity: float | None = None, validate=True) -> Order:
+    def place_market_order(self, symbol: 'MarketSymbol|str', side: Literal['buy', 'sell'], funds: float | None = None, quantity: float | None = None, validate=True) -> 'Order':
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         client_oid = uuid.uuid4().hex
@@ -398,7 +400,7 @@ class MEXCMarket(IMarket):
             raise
 
     @authentication_required
-    def get_order(self, symbol:MarketSymbol|str, order:Order|str):
+    def get_order(self, symbol:'MarketSymbol|str', order:'Order|str'):
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         if isinstance(order, Order):

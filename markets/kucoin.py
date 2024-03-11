@@ -5,7 +5,9 @@ import uuid
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Literal
-from quantapi.models import Session
+if typing.TYPE_CHECKING:
+    from quantapi.models import Session, MarketSymbol, Order, Market as MarketModel
+    
 
 import pytz
 from kucoin.client import Market, Trade, User
@@ -17,7 +19,6 @@ from markets.errors import InsufficientBalance, SymbolNotInMarket
 from markets.helper import authentication_required, float_to_precision
 from match import MatchEngine
 from models import interval_to_minutes
-from quantapi.models import Order, MarketSymbol, Market as MarketModel
 from websockets.sync.client import connect
 from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
 from websockets.client import ClientConnection
@@ -181,7 +182,8 @@ class KucoinMarket(IMarket):
             raise ValueError(f'Error while subscribing to {symbol} on {self.name}: {ack}')
         return ws
 
-    def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable, session:Session=None):
+    def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable, session:'Session'=None):
+        from quantapi.models import Session
         ws = self.get_match_engine_socket(symbol)
         last_ping = datetime.now()
         engine = MatchEngine(interval, callback)
@@ -293,7 +295,7 @@ class KucoinMarket(IMarket):
             oid=oid,
             order_type=order.get('type', 'unknown').upper(),
             price=float(order.get('price', 0)),
-            timestamp=self._standardize_datetime(str(order.get('createdAt'))) if order.get('createdAt') else None,
+            market_timestamp=self._standardize_datetime(str(order.get('createdAt'))) if order.get('createdAt') else None,
             deal_funds=float(order.get('dealFunds', 0)),
             deal_size=float(order.get('dealSize', 0)),
             status='NEW' if order.get('isActive') else 'FILLED',
@@ -444,6 +446,7 @@ class KucoinMarket(IMarket):
     def get_order(self, symbol:'MarketSymbol|str', order:'Order|str') -> 'Order':
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
+        from quantapi.models import Order
         if isinstance(order, Order):
             if not order.oid:
                 raise ValueError('Cannot get order without oid')

@@ -16,9 +16,8 @@ from markets.helper import authentication_required, float_to_precision
 from markets.interface import IMarket
 from match import MatchEngine
 from models import interval_to_minutes
-from quantapi.models import Market, Session
 if typing.TYPE_CHECKING:
-    from quantapi.models import MarketSymbol, Order
+    from quantapi.models import MarketSymbol, Order, Session
 from websockets.sync.client import connect
 from websockets.exceptions import ConnectionClosedOK, ConnectionClosed
 
@@ -37,6 +36,7 @@ class BinanceMarket(IMarket):
         self.commission = {}
         self.market = market
         if not self.market:
+            from quantapi.models import Market
             self.market = Market.objects.filter(exchange_name=self.name).first()
 
         try:
@@ -100,7 +100,8 @@ class BinanceMarket(IMarket):
             'maker': payload['m'],
         }
 
-    def init_match_engine(self, symbol:str, interval:str, callback:Callable, session:Session):
+    def init_match_engine(self, symbol:str, interval:str, callback:Callable, session:'Session'):
+        from quantapi.models import Session
         ws_uri = f'wss://stream.binance.com:9443/ws/{self._format_symbol(symbol).lower()}@trade'
         ws = connect(ws_uri)
         me = MatchEngine(interval, callback)
@@ -228,7 +229,7 @@ class BinanceMarket(IMarket):
             client_oid=order['clientOrderId'],
             order_type=order['type'].upper(),
             price=float(order['price']),
-            timestamp=datetime.fromtimestamp(int(order_time // 1000), tz=pytz.UTC),
+            market_timestamp=datetime.fromtimestamp(int(order_time // 1000), tz=pytz.UTC),
             deal_funds=float(order.get('cummulativeQuoteQty', 0)),
             deal_size=float(order.get('origQty', 0)),
             status=order['status'].upper(),
@@ -292,6 +293,7 @@ class BinanceMarket(IMarket):
 
     @authentication_required
     def place_market_order(self, symbol:'MarketSymbol|str', side:Literal['buy', 'sell'], funds:Optional[float]=None, quantity:Optional[float]=None, validate=True) -> 'Order':
+        initial_quantity = quantity
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         client_oid = uuid.uuid4().hex
@@ -301,6 +303,10 @@ class BinanceMarket(IMarket):
             funds = float_to_precision(Decimal(funds), Decimal(symbol.quote_precision))
         if quantity and symbol.base_precision:
             quantity = float_to_precision(Decimal(quantity), Decimal(symbol.base_precision))
+        filters = self.market.filters(symbol)
+        lot_step = filters.get('lot_step')
+        if lot_step and quantity:
+            quantity = float_to_precision(Decimal(quantity), Decimal(lot_step))
         try:
             _order_payload = self.client.order_market(
                 side=side,
@@ -335,6 +341,10 @@ class BinanceMarket(IMarket):
             'quantity': quantity,
             'client_oid': client_oid,
         })
+        if initial_quantity:
+            order.add_message(f'Order was initially requested for {initial_quantity} {symbol.base}')
+        else:
+            order.add_message(f'Order was initially requested for {funds} {symbol.quote}')
         return order
 
     @authentication_required

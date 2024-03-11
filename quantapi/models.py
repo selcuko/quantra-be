@@ -1,16 +1,21 @@
 from datetime import datetime
 import json
+from multiprocessing import Value
 import os
 import threading
 from django.conf import settings
 from django.contrib.auth.models import User
+from numpy import add
+from regex import B
 from logger import logger
 import pytz
 from typing import Optional
 from django.db import models
 from cryptography.fernet import Fernet
+from markets.helper import float_to_precision
 
 from strategy import get_strategy
+from decimal import Decimal
 
 
 class Market(models.Model):
@@ -33,8 +38,37 @@ class Market(models.Model):
     prices = models.TextField(null=True, blank=True, help_text='Prices of symbols in this market')
     assets_updated_at = models.DateTimeField(null=True, blank=True, help_text='Last time assets were updated')
 
+    def filters(self, symbol):
+        details = json.loads(symbol.details or '{}', )
+        if self.exchange_name == Market.Exchange.BINANCE:
+            filters = {f['filterType']: f for f in details.get('filters', [])}
+            return {
+            'min_notional': Decimal(filters.get('MIN_NOTIONAL', {}).get('minNotional')) if filters.get('MIN_NOTIONAL', {}).get('applyToMarket') else None,
+            'lot_step': Decimal(filters.get('LOT_SIZE', {}).get('stepSize')),
+            'price_step': Decimal(filters.get('PRICE_FILTER', {}).get('tickSize')),
+            }
+        elif self.exchange_name == Market.Exchange.KUCOIN:
+            return {
+            'min_notional': Decimal(details.get('minFunds')),
+            'lot_step': Decimal(details.get('baseIncrement')),
+            'price_step': Decimal(details.get('priceIncrement')),
+            }
+        elif self.exchange_name == Market.Exchange.MEXC:
+            return {
+            'price_step': Decimal(details.get('quoteAmoundPrecision')),
+            'lot_step': Decimal(details.get('baseSizePrecision')),
+            'min_notional': Decimal(details.get('minQuoteAmoundMarket')),
+            }
+        else:
+            return {
+                'min_notional': None,
+                'lot_step': None,
+                'price_step': None,
+            }
+
+
     def __str__(self):
-        return str(self.friendly_name or self.exchange_name)
+        return f'{self.exchange_name} ({self.friendly_name})'
     
     def get_interface(self):
         from markets import get_market
@@ -54,7 +88,7 @@ class Market(models.Model):
     @property
     def available_capital(self):
         capital_in_sessions = Session.objects.filter(symbol__market=self, status=Session.Status.ONGOING).aggregate(models.Sum('capital'))['capital__sum'] or 0
-        return max(self.usdt - capital_in_sessions, 0)
+        return max(self.usdt - capital_in_sessions, 0) if self.usdt else 0
 
     @property
     def config(self):
@@ -268,7 +302,11 @@ class Order(models.Model):
     class Type(models.TextChoices):
         MARKET = 'MARKET'
         LIMIT = 'LIMIT'
+    class Side(models.TextChoices):
+        BUY = 'BUY'
+        SELL = 'SELL'
     class Status(models.TextChoices):
+        NOT_PLACED = 'NOT_PLACED'
         OPEN = 'OPEN'
         FILLED = 'FILLED'
         CANCELLED = 'CANCELLED'
@@ -277,17 +315,55 @@ class Order(models.Model):
         ERROR = 'ERROR'
     oid = models.CharField(max_length=256, unique=True, null=True, blank=True)
     client_oid = models.CharField(max_length=256, unique=True, null=True, blank=True)
-    deal_size = models.FloatField(help_text='Amount of quote currency in this order (e.g. BTC)')
-    price = models.FloatField(help_text='Price represented as (price of base)/(price of quote)')
-    deal_funds = models.FloatField(help_text='Amount of base currency in this order (e.g. USDT)')
-    funds = models.FloatField(help_text='Amount of base currency of this order initially placed with')
-    order_type = models.CharField(max_length=30, choices=Type.choices)
+    deal_size = models.FloatField(help_text='Amount of quote currency in this order (e.g. BTC)', null=True, blank=True)
+    price = models.FloatField(help_text='Price represented as (price of base)/(price of quote)', null=True, blank=True)
+    deal_funds = models.FloatField(help_text='Amount of base currency in this order (e.g. USDT)', null=True, blank=True)
+    funds = models.FloatField(help_text='Amount of base currency of this order initially placed with', null=True, blank=True)
+    order_type = models.CharField(max_length=30, choices=Type.choices, default=Type.MARKET)
     signal = models.OneToOneField(Signal, on_delete=models.PROTECT, related_name='order')
-    timestamp = models.DateTimeField()
+    market_timestamp = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=30, choices=Status.choices)
     force = models.BooleanField(default=False)
     details = models.TextField(null=True, blank=True)
     request = models.TextField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
+    placed_at = models.DateTimeField(null=True, blank=True)
+    side = models.CharField(max_length=30, choices=Side.choices, null=True)
+    messages_raw = models.TextField(default='')
+
+    @property
+    def messages(self):
+        return self.messages_raw.split('\n')
+    
+    @messages.setter
+    def messages(self, value):
+        self.messages_raw = '\n'.join(value)
+    
+    def add_message(self, message):
+        messages = self.messages
+        messages.append(message)
+        self.messages = messages
+
+    def validate(self):
+        if not self.funds and not self.deal_funds:
+            raise ValueError('Order must have funds or deal_funds')
+        if not self.price and not self.deal_size:
+            raise ValueError('Order must have price or deal_size')
+
+    def fit(self):
+        if self.oid or self.status != Order.Status.NOT_PLACED:
+            raise ValueError('Order must be not placed to fit')
+        filters = self.signal.session.symbol.market.filters(self.signal.session.symbol)
+        print('filters:', filters, 'symbol:', self.signal.session.symbol.name)
+        if filters['min_notional'] and self.funds < filters['min_notional']:
+            self.status = Order.Status.REJECTED
+            self.details = f'Funds {self.funds} is less than minimum notional={filters["min_notional"]}) filter enforced by {self.signal.session.symbol.market.exchange_name}'
+            self.save()
+            return
+        if filters['lot_step'] and self.deal_size:
+            self.deal_size = float_to_precision(self.deal_size, filters['lot_step'])
+        if filters['price_step'] and self.price:
+            self.price = float_to_precision(self.price, filters['price_step'])
 
     def __str__(self) -> str:
         try:
@@ -322,6 +398,9 @@ class Order(models.Model):
             return self.price
         return self.deal_funds / self.deal_size
 
+    def save(self, *args, **kwargs):
+        if not self.side: self.side = self.signal.side
+        super().save(*args, **kwargs)
 
 class Subscription(models.Model):
     user = models.ForeignKey(User, on_delete=models.PROTECT, related_name='subscriptions')

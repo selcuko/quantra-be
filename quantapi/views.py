@@ -63,7 +63,7 @@ class HomeView(View):
                 'open_position_delta_pct': open_position_delta_pct,
             })
 
-        recent_orders = Order.objects.filter(signal__session__in=sessions, status=Order.Status.FILLED).order_by('-timestamp')[:8]
+        recent_orders = Order.objects.filter(signal__session__in=sessions, status=Order.Status.FILLED).order_by('-created_at')[:8]
 
         ma = MarketAnalytics()
         sa = TotalSessionAnalytics(sessions)
@@ -84,7 +84,7 @@ class SessionDetailView(View):
         orders = Order.objects.filter(signal__session=session, status=Order.Status.FILLED)
         if not orders:
             return None
-        last_order = orders.order_by('-timestamp')[0]
+        last_order = orders.order_by('-created_at')[0]
         if last_order.signal.side == 'BUY':
             return last_order
         else:
@@ -329,7 +329,7 @@ class SessionUpdateView(View):
 
 class MarketListView(View):
     def get(self, request):
-        markets = Market.objects.filter(trading_enabled=True, mainnet_enabled=True).order_by('exchange_name')
+        markets = Market.objects.filter(trading_enabled=True).order_by('exchange_name')
         return render(request, 'market-list.html', {'markets': markets})
 
 
