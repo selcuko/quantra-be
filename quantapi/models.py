@@ -263,7 +263,7 @@ class Session(models.Model):
 
     def recent_order_error(self):
         # return True if if there is an order with status ERROR in the last 5 orders
-        orders = Order.objects.filter(signal__session=self).order_by('-timestamp')[:5]
+        orders = Order.objects.filter(signal__session=self).order_by('-created_at')[:5]
         orders = orders.filter(status=Order.Status.ERROR)
         return orders.exists()
 

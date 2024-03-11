@@ -24,7 +24,7 @@ def get_open_position(session):
     orders = Order.objects.filter(signal__session=session, status=Order.Status.FILLED)
     if not orders:
         return None
-    last_order = orders.order_by('-timestamp')[0]
+    last_order = orders.order_by('-created_at')[0]
     if last_order.signal.side == 'BUY':
         return last_order
     else:
