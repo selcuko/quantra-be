@@ -73,15 +73,18 @@ if LOGTAIL_TOKEN:
 class NotificationHandler(logging.Handler):
     def emit(self, record):
         from quantapi.models import Notification
-        if record.levelno <= logging.INFO and 0:
+        if record.levelno <= logging.WARNING:
             return
         message = record.getMessage()
         if hasattr(record, 'loop'):
             message = f"[{record.loop!s}] {message}"
+        n_type = Notification.Type.LOG
+        if hasattr(record, 'n_type'):
+            n_type = record.n_type
         n = Notification.objects.create(
             message=message,
             severity=record.levelname,
-            notification_type=Notification.Type.LOG,
+            notification_type=n_type
         )
         n.send()
 

@@ -119,7 +119,7 @@ class LiveLoop:
         else:
             self.thread = threading.Thread(target=self.__run_polling, name=f'LLAPI:{self.symbol.base}:{self.freq.replace(" ", "")}@{self.market.exchange_name}')
         self.thread.start()
-        self.logger.info(f'LiveLoop started in thread {self.thread.name}, id={self.thread.ident}.')
+        logger.info(f'LiveLoop started in thread {self.thread.name}, id={self.thread.ident}.')
         self.session.started = datetime.now(tz=pytz.UTC)
         self.session.thread_id = self.thread.ident
         self.session.last_price = self.last_kline['close']
@@ -268,7 +268,7 @@ class LiveLoop:
                         self.session.assets += last_order.deal_size
                         self.session.capital -= last_order.deal_funds
                     else:
-                        logger.error(f'{signal.side} order for {last_order.deal_funds} {self.symbol.quote} not filled, status is {last_order.status} (oid={last_order.oid}))')
+                        logger.error(f'{signal.side} order for {last_order.deal_funds} {self.symbol.quote} not filled, status is {last_order.status} (oid={last_order.oid}))', extra={'n_type': 'ORDER'})
                 except InsufficientBalance:
                     self.imarket.get_account()
                     self.session.capital = max(self.imarket.capital, 0)
@@ -298,7 +298,7 @@ class LiveLoop:
                         details=repr(e),
                         timestamp=self.last_kline_dt or datetime.now(tz=pytz.UTC)
                     )
-                    logger.error(f'Failed to place BUY order for {self.session.capital} {self.symbol.quote} (olid:{last_order.id}), skipping.', exc_info=True)
+                    logger.error(f'Failed to place BUY order for {self.session.capital} {self.symbol.quote} (olid:{last_order.id}), skipping.', exc_info=True, extra={'n_type': 'ORDER'})
                 self.session.save()
             else:
                 return False
@@ -328,7 +328,7 @@ class LiveLoop:
                         self.session.assets -= last_order.deal_size
                         self.session.capital += last_order.deal_funds
                     else:
-                        logger.error(f'{signal.side} order for {last_order.deal_size} {self.symbol.base} not filled, status is {last_order.status} (oid={last_order.oid}))')
+                        logger.error(f'{signal.side} order for {last_order.deal_size} {self.symbol.base} not filled, status is {last_order.status} (oid={last_order.oid}))', extra={'n_type': 'ORDER'})
                 except InsufficientBalance:
                     self.imarket.get_account()
                     self.session.capital = max(self.imarket.capital, 0)
@@ -348,7 +348,7 @@ class LiveLoop:
                         timestamp=self.last_kline_dt or datetime.now(tz=pytz.UTC)
                     )
                 except Exception as e:
-                    logger.error(f'Failed to place SELL order for {self.session.assets} {self.symbol.base} (olid:{last_order.id}), skipping.', exc_info=True)
+                    logger.error(f'Failed to place SELL order for {self.session.assets} {self.symbol.base} (olid:{last_order.id}), skipping.', exc_info=True, extra={'n_type': 'ORDER'})
                     last_order = Order.objects.create(
                         funds=self.session.capital,
                         deal_funds=self.session.capital,
@@ -394,11 +394,11 @@ class LiveLoop:
     def idle(self):
         """Idle indefinitely (for development purposes)"""
         if not self.thread:
-            logger.warning('Thread is not initialized yet.')
+            logger.critical('Thread is not initialized yet.')
             return
         while True:
             if not self.thread.is_alive():
-                logger.error(f'Thread ({self.thread.name}) died, exiting')
+                logger.critical(f'Thread ({self.thread.name}) died, exiting.')
                 break
             try:
                 time.sleep(1)

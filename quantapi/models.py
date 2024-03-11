@@ -463,7 +463,7 @@ class Notification(models.Model):
         from telegram import send_message
         if not self.pk:
             self.save()
-        message = f'{self.severity} {self.notification_type}\n{self.message}'
+        message = f'[{self.severity}] {self.message}'
         sent_to = []
         already_sent_to = self.sent_to.all()
         for endpoint in Endpoint.objects.all():

@@ -1,3 +1,4 @@
+from datetime import timedelta
 from quantapi.models import Order, Session, Market, Signal
 
 
@@ -70,7 +71,7 @@ class SessionAnalytics:
 
         """
         return self.session.capital + self.assets_value
-    
+
     @property
     def equity_delta(self):
         """
@@ -94,7 +95,7 @@ class SessionAnalytics:
 
         """
         return self.session.capital - self.session.initial_capital
-    
+
     @property
     def capital_delta_pct(self):
         """
@@ -102,6 +103,28 @@ class SessionAnalytics:
 
         """
         return (self.capital_delta / self.session.initial_capital) * 100
+
+    @property
+    def max_hold_time(self):
+        """
+        Calculate the maximum hold time for the session.
+
+        """
+        orders = Order.objects.filter(signal__session=self.session, status=Order.Status.FILLED)
+        max_hold_time = timedelta(seconds=0)
+        in_position = False
+        in_time = None
+        for order in orders:
+            if order.signal.side == Signal.Side.BUY:
+                in_position = True
+                in_time = order.created_at
+            elif order.signal.side == Signal.Side.SELL and in_position:
+                in_position = False
+                out_time = order.created_at
+                hold_time = out_time - in_time
+                if not max_hold_time or hold_time > max_hold_time:
+                    max_hold_time = hold_time
+        return max_hold_time
 
 
 class TotalSessionAnalytics:
