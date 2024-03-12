@@ -40,8 +40,8 @@ class LogTailFormatter(logging.Formatter):
 
 class DetailPrefixFilter(logging.Filter):
     def filter(self, record):
-        if hasattr(record, 'session'):
-            record.msg = f"{record.session!s} {record.msg}"
+        if hasattr(record, 'loop'):
+            record.msg = f"{record.loop!s} {record.msg}"
         return True
 
 
@@ -89,3 +89,4 @@ class NotificationHandler(logging.Handler):
         n.send()
 
 logger.addHandler(NotificationHandler())
+logger.addFilter(DetailPrefixFilter())

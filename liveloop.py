@@ -11,7 +11,7 @@ import pytz
 from logger import logger
 from markets.errors import InsufficientBalance, RejectedOrder
 from models import OHLCVDataset, interval_to_minutes
-from quantapi.models import Market, MarketSymbol, Order, Session, Signal
+from quantapi.models import ComplexOrder, Market, MarketSymbol, Order, Session, Signal
 from quantapi.models import Strategy as StrategyModel
 from strategy import Strategy, get_strategy
 
@@ -34,6 +34,7 @@ class LiveLoop:
         self.market = market
         self.imarket = market.get_interface()
         self.strategy = strategy
+        self.strategy.freq = freq
         self.freq = freq
         self.end = end
         self.capital_limit = capital_limit
@@ -237,6 +238,8 @@ class LiveLoop:
             self.session.initial_price = self.last_kline['close']
         self.session.save()
 
+        self.run_complex_orders()
+
 
     def can_buy(self):
         """Returns whether the session can buy or not based on available capital and buy permission."""
@@ -262,7 +265,7 @@ class LiveLoop:
                     last_order = self.imarket.place_market_order(self.symbol.name, 'buy', funds=self.session.capital)
                     last_order.signal = signal
                     last_order.price = last_kline['close']
-                    last_order.timestamp = last_order.timestamp or self.last_kline_dt or datetime.now(tz=pytz.UTC)
+                    last_order.market_timestamp = last_order.market_timestamp or self.last_kline_dt or datetime.now(tz=pytz.UTC)
                     last_order.save()
                     if last_order.status == Order.Status.FILLED:
                         self.session.assets += last_order.deal_size
@@ -285,7 +288,7 @@ class LiveLoop:
                         signal=signal,
                         status=Order.Status.REJECTED,
                         details=repr(ro),
-                        timestamp=self.last_kline_dt or datetime.now(tz=pytz.UTC)
+                        market_timestamp=self.last_kline_dt or datetime.now(tz=pytz.UTC)
                     )
                 except Exception as e:
                     last_order = Order.objects.create(
@@ -296,7 +299,7 @@ class LiveLoop:
                         signal=signal,
                         status=Order.Status.ERROR,
                         details=repr(e),
-                        timestamp=self.last_kline_dt or datetime.now(tz=pytz.UTC)
+                        market_timestamp=self.last_kline_dt or datetime.now(tz=pytz.UTC)
                     )
                     logger.error(f'Failed to place BUY order for {self.session.capital} {self.symbol.quote} (olid:{last_order.id}), skipping.', exc_info=True, extra={'n_type': 'ORDER'})
                 self.session.save()
@@ -322,7 +325,7 @@ class LiveLoop:
                     last_order = self.imarket.place_market_order(self.symbol.name, 'sell', quantity=self.session.assets)
                     last_order.signal = signal
                     last_order.price = last_kline['close']
-                    last_order.timestamp = last_order.timestamp or self.last_kline_dt or datetime.now(tz=pytz.UTC)
+                    last_order.market_timestamp = last_order.market_timestamp or self.last_kline_dt or datetime.now(tz=pytz.UTC)
                     last_order.save()
                     if last_order.status == Order.Status.FILLED:
                         self.session.assets -= last_order.deal_size
@@ -363,6 +366,16 @@ class LiveLoop:
             else:
                 return False
             return last_order
+
+
+    def run_complex_orders(self):
+        if self.session.status != Session.Status.ONGOING:
+            return
+        complex_orders = ComplexOrder.objects.filter(session=self.session, status=ComplexOrder.Status.PENDING)
+        for co in complex_orders:
+            if co.is_ready(self):
+                co.execute(self)
+                co.save()
 
 
     def should_stop(self):

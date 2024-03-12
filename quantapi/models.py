@@ -1,12 +1,10 @@
 from datetime import datetime
 import json
-from multiprocessing import Value
 import os
 import threading
+import typing
 from django.conf import settings
 from django.contrib.auth.models import User
-from numpy import add
-from regex import B
 from logger import logger
 import pytz
 from typing import Optional
@@ -16,6 +14,8 @@ from markets.helper import float_to_precision
 
 from strategy import get_strategy
 from decimal import Decimal
+if typing.TYPE_CHECKING:
+    from liveloop import LiveLoop
 
 
 class Market(models.Model):
@@ -321,7 +321,7 @@ class Order(models.Model):
     deal_funds = models.FloatField(help_text='Amount of base currency in this order (e.g. USDT)', null=True, blank=True)
     funds = models.FloatField(help_text='Amount of base currency of this order initially placed with', null=True, blank=True)
     order_type = models.CharField(max_length=30, choices=Type.choices, default=Type.MARKET)
-    signal = models.OneToOneField(Signal, on_delete=models.PROTECT, related_name='order')
+    signal = models.OneToOneField(Signal, on_delete=models.PROTECT, related_name='order', null=True, blank=True)
     market_timestamp = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=30, choices=Status.choices)
     force = models.BooleanField(default=False)
@@ -382,17 +382,17 @@ class Order(models.Model):
         self.deal_size = order.deal_size
         self.funds = order.funds
         self.order_type = order.order_type
-        self.timestamp = order.timestamp
+        self.market_timestamp = order.market_timestamp
         self.client_oid = order.client_oid
         self.save()
-    
+
     @property
     def symbol(self):
         try:
             return self.signal.symbol
         except:
             return None
-    
+
     @property
     def display_price(self):
         if self.price > 0:
@@ -402,6 +402,64 @@ class Order(models.Model):
     def save(self, *args, **kwargs):
         if not self.side: self.side = self.signal.side
         super().save(*args, **kwargs)
+
+
+class ComplexOrder(models.Model):
+    class Type(models.TextChoices):
+        TARGET_PRICE = 'TARGET_PRICE'
+    class Status(models.TextChoices):
+        PENDING = 'PENDING'
+        FILLED = 'FILLED'
+        ERRORED = 'ERRORED'
+
+    type = models.CharField(max_length=30, choices=Type.choices, default=Type.TARGET_PRICE)
+    status = models.CharField(max_length=30, choices=Status.choices)
+    session = models.ForeignKey(Session, on_delete=models.PROTECT, related_name='complex_orders')
+    target_price = models.FloatField(null=True, blank=True)
+    deal_funds = models.FloatField(null=True, blank=True)
+    deal_size = models.FloatField(null=True, blank=True)
+    side = models.CharField(max_length=30, choices=Order.Side.choices)
+    market_order = models.OneToOneField(Order, on_delete=models.PROTECT, related_name='complex_order', null=True, blank=True)
+
+    def __str__(self) -> str:
+        return f'{self.status} {self.type} @ {self.session.symbol.base}'
+
+    def is_ready(self, ll:'LiveLoop') -> bool:
+        if self.type == ComplexOrder.Type.TARGET_PRICE:
+            if self.side == Order.Side.BUY:
+                return ll.last_price <= self.target_price
+            elif self.side == Order.Side.SELL:
+                return ll.last_price >= self.target_price
+        return False
+
+    def execute(self, ll:'LiveLoop') -> Order:
+        if self.type == ComplexOrder.Type.TARGET_PRICE:
+            if self.side == Order.Side.BUY:
+                order = ll.imarket.place_market_order(
+                    symbol=self.session.symbol,
+                    side=Order.Side.BUY,
+                    funds=self.deal_funds
+                )
+                if not order.price:
+                    order.price = self.target_price
+                order.save()
+                self.market_order = order
+                self.status = ComplexOrder.Status.FILLED
+                self.save()
+            elif self.side == Order.Side.SELL:
+                order = ll.imarket.place_market_order(
+                    symbol=self.session.symbol,
+                    side=Order.Side.SELL,
+                    deal_size=self.deal_size
+                )
+                if not order.price:
+                    order.price = self.target_price
+                order.save()
+                self.market_order = order
+                self.status = ComplexOrder.Status.FILLED
+                self.save()
+        raise ValueError('Invalid complex order type: ' + self.type)
+
 
 class Subscription(models.Model):
     user = models.ForeignKey(User, on_delete=models.PROTECT, related_name='subscriptions')
@@ -483,7 +541,6 @@ class Notification(models.Model):
         else:
             self.state = Notification.State.SENT
         self.save()
-
 
 
 class Backtest(models.Model):

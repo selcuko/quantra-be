@@ -54,7 +54,6 @@ class OrderAdmin(admin.ModelAdmin):
     symbol_display.short_description = 'Symbol'
 
 
-
 class NotificationAdmin(admin.ModelAdmin):
     list_display = ('timestamp', 'message', 'severity', 'notification_type', 'state')
     list_filter = ('severity', 'notification_type', 'state')
@@ -73,6 +72,18 @@ class GlobalSymbolAdmin(admin.ModelAdmin):
     list_filter = ['data_source']
 
 
+class ComplexOrderAdmin(admin.ModelAdmin):
+    list_display = ('__str__', 'status', 'type', 'session', 'deal_funds')
+    search_fields = ('signal__session__symbol__name', 'session__symbol__market__exchange_name')
+    list_filter = ('status', 'type', 'side', 'session__symbol__market__exchange_name')
+    readonly_fields = ('symbol_display',)
+
+    def symbol_display(self, obj):
+        return obj.session.symbol
+
+    symbol_display.short_description = 'Symbol'
+
+
 admin.site.register(GlobalSymbol, GlobalSymbolAdmin)
 admin.site.register(Market, MarketAdmin)
 admin.site.register(MarketSymbol, MarketSymbolAdmin)
@@ -85,3 +96,4 @@ admin.site.register(Backtest, BacktestAdmin)
 admin.site.register(WhitelistedUser)
 admin.site.register(Strategy)
 admin.site.register(Notification, NotificationAdmin)
+admin.site.register(ComplexOrder, ComplexOrderAdmin)
