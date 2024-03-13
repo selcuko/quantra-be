@@ -427,9 +427,9 @@ class ComplexOrder(models.Model):
     def is_ready(self, ll:'LiveLoop') -> bool:
         if self.type == ComplexOrder.Type.TARGET_PRICE:
             if self.side == Order.Side.BUY:
-                return ll.last_price <= self.target_price
+                return ll.session.last_price <= self.target_price if ll.session.last_price else False
             elif self.side == Order.Side.SELL:
-                return ll.last_price >= self.target_price
+                return ll.session.last_price >= self.target_price if ll.session.last_price else False
         return False
 
     def execute(self, ll:'LiveLoop') -> Order:

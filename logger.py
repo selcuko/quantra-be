@@ -39,9 +39,10 @@ class LogTailFormatter(logging.Formatter):
 
 
 class DetailPrefixFilter(logging.Filter):
+    # 'loop' param is in extras, print that too
     def filter(self, record):
         if hasattr(record, 'loop'):
-            record.msg = f"{record.loop!s} {record.msg}"
+            record.msg = f"[{record.loop!s}] {record.msg}"
         return True
 
 
