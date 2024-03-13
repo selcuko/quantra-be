@@ -499,8 +499,19 @@ class CoinScanView(View):
             query['market_cap__gte'] = int(payload['marketcapMin'])
         if payload.get('marketcapMax'):
             query['market_cap__lte'] = int(payload['marketcapMax'])
-
-        symbols = GlobalSymbol.objects.filter(**query).exclude(volume__isnull=True).order_by('-volume')[:50]
+        if payload.get('volToMcapMin'):
+            query['volume24h_to_mcap__gte'] = float(payload['volToMcapMin'])
+        if payload.get('volToMcapMax'):
+            query['volume24h_to_mcap__lte'] = float(payload['volToMcapMax'])
+        if payload.get('sortBy'):
+            sort = payload['sortBy']
+        else:
+            sort = '-volume'
+        sort_col = sort.replace('-', '')
+        globals = GlobalSymbol.objects.filter(volume__gte=100, market_cap__gte=100)
+        # exclude sort_col=null values
+        globals = globals.exclude(**{f'{sort_col}__isnull': True})
+        symbols = globals.filter(**query).order_by(sort)[:50]
         print('returning', len(symbols))
         return JsonResponse(GlobalSymbol.batch_to_json(symbols), safe=False)
 

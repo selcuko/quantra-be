@@ -124,6 +124,7 @@ class BinanceMarket(IMarket):
             except TimeoutError:
                 continue
             except (ConnectionClosed, ConnectionClosedOK):
+                time.sleep(5)
                 ws = connect(ws_uri)
                 continue
             except:
@@ -131,6 +132,7 @@ class BinanceMarket(IMarket):
                 if retries > 5:
                     raise
                 retries += 1
+                time.sleep(5)
                 ws = connect(ws_uri)
                 continue
 
@@ -465,16 +467,22 @@ class BinanceMarket(IMarket):
 
     @authentication_required
     def get_current_prices(self, save=True) -> dict:
-        prices = { self._standardize_symbol(ticker['symbol']): float(ticker['price']) for ticker in self.client.get_all_tickers() if ticker['symbol'].endswith('USDT') and ticker['price'] }
-        if self.market and self.market.prices != prices:
-            self.market.prices = json.dumps(prices)
-            if save:
-                self.market.save()
-        return prices
+        try:
+            prices = { self._standardize_symbol(ticker['symbol']): float(ticker['price']) for ticker in self.client.get_all_tickers() if ticker['symbol'].endswith('USDT') and ticker['price'] }
+            if self.market and self.market.prices != prices:
+                self.market.prices = json.dumps(prices)
+                if save:
+                    self.market.save()
+            return prices
+        except:
+            logger.error(f'Error while fetching current prices from {self.name}', exc_info=True)
+            return {}
 
     @authentication_required
     def get_equity(self, save=True) -> float:
         prices = self.get_current_prices(save=False)
+        if not prices:
+            prices = self.market.prices
         equity = self.capital + sum([ self.assets.get(asset, 0) * prices.get(asset+'-USDT', 0) for asset in self.assets ])
         if self.market and self.market.equity != equity:
             self.market.equity = equity

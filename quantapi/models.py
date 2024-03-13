@@ -608,6 +608,7 @@ class GlobalSymbol(models.Model):
     supply_ratio = models.FloatField(null=True, blank=True, help_text='Circulating supply / Total supply')
     ath_prox = models.FloatField(null=True, blank=True, help_text='Proximity to all time high')
     atl_prox = models.FloatField(null=True, blank=True, help_text='Proximity to all time low')
+    volume24h_to_mcap = models.FloatField(null=True, blank=True, help_text='Volume 24H / Market cap')
 
     @property
     def price(self):
@@ -617,6 +618,7 @@ class GlobalSymbol(models.Model):
         self.supply_ratio = (self.circulating_supply / self.total_supply) if self.circulating_supply and self.total_supply else None
         self.ath_prox = ((self.ath - self.price) / (self.ath - self.atl)) if self.ath != self.atl and self.ath and self.atl and self.price else None
         self.atl_prox = ((self.price - self.atl) / (self.ath - self.atl)) if self.ath != self.atl and self.ath and self.atl and self.price else None
+        self.volume24h_to_mcap = (self.volume / self.market_cap) if self.volume and self.market_cap else None
 
     def save(self, *args, **kwargs):
         self.calculate()
