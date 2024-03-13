@@ -589,6 +589,8 @@ class GlobalSymbol(models.Model):
     data_source = models.CharField(max_length=30, choices=DataSource.choices, default=DataSource.COINGECKO)
     payload = models.TextField(null=True, blank=True)
     image = models.URLField(null=True, blank=True, max_length=1024, help_text='URL to image of this symbol')
+    is_favorite = models.BooleanField(default=False)
+    available_markets = models.TextField(default='[]', help_text='JSON string of available markets for this symbol')
 
     ath = models.FloatField(null=True, blank=True)
     atl = models.FloatField(null=True, blank=True)
@@ -609,6 +611,22 @@ class GlobalSymbol(models.Model):
     ath_prox = models.FloatField(null=True, blank=True, help_text='Proximity to all time high')
     atl_prox = models.FloatField(null=True, blank=True, help_text='Proximity to all time low')
     volume24h_to_mcap = models.FloatField(null=True, blank=True, help_text='Volume 24H / Market cap')
+
+    @property
+    def markets(self):
+        return json.loads(self.available_markets)
+    
+    @markets.setter
+    def markets(self, value):
+        self.available_markets = json.dumps(value)
+    
+    def add_market(self, market, save=True):
+        markets = self.markets
+        if market not in markets:
+            markets.append(market)
+            self.markets = markets
+            if save:
+                self.save()
 
     @property
     def price(self):
@@ -660,4 +678,6 @@ class GlobalSymbol(models.Model):
             'ath_prox': self.ath_prox,
             'atl_prox': self.atl_prox,
             'supply_ratio': self.supply_ratio,
+            'volume24h_to_mcap': self.volume24h_to_mcap,
+            'is_favorite': self.is_favorite,
         }

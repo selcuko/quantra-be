@@ -525,3 +525,24 @@ class SymbolView(View):
             'symbol': name,
             'metrics': SymbolMetrics(global_metrics),
         })
+
+
+class FavoritesView(View):
+    def get(self, request):
+        favorites = GlobalSymbol.objects.filter(is_favorite=True)
+        return render(request, 'symbol-favorites.html', {'symbols': favorites})
+    
+    def post(self, request):
+        payload = json.loads(request.body.decode('utf-8'))
+        symbol_cid = payload.get('cid')
+        if not symbol_cid:
+            return JsonResponse({'error': 'Symbol CID is required.'})
+        is_favorite = payload.get('isFavorite')
+        try:
+            symbol = GlobalSymbol.objects.get(cid=symbol_cid)
+        except GlobalSymbol.DoesNotExist:
+            return JsonResponse({'error': f'Symbol CID={symbol_cid} not found.'})
+        if symbol.is_favorite != is_favorite:
+            symbol.is_favorite = is_favorite
+            symbol.save()
+        return JsonResponse({'success': f'Symbol {symbol_cid} is now {"added to" if is_favorite else "removed from"} favorites.'})

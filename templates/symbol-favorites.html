@@ -1,0 +1,133 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% block title %}{{ symbol.name }}{% endblock %}
+{% block content %}
+
+<h1 class="m-4 text-3xl font-extrabold leading-none tracking-tight text-gray-900 md:text-3xl lg:text-4xl">
+    <span class="underline underline-offset-3 decoration-8 decoration-blue-400 dark:decoration-blue-600">
+        Favorite
+    </span>
+    Symbols
+</h1>
+<section class="p-4 flex flex-col md:flex-row">
+    {% csrf_token %}
+    <div class="overflow-x-auto p-3 w-full">
+        <table class="w-full text-sm text-left rtl:text-right text-gray-500 dark:text-gray-400 whitespace-nowrap">
+            <thead class="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
+                <tr>
+                    <th scope="col" class="p-3" id="symbol">
+                        Symbol
+                    </th>
+                    <th scope="col" class="p-3" id="volume">
+                        <div>Volume</div>
+                    </th>
+                    <th scope="col" class="p-3" id="market_cap">
+                        Market cap
+                    </th>
+                    <th scope="col" class="p-3" id="ath_prox">
+                        ATH/ATL proximity
+                    </th>
+                    <th scope="col" class="p-3" id="supply_ratio">
+                        Supply ratio
+                    </th>
+                    <th scope="col" class="p-3" id="price_change_percentage_24h">
+                        Price change 24h
+                    </th>
+                    <th scope="col" class="p-3" id="high_24h">
+                        High/low 24h
+                    </th>
+                    <th scope="col" class="p-3" id="vol24_to_mcap">
+                        Vol 24h / MCap
+                    </th>
+                </tr>
+            </thead>
+            <tbody id="symbol-list">
+
+                {% for symbol in symbols %}
+                <tr class="bg-white dark:bg-gray-800"></tr>
+                <th scope="row"
+                    class="p-3 font-medium text-gray-900 whitespace-nowrap dark:text-white flex flex-row items-center">
+                    <button class="hover:text-blue-500 mr-3 {% if symbol.is_favorite %}favorite{% endif %}" onclick="toggleFavorite('{{ symbol.cid }}')" data-cid="{{ symbol.cid }}">
+                        {% if not symbol.is_favorite %}
+                        <svg class="w-[24px] h-[24px] text-gray-800 dark:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24"><path stroke="#a61414" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12.01 6.001C6.5 1 1 8 5.782 13.001L12.011 20l6.23-7C23 8 17.5 1 12.01 6.002Z"/></svg>
+                        {% else %}
+                        <svg class="w-[24px] h-[24px] text-gray-800 dark:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="#a61414" viewBox="0 0 24 24"><path d="m12.75 20.66 6.184-7.098c2.677-2.884 2.559-6.506.754-8.705-.898-1.095-2.206-1.816-3.72-1.855-1.293-.034-2.652.43-3.963 1.442-1.315-1.012-2.678-1.476-3.973-1.442-1.515.04-2.825.76-3.724 1.855-1.806 2.201-1.915 5.823.772 8.706l6.183 7.097c.19.216.46.34.743.34a.985.985 0 0 0 .743-.34Z"/></svg>
+                        {% endif %}
+                    </button>
+                    <a href="/symbol/{{ symbol.base }}"
+                        class="hover:text-blue-500 whitespace-nowrap flex items-center"><img src="{{ symbol.image }}"
+                            class="w-6 h-6 mr-3"> {{ symbol.base }}</a>
+                </th>
+                <td class="p-3">
+                    $ {{ symbol.volume|intcomma }}
+                </td>
+                <td class="p-3">
+                    $ {{ symbol.market_cap|intcomma }}
+                </td>
+                <td class="p-3">
+                    {{ symbol.ath_prox|floatformat:2|default:'---' }} / {{ symbol.atl_prox|floatformat:2|default:'---' }}
+                </td>
+                <td class="p-3">
+                    {{ symbol.supply_ratio|floatformat:2|default:'---' }}
+                </td>
+                <td class="p-3">
+                    {{ symbol.price_change_percentage_24h|floatformat:2|default:'---' }}%
+                </td>
+                <td class="p-3">
+                    $ {{ symbol.high_24h|floatformat:2|default:'---' }} / $ {{ symbol.low_24h|floatformat:2|default:'---' }}
+                </td>
+                <td class="p-3">
+                    {{ symbol.vol24_to_mcap|floatformat:2|default:'---' }}
+                </td>
+                {% empty %}
+                <td class="p-3">
+                    No symbols added to favorites yet.
+                </td>
+                </tr>
+                {% endfor %}
+
+            </tbody>
+        </table>
+    </div>
+</section>
+<script>
+    const favHeart = '<svg class="w-[24px] h-[24px] text-gray-800 dark:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24"><path stroke="#a61414" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12.01 6.001C6.5 1 1 8 5.782 13.001L12.011 20l6.23-7C23 8 17.5 1 12.01 6.002Z"/></svg>'
+    const favHeartFilled = '<svg class="w-[24px] h-[24px] text-gray-800 dark:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="#a61414" viewBox="0 0 24 24"><path d="m12.75 20.66 6.184-7.098c2.677-2.884 2.559-6.506.754-8.705-.898-1.095-2.206-1.816-3.72-1.855-1.293-.034-2.652.43-3.963 1.442-1.315-1.012-2.678-1.476-3.973-1.442-1.515.04-2.825.76-3.724 1.855-1.806 2.201-1.915 5.823.772 8.706l6.183 7.097c.19.216.46.34.743.34a.985.985 0 0 0 .743-.34Z"/></svg>'
+    const csrf_token = document.querySelector('input[name="csrfmiddlewaretoken"]').value;
+    function toggleFavorite(cid) {
+        const favButton = document.querySelector(`button[data-cid="${cid}"]`);
+        let isFavorite = false;
+        if (favButton.classList.contains('favorite')) {
+            favButton.innerHTML = favHeart;
+            favButton.classList.remove('favorite');
+        } else {
+            favButton.innerHTML = favHeartFilled;
+            favButton.classList.add('favorite');
+            isFavorite = true;
+        }
+        fetch('/favorites/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrf_token
+            },
+            body: JSON.stringify({
+                csrfmiddleware_token: csrf_token,
+                cid: cid,
+                isFavorite: isFavorite,
+            }),
+        }).then(response => {
+            if (response.ok) {
+                return response.json();
+            }
+            throw new Error('Request failed.');
+        }).then(data => {
+            console.log(data);
+        }).catch(error => {
+            console.log(error);
+        });
+    }
+</script>
+
+
+{% endblock %}

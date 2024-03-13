@@ -263,12 +263,52 @@
         });
     }
 
+
+    const favHeart       = '<svg class="w-[24px] h-[24px] text-gray-800 dark:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24"><path stroke="#a61414" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12.01 6.001C6.5 1 1 8 5.782 13.001L12.011 20l6.23-7C23 8 17.5 1 12.01 6.002Z"/></svg>'
+    const favHeartFilled = '<svg class="w-[24px] h-[24px] text-gray-800 dark:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="#a61414" viewBox="0 0 24 24"><path d="m12.75 20.66 6.184-7.098c2.677-2.884 2.559-6.506.754-8.705-.898-1.095-2.206-1.816-3.72-1.855-1.293-.034-2.652.43-3.963 1.442-1.315-1.012-2.678-1.476-3.973-1.442-1.515.04-2.825.76-3.724 1.855-1.806 2.201-1.915 5.823.772 8.706l6.183 7.097c.19.216.46.34.743.34a.985.985 0 0 0 .743-.34Z"/></svg>'
+    function toggleFavorite(cid) {
+            const favButton = document.querySelector(`button[data-cid="${cid}"]`);
+            let isFavorite = false;
+            if (favButton.classList.contains('favorite')) {
+                favButton.innerHTML = favHeart;
+                favButton.classList.remove('favorite');
+            } else {
+                favButton.innerHTML = favHeartFilled;
+                favButton.classList.add('favorite');
+                isFavorite = true;
+            }
+            fetch('/favorites/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrf_token
+                },
+                body: JSON.stringify({
+                    csrfmiddleware_token: csrf_token,
+                    cid: cid,
+                    isFavorite: isFavorite,
+                }),
+            }).then(response => {
+                if (response.ok) {
+                    return response.json();
+                }
+                throw new Error('Request failed.');
+            }).then(data => {
+                console.log(data);
+            }).catch(error => {
+                console.log(error);
+            });
+        }
+
     function renderSymbols() {
         symbolTable.innerHTML = '';
         symbols.forEach(symbol => {
             const tr = document.createElement('tr');
+            let heart = symbol.is_favorite ? favHeartFilled : favHeart;
+            let isFavorite = symbol.is_favorite ? 'favorite' : '';
             tr.innerHTML = `
                 <th scope="row" class="p-3 font-medium text-gray-900 whitespace-nowrap dark:text-white flex flex-row items-center">
+                    <button class="hover:text-blue-500 mr-3 ${isFavorite}" onclick="toggleFavorite('${symbol.cid}')" data-cid=${symbol.cid}>${heart}</button>
                     <a href="/symbol/${symbol.base}" class="hover:text-blue-500 whitespace-nowrap flex items-center"><img src="${symbol.image}" alt="${symbol.base}" class="w-6 h-6 mr-3"> ${symbol.base}</a>
                 </th>
                 <td class="p-3">
@@ -295,6 +335,8 @@
             `;
             symbolTable.appendChild(tr);
         });
+
+        
     }
 
 </script>
