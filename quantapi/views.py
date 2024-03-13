@@ -338,7 +338,10 @@ class MarketDetailView(View):
         market = Market.objects.get(pk=pk)
         interface = market.get_interface()
         symbols = MarketSymbol.objects.filter(market=market)
-        return render(request, 'market-detail.html', {'market': market, 'symbols': symbols, 'interface': interface})
+        assets = json.loads(market.assets)
+        print(assets)
+        available_assets = {symbol: assets[symbol] for symbol in assets if assets[symbol] > 0}
+        return render(request, 'market-detail.html', {'market': market, 'symbols': symbols, 'interface': interface, 'available_assets': available_assets})
     
 
 def raw_market_data(request, pk):
