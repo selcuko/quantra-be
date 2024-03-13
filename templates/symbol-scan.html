@@ -25,12 +25,19 @@
     
 </style>
 <!-- Incomplete -->
-<h1 class="m-4 text-3xl font-extrabold leading-none tracking-tight text-gray-900 md:text-3xl lg:text-4xl">
-    Coin
-    <span class="underline underline-offset-3 decoration-8 decoration-blue-400 dark:decoration-blue-600">
-        Scanner
-    </span>
-</h1>
+<div class="flex flex-row items-center justify-between">
+    <h1 class="m-4 text-3xl font-extrabold leading-none tracking-tight text-gray-900 md:text-3xl lg:text-4xl">
+        Coin
+        <span class="underline underline-offset-3 decoration-8 decoration-blue-400 dark:decoration-blue-600">
+            Scanner
+        </span>
+    </h1>
+    <a href="{% url 'symbol-favorites' %}" style="color: #a61414" class="flex flex-row font-large text-xl hover:underline items-center mr-6"><svg class="w-6 h-6 text-gray-800 dark:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="#a61414" viewBox="0 0 24 24">
+        <path d="m12.75 20.66 6.184-7.098c2.677-2.884 2.559-6.506.754-8.705-.898-1.095-2.206-1.816-3.72-1.855-1.293-.034-2.652.43-3.963 1.442-1.315-1.012-2.678-1.476-3.973-1.442-1.515.04-2.825.76-3.724 1.855-1.806 2.201-1.915 5.823.772 8.706l6.183 7.097c.19.216.46.34.743.34a.985.985 0 0 0 .743-.34Z"/>
+      </svg>
+      See favorites</a>
+</div>
+
 <section class="p-4 flex flex-col md:flex-row">
     <aside id="default-sidebar" class="md:w-1/4 w-full transition-transform"
         aria-label="Sidebar">
