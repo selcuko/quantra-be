@@ -45,7 +45,6 @@ class Command(BaseCommand):
             cid_map = {}
             for s in global_coins:
                 if s.cid in cid_map:
-                    print(f'Duplicate symbol found: {s.cid} - {s.name}. Skipping...')
                     continue
                 cid_map[s.cid] = s
 

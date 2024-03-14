@@ -505,6 +505,8 @@ class CoinScanView(View):
             query['volume24h_to_mcap__lte'] = float(payload['volToMcapMax'])
         if payload.get('sortBy'):
             sort = payload['sortBy']
+            if sort == 'symbol':
+                sort = '-volume'
         else:
             sort = '-volume'
         sort_col = sort.replace('-', '')

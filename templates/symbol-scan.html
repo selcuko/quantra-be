@@ -45,24 +45,13 @@
         <div class="flow-root rounded-lg border border-gray-300 p-3 shadow-sm">
             <dl class="-my-3 divide-y divide-gray-100 text-sm">
                 <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
-                    <dt class="font-medium text-gray-900">ATL proximity</dt>
-                    <dd class="text-gray-700 sm:col-span-2">
-                        max
-                        <input id="atl-prox-max" type="text"
-                            class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
-                        min
-                        <input id="atl-prox-min" type="text"
-                            class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
-                    </dd>
-                </div>
-                <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
                     <dt class="font-medium text-gray-900">ATH proximity</dt>
                     <dd class="text-gray-700 sm:col-span-2">
                         max
-                        <input id="ath-prox-max" type="text"
+                        <input id="ath-prox-max" type="number" min="0" max="1" step="0.01"
                             class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
                         min
-                        <input id="ath-prox-min" type="text"
+                        <input id="ath-prox-min" type="number" min="0" max="1" step="0.01"
                             class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
                     </dd>
                 </div>
@@ -70,21 +59,21 @@
                     <dt class="font-medium text-gray-900">Volume 24H</dt>
                     <dd class="text-gray-700 sm:col-span-2">
                         max
-                        <input id="volume-max" type="text"
+                        <input id="volume-max" type="number" min="100"
                             class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
                         min
-                        <input id="volume-min" type="text"
+                        <input id="volume-min" type="number" min="100"
                             class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
                     </dd>
                 </div>
                 <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
-                    <dt class="font-medium text-gray-900">Supply %</dt>
+                    <dt class="font-medium text-gray-900">Supply ratio</dt>
                     <dd class="text-gray-700 sm:col-span-2">
                         max
-                        <input id="supply-max" type="text"
+                        <input id="supply-max" type="number" min="0" step="0.01" max="1"
                             class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
                         min
-                        <input id="supply-min" type="text"
+                        <input id="supply-min" type="number" min="0" step="0.01" max="1"
                             class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
                     </dd>
                 </div>
@@ -92,10 +81,10 @@
                     <dt class="font-medium text-gray-900">Market cap</dt>
                     <dd class="text-gray-700 sm:col-span-2">
                         max
-                        <input id="marketcap-max" type="text"
+                        <input id="marketcap-max" type="number" min="100"
                             class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
                         min
-                        <input id="marketcap-min" type="text"
+                        <input id="marketcap-min" type="number" min="100"
                             class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
                     </dd>
                 </div>
@@ -103,10 +92,10 @@
                     <dt class="font-medium text-gray-900">Vol 24h / Mcap</dt>
                     <dd class="text-gray-700 sm:col-span-2">
                         max
-                        <input id="vol-to-mcap-max" type="text"
+                        <input id="vol-to-mcap-max" type="number"
                             class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
                         min
-                        <input id="vol-to-mcap-min" type="text"
+                        <input id="vol-to-mcap-min" type="number"
                             class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
                     </dd>
                 </div>
@@ -146,7 +135,7 @@
                         High/low 24h
                         <div class="ml-1 sorting-indicator"></div>
                     </th>
-                    <th scope="col" class="p-3" id="vol24_to_mcap">
+                    <th scope="col" class="p-3" id="volume24h_to_mcap">
                         Vol 24h / MCap
                         <div class="sorting-indicator"></div>
                     </th>

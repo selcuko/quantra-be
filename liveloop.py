@@ -337,7 +337,7 @@ class LiveLoop:
                         signal=signal,
                         status=Order.Status.REJECTED,
                         details=repr(ro),
-                        timestamp=self.last_kline_dt or datetime.now(tz=pytz.UTC)
+                        market_timestamp=self.last_kline_dt or datetime.now(tz=pytz.UTC)
                     )
                 except Exception as e:
                     logger.error(f'Failed to place SELL order for {self.session.assets} {self.symbol.base} (olid:{last_order.id}), skipping.', exc_info=True, extra={'n_type': 'ORDER', 'loop': self})
@@ -349,7 +349,7 @@ class LiveLoop:
                         signal=signal,
                         status=Order.Status.ERROR,
                         details=repr(e),
-                        timestamp=self.last_kline_dt or datetime.now(tz=pytz.UTC)
+                        market_timestamp=self.last_kline_dt or datetime.now(tz=pytz.UTC)
                     )
                 self.session.save()
             else:

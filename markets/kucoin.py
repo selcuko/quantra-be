@@ -208,8 +208,8 @@ class KucoinMarket(IMarket):
                 ws = self.get_match_engine_socket(symbol)
                 continue
             except:
-                logger.error(f'Error while initializing match engine for {symbol} on {self.name}', exc_info=True)
                 if retries > 5:
+                    logger.error(f'Error while initializing match engine for {symbol} on {self.name}', exc_info=True)
                     raise
                 retries += 1
                 ws = self.get_match_engine_socket(symbol)
