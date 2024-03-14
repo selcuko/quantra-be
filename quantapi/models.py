@@ -638,6 +638,19 @@ class GlobalSymbol(models.Model):
         self.atl_prox = ((self.price - self.atl) / (self.ath - self.atl)) if self.ath != self.atl and self.ath and self.atl and self.price else None
         self.volume24h_to_mcap = (self.volume / self.market_cap) if self.volume and self.market_cap else None
 
+    def set_markets(self, ms=None, save=True):
+        if ms:
+            market_symbols = ms
+        else:
+            market_symbols = MarketSymbol.objects.filter(symbol=self)
+        current_markets = self.markets
+        for ms in market_symbols:
+            if ms.market.exchange_name not in current_markets and ms.spot_trading_enabled:
+                current_markets.append(ms.market.exchange_name)
+        self.markets = current_markets
+        if save:
+            self.save()
+
     def save(self, *args, **kwargs):
         self.calculate()
         super().save(*args, **kwargs)
@@ -680,4 +693,5 @@ class GlobalSymbol(models.Model):
             'supply_ratio': self.supply_ratio,
             'volume24h_to_mcap': self.volume24h_to_mcap,
             'is_favorite': self.is_favorite,
+            'markets': self.markets,
         }

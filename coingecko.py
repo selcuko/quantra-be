@@ -2,7 +2,7 @@
 
 
 import json
-from pprint import pprint
+import os
 import time
 import requests
 
@@ -35,6 +35,14 @@ class CoinGecko:
         return response.json()
     
     def all_coins_with_market_data(self, vs_currency:str='usd', order:str='volume_desc', volmin=0):
+        ts = time.time()
+        fname = f'cg-cache.json'
+        if os.path.exists(fname):
+            with open(fname, 'r') as f:
+                date_updated = os.path.getmtime(fname)
+                hrs4 = 60*60*4
+                if ts - date_updated < hrs4:
+                    return json.loads(f.read())
         last_page = False
         page = 1
         all_coins = []
@@ -49,6 +57,8 @@ class CoinGecko:
             if len(coins) < 250:
                 last_page = True
             page += 1
+        with open(fname, 'w') as f:
+            f.write(json.dumps(all_coins, indent=4))
         return all_coins
 
     def coin_id(self, name:str):

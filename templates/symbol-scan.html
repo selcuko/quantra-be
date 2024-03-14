@@ -111,6 +111,9 @@
                     <th scope="col" class="p-3" id="symbol">
                         Symbol
                     </th>
+                    <th scope="col" class="p-3" id="symbol">
+                        Markets
+                    </th>
                     <th scope="col" class="p-3" id="volume" >
                         <div>Volume</div>
                         <div class="ml-1 sorting-indicator"></div>
@@ -156,8 +159,6 @@
     let symbols = [];
     let sortBy = null;
     const symbolTable = document.getElementById('symbol-list');
-    const atlProxMax = document.getElementById('atl-prox-max');
-    const atlProxMin = document.getElementById('atl-prox-min');
     const athProxMax = document.getElementById('ath-prox-max');
     const athProxMin = document.getElementById('ath-prox-min');
     const volumeMax = document.getElementById('volume-max');
@@ -168,7 +169,7 @@
     const marketcapMin = document.getElementById('marketcap-min');
     const volToMcapMax = document.getElementById('vol-to-mcap-max');
     const volToMcapMin = document.getElementById('vol-to-mcap-min');
-    const inputs = [volumeMax, volumeMin, supplyMax, supplyMin, marketcapMax, marketcapMin, atlProxMax, atlProxMin, athProxMax, athProxMin, volToMcapMax, volToMcapMin];
+    const inputs = [volumeMax, volumeMin, supplyMax, supplyMin, marketcapMax, marketcapMin, athProxMax, athProxMin, volToMcapMax, volToMcapMin];
     const csrf_token = document.getElementsByName('csrfmiddlewaretoken')[0].value;
 
     const tableHeaders = document.querySelectorAll('th');
@@ -232,8 +233,6 @@
             },
             body: JSON.stringify({
                 csrfmiddleware_token: csrf_token,
-                atlProxMax: atlProxMax.value,
-                atlProxMin: atlProxMin.value,
                 athProxMax: athProxMax.value,
                 athProxMin: athProxMin.value,
                 volumeMax: volumeMax.value,
@@ -298,15 +297,31 @@
 
     function renderSymbols() {
         symbolTable.innerHTML = '';
+        const binanceIcon = 'https://cryptologos.cc/logos/binance-coin-bnb-logo.png';
+        const kucoinIcon = 'https://cryptologos.cc/logos/kucoin-shares-kcs-logo.png';
+        const mexcIcon = 'https://cryptologos.cc/logos/mxc-mxc-logo.png';
         symbols.forEach(symbol => {
             const tr = document.createElement('tr');
             let heart = symbol.is_favorite ? favHeartFilled : favHeart;
             let isFavorite = symbol.is_favorite ? 'favorite' : '';
+            let marketIcons = '';
+            if (symbol.markets.includes('BINANCE')) {
+                marketIcons += `<img src="${binanceIcon}" alt="Binance" class="w-6 h-6 mr-1">`;
+            }
+            if (symbol.markets.includes('KUCOIN')) {
+                marketIcons += `<img src="${kucoinIcon}" alt="Kucoin" class="w-6 h-6 mr-1">`;
+            }
+            if (symbol.markets.includes('MEXC')) {
+                marketIcons += `<img src="${mexcIcon}" alt="MEXC" class="w-6 h-6 mr-1">`;
+            }
             tr.innerHTML = `
-                <th scope="row" class="p-3 font-medium text-gray-900 whitespace-nowrap dark:text-white flex flex-row items-center">
+                <th scope="row" class="p-3 font-medium text-gray-900 whitespace-nowrap dark:text-white flex flex-row items-center w-max">
                     <button class="hover:text-blue-500 mr-3 ${isFavorite}" onclick="toggleFavorite('${symbol.cid}')" data-cid=${symbol.cid}>${heart}</button>
                     <a href="/symbol/${symbol.base}" class="hover:text-blue-500 whitespace-nowrap flex items-center"><img src="${symbol.image}" alt="${symbol.base}" class="w-6 h-6 mr-3"> ${symbol.base}</a>
                 </th>
+                <td class="p-3">
+                    <div class="flex w-max"> ${marketIcons} </div>
+                </td>
                 <td class="p-3">
                     $ ${symbol.volume ? symbol.volume.toLocaleString() : '---'}
                 </td>
@@ -326,7 +341,7 @@
                     $ ${symbol.high_24h ? symbol.high_24h : '---'} / $ ${symbol.low_24h ? symbol.low_24h : '---'}
                 </td>
                 <td class="p-3">
-                    ${symbol.vol_to_mcap ? symbol.vol_to_mcap.toFixed(2) : '---'}
+                    ${symbol.volume24h_to_mcap ? symbol.volume24h_to_mcap.toFixed(2) : '---'}
                 </td>
             `;
             symbolTable.appendChild(tr);

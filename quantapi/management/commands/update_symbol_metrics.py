@@ -63,10 +63,40 @@ class Command(BaseCommand):
                 'atl',
                 'atl_date',
                 'data_updated',
-                'payload'
+                'payload',
+                'volume24h_to_mcap'
             ])
         except KeyboardInterrupt:
             print('Keyboard interrupt detected. Exiting...')
         except Exception as e:
             print(f'An error occurred: {e}')
+
+        # associate MarketSymbol with GlobalSymbol
+        market_symbols = MarketSymbol.objects.prefetch_related('symbol', 'market').all()
+        global_symbols = GlobalSymbol.objects.all()
+        unique_symbols = {}
+        market_update  = []
+        for gs in global_symbols:
+            if gs.name not in unique_symbols:
+                unique_symbols[gs.name] = gs
+            new_vol = gs.volume or 0
+            old_vol = unique_symbols[gs.name].volume or 0
+            if new_vol > old_vol:
+                unique_symbols[gs.name] = gs
+        for ms in market_symbols:
+            for us in unique_symbols.values():
+                if ms.base == us.base:
+                    ms.symbol = us
+                    market_update.append(ms)
+                    break
+        MarketSymbol.objects.bulk_update(market_update, ['symbol'])
+        market_symbols = MarketSymbol.objects.prefetch_related('symbol', 'market').all()
+        gs_update = []
+        for i, gs in enumerate(GlobalSymbol.objects.all()):
+            ms = [ms for ms in market_symbols if ms.symbol == gs]
+            gs.set_markets(save=False, ms=ms)
+            if i % 100 == 0:
+                print(i, gs.name, gs.available_markets)
+            gs_update.append(gs)
+        GlobalSymbol.objects.bulk_update(gs_update, ['available_markets'])
 

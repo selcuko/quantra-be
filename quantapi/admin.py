@@ -67,9 +67,44 @@ class NotificationAdmin(admin.ModelAdmin):
 
 
 class GlobalSymbolAdmin(admin.ModelAdmin):
-    list_display = ['name', 'volume', 'data_updated', 'data_source']
+    class VolumeFilter(admin.SimpleListFilter):
+        title = 'Hide no volumes'
+
+        parameter_name = 'volume'
+
+        def lookups(self, request, model_admin):
+            return [
+                ('vol100', 'Hide volume<=100'),
+            ]
+
+        def queryset(self, request, queryset):
+            """
+            Returns the filtered queryset based on the value
+            provided in the query string and retrievable via
+            `self.value()`.
+            """
+            # Compare the requested value (either '80s' or '90s')
+            # to decide how to filter the queryset.
+            if self.value() == 'vol0' or self.value() == None:
+                return queryset.filter(volume__gt=0)
+            if self.value() == 'vol100':
+                return queryset.filter(volume__gt=100)
+            if self.value() == 'volall':
+                pass
+            return queryset
+
+    list_display = ['name', 'volume', 'data_updated', 'data_source', 'markets']
     search_fields = ['name', 'data_source']
-    list_filter = ['data_source']
+    list_filter = ['data_source', VolumeFilter]
+    ordering = ['-volume']
+
+    def get_markets(self, obj):
+        return json.loads(obj.available_markets)
+    
+    # enable vol0 filter by default
+
+
+
 
 
 class ComplexOrderAdmin(admin.ModelAdmin):
