@@ -37,8 +37,8 @@ def symbol_metrics_update_loop():
     from quantapi.management.commands.update_symbol_metrics import Command
     while True:
         try:
-            threading.Event().wait(60 * 60 * 4)
             Command().handle()
+            threading.Event().wait(60 * 60 * 4)
         except:
             logger.error('Failed to update symbol metrics.', exc_info=True)
 
