@@ -45,6 +45,29 @@
         <div class="flow-root rounded-lg border border-gray-300 p-3 shadow-sm">
             <dl class="-my-3 divide-y divide-gray-100 text-sm">
                 <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                    <dt class="font-medium text-gray-900">Count</dt>
+                    <dd class="text-gray-700 sm:col-span-2">
+                        <p id="symbol-count">0</p>
+                    </dd>
+                </div>
+                <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                    <dt class="font-medium text-gray-900">Markets</dt>
+                    <dd class="text-gray-700 sm:col-span-2">
+                        <div class="flex items-center mb-4">
+                            <input id="BINANCE" type="checkbox" value="BINANCE" class="market-selector w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500">
+                            <label for="default-checkbox" class="ms-2 text-sm font-medium text-gray-900 dark:text-gray-300">Binance</label>
+                        </div>
+                        <div class="flex items-center mb-4">
+                            <input id="KUCOIN" type="checkbox" value="KUCOIN" class="market-selector w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500">
+                            <label class="ms-2 text-sm font-medium text-gray-900 dark:text-gray-300">Kucoin</label>
+                        </div>
+                        <div class="flex items-center">
+                            <input id="MEXC" type="checkbox" value="MEXC" class="market-selector w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500">
+                            <label class="ms-2 text-sm font-medium text-gray-900 dark:text-gray-300">MEXC</label>
+                        </div>
+                    </dd>
+                </div>
+                <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
                     <dt class="font-medium text-gray-900">ATH proximity</dt>
                     <dd class="text-gray-700 sm:col-span-2">
                         max
@@ -157,6 +180,7 @@
 
 <script>
     let symbols = [];
+    let marketFilter = [];
     let sortBy = null;
     const symbolTable = document.getElementById('symbol-list');
     const athProxMax = document.getElementById('ath-prox-max');
@@ -169,7 +193,8 @@
     const marketcapMin = document.getElementById('marketcap-min');
     const volToMcapMax = document.getElementById('vol-to-mcap-max');
     const volToMcapMin = document.getElementById('vol-to-mcap-min');
-    const inputs = [volumeMax, volumeMin, supplyMax, supplyMin, marketcapMax, marketcapMin, athProxMax, athProxMin, volToMcapMax, volToMcapMin];
+    const marketSelectors = document.querySelectorAll('.market-selector');
+    const inputs = [volumeMax, volumeMin, supplyMax, supplyMin, marketcapMax, marketcapMin, athProxMax, athProxMin, volToMcapMax, volToMcapMin].concat(Array.from(marketSelectors));
     const csrf_token = document.getElementsByName('csrfmiddlewaretoken')[0].value;
 
     const tableHeaders = document.querySelectorAll('th');
@@ -223,8 +248,16 @@
 
     // fetch symbols on page load
     fetchSymbols();
-
+    
     function fetchSymbols() {
+        
+        marketSelectors.forEach(selector => {
+            if (selector.checked) {
+                marketFilter.push(selector.value);
+            } else {
+                marketFilter = marketFilter.filter(market => market !== selector.value);
+            }
+        });
         fetch('', {
             method: 'POST',
             headers: {
@@ -244,6 +277,7 @@
                 volToMcapMax: volToMcapMax.value,
                 volToMcapMin: volToMcapMin.value,
                 sortBy: sortBy,
+                markets: marketFilter,
             }),
         }).then(response => {
             if (response.ok) {
@@ -251,7 +285,8 @@
             }
             throw new Error('Request failed.');
         }).then(data => {
-            symbols = data;
+            symbols = data.symbols;
+            document.getElementById('symbol-count').innerText = data.count;
             renderSymbols();
         }).catch(error => {
             console.log(error);
@@ -295,8 +330,12 @@
             });
         }
 
-    function renderSymbols() {
-        symbolTable.innerHTML = '';
+    function renderSymbols(nextPage=false, add=[]) {
+        if (!nextPage) {
+            symbolTable.innerHTML = '';
+        } else {
+            symbols = add;
+        }
         const binanceIcon = 'https://cryptologos.cc/logos/binance-coin-bnb-logo.png';
         const kucoinIcon = 'https://cryptologos.cc/logos/kucoin-shares-kcs-logo.png';
         const mexcIcon = 'https://cryptologos.cc/logos/mxc-mxc-logo.png';
@@ -346,14 +385,59 @@
             `;
             symbolTable.appendChild(tr);
         });
-
-        
     }
 
-</script>
+    let nextStart = 50;
+    let nextEnd = 100;
+    let stopLoadingMore = false;
+    function loadMore() {
+        if (symbols.length < 50) return;
+        fetch('', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrf_token
+            },
+            body: JSON.stringify({
+                csrfmiddleware_token: csrf_token,
+                athProxMax: athProxMax.value,
+                athProxMin: athProxMin.value,
+                volumeMax: volumeMax.value,
+                volumeMin: volumeMin.value,
+                supplyMax: supplyMax.value,
+                supplyMin: supplyMin.value,
+                marketcapMax: marketcapMax.value,
+                marketcapMin: marketcapMin.value,
+                volToMcapMax: volToMcapMax.value,
+                volToMcapMin: volToMcapMin.value,
+                sortBy: sortBy,
+                markets: marketFilter,
+                start: nextStart,
+                end: nextEnd,
+            }),
+        }).then(response => {
+            if (response.ok) {
+                return response.json();
+            }
+            throw new Error('Request failed.');
+        }).then(data => {
+            if (data.length < 50) {
+                stopLoadingMore = true;
+            }
+            renderSymbols(true, data.symbols);
+            nextStart += 50;
+            nextEnd += 50;
+        }).catch(error => {
+            console.log(error);
+        });
+    }
 
-<script>
-    
+    window.onscroll = function(ev) {
+        if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight) {
+            loadMore();
+        }
+    };
+
 </script>
 
 {% endblock %}

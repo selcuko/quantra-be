@@ -509,13 +509,28 @@ class CoinScanView(View):
                 sort = '-volume'
         else:
             sort = '-volume'
+        market_query = Q()
+        if payload.get('markets'):
+            markets = payload['markets']
+            # available_markets is a stringified JSON, and markets is a list of strings
+            for market in markets:
+                market_query &= Q(available_markets__icontains=market)
+        start = 0
+        end = 50
+        if payload.get('start'):
+            start = int(payload['start'])
+        if payload.get('end'):
+            end = int(payload['end'])
+        print('Start:', start, 'End:', end)
         sort_col = sort.replace('-', '')
         globals = GlobalSymbol.objects.filter(volume__gte=100, market_cap__gte=100)
         # exclude sort_col=null values
         globals = globals.exclude(**{f'{sort_col}__isnull': True})
-        symbols = globals.filter(**query).order_by(sort)[:50]
-        print('returning', len(symbols))
-        return JsonResponse(GlobalSymbol.batch_to_json(symbols), safe=False)
+        symbols = globals.filter(**query).filter(market_query).order_by(sort)
+        count = symbols.count()
+        symbols = symbols[start:end]
+        response = {'symbols': GlobalSymbol.batch_to_json(symbols), 'count': count}
+        return JsonResponse(response, safe=False)
 
 
 class SymbolView(View):
