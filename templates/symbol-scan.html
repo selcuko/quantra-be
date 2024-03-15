@@ -45,6 +45,14 @@
         <div class="flow-root rounded-lg border border-gray-300 p-3 shadow-sm">
             <dl class="-my-3 divide-y divide-gray-100 text-sm">
                 <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                    <dt class="font-medium text-gray-900">Search</dt>
+                    <dd class="text-gray-700 sm:col-span-2">
+                        <div class="relative">
+                            <input type="search" id="search" class="block w-full text-sm text-gray-900 border border-gray-300 rounded-lg bg-gray-50 focus:ring-blue-500 focus:border-blue-500" placeholder="Symbol name" />
+                        </div>
+                    </dd>
+                </div>
+                <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
                     <dt class="font-medium text-gray-900">Count</dt>
                     <dd class="text-gray-700 sm:col-span-2">
                         <p id="symbol-count">0</p>
@@ -194,7 +202,8 @@
     const volToMcapMax = document.getElementById('vol-to-mcap-max');
     const volToMcapMin = document.getElementById('vol-to-mcap-min');
     const marketSelectors = document.querySelectorAll('.market-selector');
-    const inputs = [volumeMax, volumeMin, supplyMax, supplyMin, marketcapMax, marketcapMin, athProxMax, athProxMin, volToMcapMax, volToMcapMin].concat(Array.from(marketSelectors));
+    const search = document.getElementById('search');
+    const inputs = [volumeMax, volumeMin, supplyMax, supplyMin, marketcapMax, marketcapMin, athProxMax, athProxMin, volToMcapMax, volToMcapMin, search].concat(Array.from(marketSelectors));
     const csrf_token = document.getElementsByName('csrfmiddlewaretoken')[0].value;
 
     const tableHeaders = document.querySelectorAll('th');
@@ -278,6 +287,7 @@
                 volToMcapMin: volToMcapMin.value,
                 sortBy: sortBy,
                 markets: marketFilter,
+                search: search.value,
             }),
         }).then(response => {
             if (response.ok) {
