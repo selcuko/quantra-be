@@ -30,6 +30,7 @@ class CoinGecko:
 
     def coins_list_market(self, vs_currency:str='usd', order:str='market_cap_desc', per_page:int=100, page:int=1, sparkline:bool=False, price_change_percentage:str='1h,24h,7d'):
         uri = self.url + f'coins/markets?vs_currency={vs_currency}&order={order}&per_page={per_page}&page={page}&sparkline={sparkline}&price_change_percentage={price_change_percentage}'
+        # get tags too
         response = self.session.get(uri)
         self.handle_failed_request(response)
         return response.json()
@@ -46,11 +47,16 @@ class CoinGecko:
         last_page = False
         page = 1
         all_coins = []
+        error = 0
         while not last_page:
             try:
                 coins = self.coins_list_market(vs_currency=vs_currency, order=order, per_page=250, page=page)
                 time.sleep(1)
             except:
+                error += 1
+                if error > 5:
+                    print('Too many errors, stopping')
+                    break
                 time.sleep(5)
                 continue
             all_coins += coins
@@ -82,8 +88,6 @@ class CoinGecko:
 
 
 if __name__ == '__main__':
-    token = 'REDACTED'
-    gc = CoinGecko(token)
-    xrp = gc.all_coins_with_market_data()
-    with open('cg-all.json', 'w') as f:
-        f.write(json.dumps(xrp, indent=4))
+    gc = CoinGecko()
+    xrp = gc.coins_list_market()
+    print(xrp)

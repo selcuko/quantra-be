@@ -527,7 +527,7 @@ class CoinScanView(View):
         sort_col = sort.replace('-', '')
         globals = GlobalSymbol.objects.filter(volume__gte=100, market_cap__gte=100)
         # exclude sort_col=null values
-        globals = globals.exclude(**{f'{sort_col}__isnull': True})
+        globals = globals.exclude(**{f'{sort_col}__isnull': True}).exclude(tags__contains='stablecoin')
         symbols = globals.filter(**query).filter(market_query).order_by(sort)
         count = symbols.count()
         symbols = symbols[start:end]

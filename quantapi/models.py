@@ -588,9 +588,12 @@ class GlobalSymbol(models.Model):
     quote = models.CharField(max_length=200, default='USDT')
     data_source = models.CharField(max_length=30, choices=DataSource.choices, default=DataSource.COINGECKO)
     payload = models.TextField(null=True, blank=True)
+    coingecko_response = models.TextField(null=True, blank=True)
+    coinmarketcap_response = models.TextField(null=True, blank=True)
     image = models.URLField(null=True, blank=True, max_length=1024, help_text='URL to image of this symbol')
     is_favorite = models.BooleanField(default=False)
     available_markets = models.TextField(default='[]', help_text='JSON string of available markets for this symbol')
+    tags = models.TextField(null=True, blank=True, help_text='JSON string of tags for this symbol')
 
     ath = models.FloatField(null=True, blank=True)
     atl = models.FloatField(null=True, blank=True)

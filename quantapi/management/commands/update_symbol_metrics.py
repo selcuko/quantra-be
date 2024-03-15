@@ -1,5 +1,6 @@
 import json
 from django.core.management.base import BaseCommand, CommandError
+from coinmcap import CoinMarketCap
 from quantapi.models import MarketSymbol, GlobalSymbol
 from coingecko import CoinGecko
 
@@ -95,8 +96,25 @@ class Command(BaseCommand):
         for i, gs in enumerate(GlobalSymbol.objects.all()):
             ms = [ms for ms in market_symbols if ms.symbol == gs]
             gs.set_markets(save=False, ms=ms)
-            if i % 100 == 0:
-                print(i, gs.name, gs.available_markets)
             gs_update.append(gs)
         GlobalSymbol.objects.bulk_update(gs_update, ['available_markets'])
+
+        cmc = CoinMarketCap()
+        listings = cmc.listings()
+        cmc_symbols = listings['data']
+        global_symbols = list(GlobalSymbol.objects.all())
+        gs_names = [gs.base for gs in global_symbols]
+        gs_update = []
+
+        for symbol in cmc_symbols:
+            
+            if symbol['symbol'] not in gs_names:
+                print('x', end='')
+                continue
+            print('.', end='')
+            gs = [gs for gs in global_symbols if gs.base == symbol['symbol']][0]
+            gs.tags = json.dumps(symbol['tags'])
+            gs.coinmarketcap_response = json.dumps(symbol)
+            gs_update.append(gs)
+        GlobalSymbol.objects.bulk_update(gs_update, ['tags', 'coinmarketcap_response'])
 
