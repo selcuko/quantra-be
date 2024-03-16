@@ -510,7 +510,7 @@ class CoinScanView(View):
         else:
             sort = '-volume'
         if payload.get('search'):
-            query['name__icontains'] = payload['search'].replace(' ', '')
+            query['base__icontains'] = payload['search'].replace(' ', '')
         market_query = Q()
         if payload.get('markets'):
             markets = payload['markets']

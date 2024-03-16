@@ -41,8 +41,8 @@ class CoinGecko:
         if os.path.exists(fname):
             with open(fname, 'r') as f:
                 date_updated = os.path.getmtime(fname)
-                hrs4 = 60*60*4
-                if ts - date_updated < hrs4:
+                hrs24 = 60*60*24
+                if ts - date_updated < hrs24:
                     return json.loads(f.read())
         last_page = False
         page = 1

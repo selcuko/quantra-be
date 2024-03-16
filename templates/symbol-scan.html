@@ -142,7 +142,7 @@
                     <th scope="col" class="p-3" id="symbol">
                         Symbol
                     </th>
-                    <th scope="col" class="p-3" id="symbol">
+                    <th scope="col" class="p-3" id="markets">
                         Markets
                     </th>
                     <th scope="col" class="p-3" id="volume" >
@@ -153,8 +153,15 @@
                         Market cap
                         <div class="ml-1 sorting-indicator"></div>
                     </th>
+                    <th scope="col" class="p-3" id="price">
+                        Price
+                    </th>
                     <th scope="col" class="p-3" id="ath_prox">
                         ATH/ATL proximity
+                        <div class="ml-1 sorting-indicator"></div>
+                    </th>
+                    <th scope="col" class="p-3" id="ath_prox">
+                        ATH/ATL (x)
                         <div class="ml-1 sorting-indicator"></div>
                     </th>
                     <th scope="col" class="p-3" id="supply_ratio">
@@ -211,6 +218,7 @@
     let debounceTimeout;
 
     tableHeaders.forEach(header => {
+        if (header.id === 'symbol' || header.id === 'price' || header.id === 'markets') return;
         header.addEventListener('click', () => {
             let direction = null;
             // remove all other sorting indicators
@@ -378,7 +386,13 @@
                     $ ${symbol.market_cap ? symbol.market_cap.toLocaleString() : '---'}
                 </td>
                 <td class="p-3">
+                    $ ${symbol.price ? symbol.price : '---'}
+                </td>
+                <td class="p-3">
                     ${symbol.ath_prox ? symbol.ath_prox.toFixed(2) : '---'} / ${symbol.atl_prox ? symbol.atl_prox.toFixed(2) : '---'}
+                </td>
+                <td class="p-3">
+                    ${symbol.ath_ratio ? symbol.ath_ratio.toFixed(2) : '---'}x / ${symbol.atl_ratio ? symbol.atl_ratio.toFixed(2) : '---'}x
                 </td>
                 <td class="p-3">
                     ${symbol.supply_ratio ? symbol.supply_ratio.toFixed(2) : '---'}

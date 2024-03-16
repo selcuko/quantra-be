@@ -28,6 +28,7 @@ class KucoinMarket(IMarket):
     name = 'KUCOIN'
     
     def __init__(self, config=None, market=None) -> None:
+        from quantapi.models import Market as MarketModel
         if not config:
             config = {}
         self.authenticated = bool(config.get('API_KEY') and config.get('API_SECRET') and config.get('API_PASSPHRASE'))
@@ -579,4 +580,10 @@ class KucoinMarket(IMarket):
             if save:
                 self.market.save()
         return equity
+    
+    def orderbook_snapshot(self, symbol:'MarketSymbol|str'):
+        if isinstance(symbol, str):
+            symbol = self._get_symbol_from_name(symbol)
+        return self.kmarket.get_aggregated_orderv3(symbol.name)
+
 

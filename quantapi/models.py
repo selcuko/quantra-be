@@ -595,8 +595,8 @@ class GlobalSymbol(models.Model):
     available_markets = models.TextField(default='[]', help_text='JSON string of available markets for this symbol')
     tags = models.TextField(null=True, blank=True, help_text='JSON string of tags for this symbol')
 
-    ath = models.FloatField(null=True, blank=True)
-    atl = models.FloatField(null=True, blank=True)
+    ath = models.FloatField(null=True, blank=True, help_text='ATH')
+    atl = models.FloatField(null=True, blank=True, help_text='ATL')
     ath_date = models.DateTimeField(null=True, blank=True)
     atl_date = models.DateTimeField(null=True, blank=True)
     volume = models.FloatField(null=True, blank=True, help_text='Total volume in USD')
@@ -612,7 +612,9 @@ class GlobalSymbol(models.Model):
     data_updated = models.DateTimeField(null=True, blank=True, help_text='Last time this symbol was updated in the data source')
     supply_ratio = models.FloatField(null=True, blank=True, help_text='Circulating supply / Total supply')
     ath_prox = models.FloatField(null=True, blank=True, help_text='Proximity to all time high')
+    ath_ratio = models.FloatField(null=True, blank=True, help_text='ATH / Current price')
     atl_prox = models.FloatField(null=True, blank=True, help_text='Proximity to all time low')
+    atl_ratio = models.FloatField(null=True, blank=True, help_text='Current price / ATL')
     volume24h_to_mcap = models.FloatField(null=True, blank=True, help_text='Volume 24H / Market cap')
 
     @property
@@ -639,6 +641,8 @@ class GlobalSymbol(models.Model):
         self.supply_ratio = (self.circulating_supply / self.total_supply) if self.circulating_supply and self.total_supply else None
         self.ath_prox = ((self.ath - self.price) / (self.ath - self.atl)) if self.ath != self.atl and self.ath and self.atl and self.price else None
         self.atl_prox = ((self.price - self.atl) / (self.ath - self.atl)) if self.ath != self.atl and self.ath and self.atl and self.price else None
+        self.ath_ratio = (self.ath / self.price) if self.ath and self.price else None
+        self.atl_ratio = (self.price / self.atl) if self.atl and self.price else None
         self.volume24h_to_mcap = (self.volume / self.market_cap) if self.volume and self.market_cap else None
 
     def set_markets(self, ms=None, save=True):
@@ -697,4 +701,5 @@ class GlobalSymbol(models.Model):
             'volume24h_to_mcap': self.volume24h_to_mcap,
             'is_favorite': self.is_favorite,
             'markets': self.markets,
+            'price': self.price,
         }
