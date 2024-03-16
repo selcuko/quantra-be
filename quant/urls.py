@@ -42,9 +42,10 @@ urlpatterns = [
     path('watchdog/', WatchdogView.as_view(), name='watchdog'),
     path('orders/', OrderManagementView.as_view(), name='order-management'),
     path('price/', PriceView.as_view(), name='price'),
-    path('symbol/<slug:name>', SymbolView.as_view(), name='symbol-detail'),
+    path('symbol/<slug:cid>/', SymbolView.as_view(), name='symbol-detail'),
     path('coinscan/', CoinScanView.as_view(), name='symbol-scan'),
     path('favorites/', FavoritesView.as_view(), name='symbol-favorites'),
+    path('favorites/modify/', FavoritesView.favorite, name='symbol-favorite-modify')
 ]
 if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

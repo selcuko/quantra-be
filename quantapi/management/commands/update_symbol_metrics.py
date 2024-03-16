@@ -65,7 +65,9 @@ class Command(BaseCommand):
                 'atl_date',
                 'data_updated',
                 'payload',
-                'volume24h_to_mcap'
+                'volume24h_to_mcap',
+                'atl_ratio',
+                'ath_ratio',
             ])
         except KeyboardInterrupt:
             print('Keyboard interrupt detected. Exiting...')
@@ -113,7 +115,7 @@ class Command(BaseCommand):
                 continue
             print('.', end='')
             gs = [gs for gs in global_symbols if gs.base == symbol['symbol']][0]
-            gs.tags = json.dumps(symbol['tags'])
+            gs.tags = json.dumps(symbol['tags']) if symbol.get('tags') else gs.tags
             gs.coinmarketcap_response = json.dumps(symbol)
             gs_update.append(gs)
         GlobalSymbol.objects.bulk_update(gs_update, ['tags', 'coinmarketcap_response'])

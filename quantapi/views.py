@@ -9,10 +9,8 @@ from django.shortcuts import redirect, render
 from django.views import View
 from backtest import async_analyze
 from django.http import HttpResponse, JsonResponse
-from coingecko import CoinGecko
 from liveloop import LiveLoop
 from markets.errors import InsufficientBalance, MarketDisabledTrading, SymbolNotInMarket
-from models import SymbolMetrics
 from quantapi.analytics import MarketAnalytics, TotalSessionAnalytics
 from quantapi.models import (Backtest, GlobalSymbol, Market, Order, Session, Signal,
                              MarketSymbol)
@@ -474,7 +472,7 @@ class PriceView(View):
 class CoinScanView(View):
     def get(self, request):
         return render(request, 'symbol-scan.html')
-    
+
     def post(self, request):
         payload = json.loads(request.body.decode('utf-8'))
         query = {}
@@ -516,7 +514,10 @@ class CoinScanView(View):
             markets = payload['markets']
             # available_markets is a stringified JSON, and markets is a list of strings
             for market in markets:
-                market_query &= Q(available_markets__icontains=market)
+                if market == 'NOTNULL':
+                    market_query &= Q(available_markets__isnull=False) & ~Q(available_markets='') & ~Q(available_markets='[]')
+                else:
+                    market_query &= Q(available_markets__icontains=market)
         start = 0
         end = 50
         if payload.get('start'):
@@ -525,7 +526,7 @@ class CoinScanView(View):
             end = int(payload['end'])
         print('Start:', start, 'End:', end)
         sort_col = sort.replace('-', '')
-        globals = GlobalSymbol.objects.filter(volume__gte=100, market_cap__gte=100)
+        globals = GlobalSymbol.objects.filter(volume__gte=100)
         # exclude sort_col=null values
         globals = globals.exclude(**{f'{sort_col}__isnull': True}).exclude(tags__contains='stablecoin')
         symbols = globals.filter(**query).filter(market_query).order_by(sort)
@@ -536,22 +537,84 @@ class CoinScanView(View):
 
 
 class SymbolView(View):
-    def get(self, request, name):
-        name = name.upper().replace('-USDT', '')
-        cg = CoinGecko()
-        global_metrics = cg.coin(name)['market_data']
-        return render(request, 'symbol-detail.html', {
-            'symbol': name,
-            'metrics': SymbolMetrics(global_metrics),
-        })
+    def get(self, request, cid):
+        try:
+            symbol = GlobalSymbol.objects.get(cid=cid)
+        except GlobalSymbol.DoesNotExist:
+            return render(request, 'symbol-detail.html', {'error': f'Symbol CID={cid} not found.'})
+        return render(request, 'symbol-detail.html', {'symbol': symbol})
 
 
 class FavoritesView(View):
     def get(self, request):
         favorites = GlobalSymbol.objects.filter(is_favorite=True)
         return render(request, 'symbol-favorites.html', {'symbols': favorites})
-    
+
+
     def post(self, request):
+        payload = json.loads(request.body.decode('utf-8'))
+        query = {}
+        print(payload)
+        if payload.get('volumeMin'):
+            query['volume__gte'] = int(payload['volumeMin'])
+        if payload.get('volumeMax'):
+            query['volume__lte'] = int(payload['volumeMax'])
+        if payload.get('atlProxMax'):
+            query['atl_prox__lte'] = float(payload['atlProxMax'])
+        if payload.get('atlProxMin'):
+            query['atl_prox__gte'] = float(payload['atlProxMin'])
+        if payload.get('athProxMax'):
+            query['ath_prox__lte'] = float(payload['athProxMax'])
+        if payload.get('athProxMin'):
+            query['ath_prox__gte'] = float(payload['athProxMin'])
+        if payload.get('supplyMax'):
+            query['supply_ratio__lte'] = float(payload['supplyMax'])
+        if payload.get('supplyMin'):
+            query['supply_ratio__gte'] = float(payload['supplyMin'])
+        if payload.get('marketcapMin'):
+            query['market_cap__gte'] = int(payload['marketcapMin'])
+        if payload.get('marketcapMax'):
+            query['market_cap__lte'] = int(payload['marketcapMax'])
+        if payload.get('volToMcapMin'):
+            query['volume24h_to_mcap__gte'] = float(payload['volToMcapMin'])
+        if payload.get('volToMcapMax'):
+            query['volume24h_to_mcap__lte'] = float(payload['volToMcapMax'])
+        if payload.get('sortBy'):
+            sort = payload['sortBy']
+            if sort == 'symbol':
+                sort = '-volume'
+        else:
+            sort = '-volume'
+        if payload.get('search'):
+            query['base__icontains'] = payload['search'].replace(' ', '')
+        market_query = Q()
+        if payload.get('markets'):
+            markets = payload['markets']
+            # available_markets is a stringified JSON, and markets is a list of strings
+            for market in markets:
+                if market == 'NOTNULL':
+                    market_query &= Q(available_markets__isnull=False) & ~Q(available_markets='') & ~Q(available_markets='[]')
+                else:
+                    market_query &= Q(available_markets__icontains=market)
+        start = 0
+        end = 50
+        if payload.get('start'):
+            start = int(payload['start'])
+        if payload.get('end'):
+            end = int(payload['end'])
+        print('Start:', start, 'End:', end)
+        sort_col = sort.replace('-', '')
+        globals = GlobalSymbol.objects.filter(volume__gte=100)
+        # exclude sort_col=null values
+        globals = globals.exclude(**{f'{sort_col}__isnull': True}).exclude(tags__contains='stablecoin').exclude(is_favorite=False)
+        symbols = globals.filter(**query).filter(market_query).order_by(sort)
+        count = symbols.count()
+        symbols = symbols[start:end]
+        response = {'symbols': GlobalSymbol.batch_to_json(symbols), 'count': count}
+        return JsonResponse(response, safe=False)
+
+    @staticmethod
+    def favorite(request):
         payload = json.loads(request.body.decode('utf-8'))
         symbol_cid = payload.get('cid')
         if not symbol_cid:

@@ -621,6 +621,10 @@ class GlobalSymbol(models.Model):
     def markets(self):
         return json.loads(self.available_markets)
     
+    @property
+    def markets_display(self):
+        return ', '.join(self.markets)
+    
     @markets.setter
     def markets(self, value):
         self.available_markets = json.dumps(value)
@@ -636,12 +640,19 @@ class GlobalSymbol(models.Model):
     @property
     def price(self):
         return json.loads(self.payload).get('current_price')
+    
+    @property
+    def tags_display(self):
+        self.tags = self.tags.replace("'", '"')
+        tags = json.loads(self.tags or '[]')
+        tags = [t.replace('-', ' ') for t in tags]
+        return ', '.join(tags)
 
     def calculate(self):
         self.supply_ratio = (self.circulating_supply / self.total_supply) if self.circulating_supply and self.total_supply else None
         self.ath_prox = ((self.ath - self.price) / (self.ath - self.atl)) if self.ath != self.atl and self.ath and self.atl and self.price else None
         self.atl_prox = ((self.price - self.atl) / (self.ath - self.atl)) if self.ath != self.atl and self.ath and self.atl and self.price else None
-        self.ath_ratio = (self.ath / self.price) if self.ath and self.price else None
+        self.ath_ratio = ((self.ath - self.price) * 100 / self.ath) if self.ath and self.price else None
         self.atl_ratio = (self.price / self.atl) if self.atl and self.price else None
         self.volume24h_to_mcap = (self.volume / self.market_cap) if self.volume and self.market_cap else None
 
