@@ -39,7 +39,7 @@ class MEXCMarket(IMarket):
             self.session.headers.update({
                 'X-MEXC-APIKEY': config['ACCESS_KEY'],
             })
-
+        from quantapi.models import Market
         self.market = market
         if not self.market:
             self.market = Market.objects.filter(exchange_name=self.name).first()
@@ -230,8 +230,8 @@ class MEXCMarket(IMarket):
         payload = self.sign(payload)
         return payload
 
-    def get_klines(self, symbol, interval, start=None, end=None, limit=1000):
-        return self._get_klines(symbol, interval, start, end, limit)
+    def get_klines(self, symbol, interval, start=None, end=None, limit=1000, retry=1):
+        return self._get_klines(symbol, interval, start, end, limit, retry=retry)
 
     def get_account(self):
         uri = f'{self.url}/api/v3/account'
@@ -253,7 +253,7 @@ class MEXCMarket(IMarket):
     def _get_klines(self, symbol, interval, start=None, end=None, limit=1000, retry=3):
         if not end and not start:
             raise ValueError('Either start or end must be provided')
-        if not limit or limit > 1000:
+        if limit > 1000:
             logger.warning(f'MEXC only allows a maximum of 1000 klines per request, you requested {limit}')
             limit = 1000
         calculated_timerange = timedelta(minutes=interval_to_minutes(interval) * limit)
@@ -297,6 +297,7 @@ class MEXCMarket(IMarket):
         )
 
     def get_symbols(self):
+        from quantapi.models import MarketSymbol
         try:
             uri = f'{self.url}/api/v3/exchangeInfo'
             response = requests.get(uri)
@@ -310,11 +311,11 @@ class MEXCMarket(IMarket):
         MarketSymbol.objects.bulk_create(self.symbols.values(), ignore_conflicts=True)
         return self.symbols
 
-    def get_last_klines(self, symbol, interval, limit=100):
+    def get_last_klines(self, symbol, interval, limit=100, retry=1):
         minutes = interval_to_minutes(interval)
         now = datetime.now(tz=pytz.UTC)
         start = now - timedelta(minutes=minutes*limit)
-        klines = self.get_klines(symbol, interval, start, now)
+        klines = self.get_klines(symbol, interval, start, now, limit, retry)
         if not klines:
             return []
         last_kline_dt = klines[-1][0]

@@ -127,6 +127,15 @@ class MarketSymbol(models.Model):
     details = models.TextField(null=True, blank=True, help_text='JSON string of symbol detail from market')
     sessions: models.QuerySet['Session']
 
+    hour4_volume = models.FloatField(null=True, blank=True, help_text='Volume in the last 4 hours')
+    hour4_volume_date = models.DateTimeField(null=True, blank=True, help_text='Start date of the candle used for last 4 hour volume')
+    day10_volume = models.FloatField(null=True, blank=True, help_text='Volume in the last 10 days')
+    day10_volume_date = models.DateTimeField(null=True, blank=True, help_text='Start date of the candle used for last 10 day volume')
+    day30_volume = models.FloatField(null=True, blank=True, help_text='Volume in the last 30 days')
+    day30_volume_date = models.DateTimeField(null=True, blank=True, help_text='Start date of the candle used for last 30 day volume')
+    day60_volume = models.FloatField(null=True, blank=True, help_text='Volume in the last 60 days')
+    day60_volume_date = models.DateTimeField(null=True, blank=True, help_text='Start date of the candle used for last 60 day volume')
+
     def save(self, *args, **kwargs):
         if not self.name and self.base and self.quote:
             self.name = f'{self.base}-{self.quote}'
@@ -643,6 +652,7 @@ class GlobalSymbol(models.Model):
     
     @property
     def tags_display(self):
+        self.tags = self.tags or '[]'
         self.tags = self.tags.replace("'", '"')
         tags = json.loads(self.tags or '[]')
         tags = [t.replace('-', ' ') for t in tags]

@@ -75,6 +75,7 @@ class GlobalSymbolAdmin(admin.ModelAdmin):
         def lookups(self, request, model_admin):
             return [
                 ('vol100', 'Hide volume<=100'),
+                ('volall', 'Show all volumes'),
             ]
 
         def queryset(self, request, queryset):

@@ -28,6 +28,27 @@ class IMarket:
         """
         raise NotImplementedError(f'{self.name} does not implement json()')
 
+    def format_candle(self, candle:list) -> dict:
+        """Format candle to standard format
+
+        Args:
+            candle (list): list of OHLCV
+
+        Returns:
+            dict: standard candle
+        """
+        
+        candle = {
+            'time': candle[0],
+            'open': candle[1],
+            'high': candle[2],
+            'low': candle[3],
+            'close': candle[4],
+            'volume': candle[5] if len(candle) > 5 else None,
+        }
+        candle['price'] = (candle['open'] + candle['close'] + candle['high'] + candle['low']) / 4
+        return candle
+
     def init_match_engine(self, symbol:str, interval:str, callback:Callable):
         """Blocking (sync) function to initialize a match engine for given symbol and interval. Run in a thread!
 
