@@ -704,6 +704,8 @@ class GlobalSymbol(models.Model):
             'atl': self.atl,
             'ath_date': self.ath_date,
             'atl_date': self.atl_date,
+            'ath_ratio': self.ath_ratio,
+            'atl_ratio': self.atl_ratio,
             'volume': self.volume,
             'market_cap': self.market_cap,
             'circulating_supply': self.circulating_supply,
