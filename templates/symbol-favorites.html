@@ -161,7 +161,11 @@
                         <div class="ml-1 sorting-indicator"></div>
                     </th>
                     <th scope="col" class="p-3" id="ath_prox">
-                        ATH/ATL (x)
+                        ATH %
+                        <div class="ml-1 sorting-indicator"></div>
+                    </th>
+                    <th scope="col" class="p-3" id="ath_prox">
+                        ATL x
                         <div class="ml-1 sorting-indicator"></div>
                     </th>
                     <th scope="col" class="p-3" id="supply_ratio">
@@ -392,7 +396,10 @@
                     ${symbol.ath_prox ? symbol.ath_prox.toFixed(2) : '---'} / ${symbol.atl_prox ? symbol.atl_prox.toFixed(2) : '---'}
                 </td>
                 <td class="p-3">
-                    ${symbol.ath_ratio ? symbol.ath_ratio.toFixed(2) : '---'}% / ${symbol.atl_ratio ? symbol.atl_ratio.toFixed(2) : '---'}x
+                    ${symbol.ath_ratio ? symbol.ath_ratio.toFixed(2) : '---'}%
+                </td>
+                <td class="p-3">
+                    ${symbol.atl_ratio ? symbol.atl_ratio.toFixed(2) : '---'}x
                 </td>
                 <td class="p-3">
                     ${symbol.supply_ratio ? symbol.supply_ratio.toFixed(2) : '---'}

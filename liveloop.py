@@ -190,8 +190,13 @@ class LiveLoop:
 
     def on_candle(self, candle):
         if self.session.status != Session.Status.ONGOING:
-            logger.error(f'Received candle while session status is {self.session.status}, skipping.', extra={'loop': self})
+            logger.warning(f'Received candle while session status is {self.session.status}, skipping.', extra={'loop': self})
             return
+        equity = self.session.capital + self.session.assets * self.session.last_price or 1
+        if equity < 5:
+            logger.error(f'Ghost session found - no capital and no assets, pausing. [SessionID:{self.session.id}]', extra={'loop': self})
+            self.session.status = Session.Status.PAUSED
+            self.session.save()
         self.imarket.cache_to_db()
         try:
             self.last_kline_dt = candle['time']

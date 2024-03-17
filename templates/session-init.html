@@ -313,8 +313,9 @@
     fetch(`/market/${marketId}/raw/`)
       .then(response => response.json())
       .then(data => {
-        if (data.assets[symbol]) {
-          assets = data.assets[symbol]
+        symbol_proper = symbol.toUpperCase().replace('-USDT', '');
+        if (data.assets[symbol_proper]) {
+          assets = data.assets[symbol_proper]
           assetRange.max = assets;
           assetsInput.max = assets;
           assetsInput.value = assets / 2;

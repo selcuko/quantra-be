@@ -57,6 +57,23 @@
                 <dt class="font-medium text-gray-900">Supply</dt>
                 <dd class="text-gray-700 sm:col-span-2">Ratio: {{ symbol.supply_ratio|floatformat:2 }} | Circulating: {{ symbol.circulating_supply|intcomma }} | Total: {{ symbol.total_supply|intcomma }}</dd>
             </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">CoinGecko</dt>
+                <dd class="text-gray-700 sm:col-span-2"><a class="text-blue-700 hover:underline" target='_blank' href="https://www.coingecko.com/en/coins/{{ symbol.cid }}">View in CoinGecko</a></dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">CoinMarketCap</dt>
+                <dd class="text-gray-700 sm:col-span-2"><a class="text-blue-700 hover:underline" target='_blank' href="https://coinmarketcap.com/currencies/{{ symbol.cid }}/">View in CoinMarketCap</a></dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">TradingView</dt>
+                <dd class="text-gray-700 sm:col-span-2">
+                    
+                    {% for market_symbol in symbol.mainnet_symbols %}
+                        <a class="text-blue-700 hover:underline mr-2" target='_blank' href="https://www.tradingview.com/chart/?symbol={{ market_symbol.market.exchange_name }}%3A{{ symbol.base }}{{ symbol.quote }}">{{ market_symbol.market.exchange_name }}</a>
+                    {% endfor %}
+                </dd>
+            </div>
         </dl>
     </div>
 </div>

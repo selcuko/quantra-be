@@ -15,7 +15,7 @@ from quantapi.analytics import MarketAnalytics, TotalSessionAnalytics
 from quantapi.models import (Backtest, GlobalSymbol, Market, Order, Session, Signal,
                              MarketSymbol)
 from strategy import get_strategy
-
+from logger import logger
 
 def get_open_position(session):
     # get last filled order
@@ -285,7 +285,11 @@ class SessionUpdateView(View):
             session.sell_enabled = bool(int(request.POST.get('session_sell_enabled', 0)))
         if 'session_buy' in request.POST and float(request.POST.get('session_buy', 0)) > 0:
             iface = session.symbol.market.get_interface()
+            session.update(iface)
             amt = float(request.POST.get('session_buy'))
+            corrected_amt = min(amt, session.capital)
+            if amt != corrected_amt:
+                logger.warning(f'Manual buy amount {amt} exceeds available capital {session.capital} USDT. Corrected to {corrected_amt} USDT.', extra={'loop': session, 'n_type': 'ORDER'})
             order = iface.place_market_order(session.symbol.name, 'buy', funds=amt)
             order.force = True
             signal = Signal.objects.create(session=session, side='BUY', price=order.display_price, timestamp=datetime.now(pytz.UTC))
@@ -304,7 +308,11 @@ class SessionUpdateView(View):
                 session.assets += order.deal_size
         if 'session_sell' in request.POST and float(request.POST.get('session_sell', 0)) > 0:
             iface = session.symbol.market.get_interface()
+            session.update(iface)
             amt = float(request.POST.get('session_sell'))
+            corrected_amt = min(amt, session.assets)
+            if amt != corrected_amt:
+                logger.warning(f'Manual sell amount {amt} exceeds available assets {session.assets} {session.symbol.base}. Corrected to {corrected_amt} {session.symbol.base}.', extra={'loop': session, 'n_type': 'ORDER'})
             order = iface.place_market_order(session.symbol.name, 'sell', quantity=amt)
             order.force = True
             signal = Signal.objects.create(session=session, side='SELL', price=order.display_price, timestamp=datetime.now(pytz.UTC))
@@ -528,7 +536,7 @@ class CoinScanView(View):
         sort_col = sort.replace('-', '')
         globals = GlobalSymbol.objects.filter(volume__gte=100)
         # exclude sort_col=null values
-        globals = globals.exclude(**{f'{sort_col}__isnull': True}).exclude(tags__contains='stablecoin')
+        globals = globals.exclude(**{f'{sort_col}__isnull': True}).exclude(is_stablecoin=True)
         symbols = globals.filter(**query).filter(market_query).order_by(sort)
         count = symbols.count()
         symbols = symbols[start:end]

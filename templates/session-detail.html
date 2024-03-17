@@ -86,6 +86,12 @@
 <div class="m-3">
     <div class="flow-root rounded-lg border border-gray-300 p-3 shadow-sm">
         <dl class="-my-3 divide-y divide-gray-100 text-sm">
+            {% if session.symbol.symbol %}
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">Symbol details</dt>
+                <dd class="text-gray-700 sm:col-span-2"><a class="text-blue-700 hover:underline" target="_blank" href="{% url 'symbol-detail' cid=session.symbol.symbol.cid %}">{{ session.symbol.symbol.base }} ({{ session.symbol.symbol.cid }})</a></dd>
+            </div>
+            {% endif %}
             <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
                 <dt class="font-medium text-gray-900">Open pos.</dt>
                 <dd class="text-gray-700 sm:col-span-2">$ {{ session.analytics.open_position_delta|floatformat:2|default:'-' }} ({{ session.analytics.open_position_delta_pct|floatformat:2|default:'-' }}%)</dd>

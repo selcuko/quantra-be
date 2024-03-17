@@ -4,6 +4,12 @@ from coinmcap import CoinMarketCap
 from quantapi.models import MarketSymbol, GlobalSymbol
 from coingecko import CoinGecko
 
+STABLES = ['USDT', 'BUSD', 'USDC', 'DAI', 'FDUSD', 'TUSD', 'USDD', 'USDe',
+           'FRAX', 'USTC', 'PYUSD', 'USDP', 'USDJ', 'GUSD', 'EURS', 'LUSD',
+           'vUSDC', 'USDX', 'BUSD', 'MKUSD', 'SBD', 'AEUR', 'vBUSD', 'EURC',
+           'SUSD', 'RSV', 'CUSD', 'EURt', 'XSGD', 'vUSDT', 'USDK', 'ZUSD',
+           'USDV']
+
 class Command(BaseCommand):
     help = 'Update symbol metrics from a 3rd party provider for all symbols.'
 
@@ -116,7 +122,8 @@ class Command(BaseCommand):
             print('.', end='')
             gs = [gs for gs in global_symbols if gs.base == symbol['symbol']][0]
             gs.tags = json.dumps(symbol['tags']) if symbol.get('tags') else gs.tags
+            gs.is_stablecoin = 'stablecoin' in symbol.get('tags') or gs.base in STABLES
             gs.coinmarketcap_response = json.dumps(symbol)
             gs_update.append(gs)
-        GlobalSymbol.objects.bulk_update(gs_update, ['tags', 'coinmarketcap_response'])
+        GlobalSymbol.objects.bulk_update(gs_update, ['tags', 'coinmarketcap_response', 'is_stablecoin'])
 

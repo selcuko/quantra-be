@@ -10,6 +10,7 @@ import pytz
 from typing import Optional
 from django.db import models
 from cryptography.fernet import Fernet
+from markets import get_market
 from markets.helper import float_to_precision
 
 from strategy import get_strategy
@@ -276,6 +277,12 @@ class Session(models.Model):
         orders = Order.objects.filter(signal__session=self).order_by('-created_at')[:5]
         orders = orders.filter(status=Order.Status.ERROR)
         return orders.exists()
+
+    def update(self, interface, save=True):
+        interface = interface or self.symbol.market.get_interface()
+        self.capital = max(self.capital, interface.capital)
+        self.assets = max(self.assets, interface.assets.get(self.symbol.base, 0))
+        if save: self.save()
 
 
 class Strategy(models.Model):
@@ -603,6 +610,7 @@ class GlobalSymbol(models.Model):
     is_favorite = models.BooleanField(default=False)
     available_markets = models.TextField(default='[]', help_text='JSON string of available markets for this symbol')
     tags = models.TextField(null=True, blank=True, help_text='JSON string of tags for this symbol')
+    is_stablecoin = models.BooleanField(null=True, blank=True)
 
     ath = models.FloatField(null=True, blank=True, help_text='ATH')
     atl = models.FloatField(null=True, blank=True, help_text='ATL')
@@ -633,7 +641,7 @@ class GlobalSymbol(models.Model):
     @property
     def markets_display(self):
         return ', '.join(self.markets)
-    
+
     @markets.setter
     def markets(self, value):
         self.available_markets = json.dumps(value)
@@ -649,6 +657,9 @@ class GlobalSymbol(models.Model):
     @property
     def price(self):
         return json.loads(self.payload).get('current_price')
+    
+    def mainnet_symbols(self):
+        return MarketSymbol.objects.filter(symbol=self, market__mainnet_enabled=True)
     
     @property
     def tags_display(self):
