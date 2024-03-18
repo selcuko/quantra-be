@@ -280,8 +280,14 @@ class Session(models.Model):
 
     def update(self, interface, save=True):
         interface = interface or self.symbol.market.get_interface()
-        self.capital = max(self.capital, interface.capital)
-        self.assets = max(self.assets, interface.assets.get(self.symbol.base, 0))
+        new_capital = min(self.capital, interface.capital)
+        new_assets  = min(self.assets, interface.assets.get(self.symbol.base, 0))
+        if new_capital != self.capital:
+            logger.warning(f'Capital changed from {self.capital} to {new_capital} (SessionID:{self.pk})')
+        if new_assets != self.assets:
+            logger.warning(f'Assets changed from {self.assets} to {new_assets} (SessionID:{self.pk})')
+        self.capital = new_capital
+        self.assets = new_assets
         if save: self.save()
 
 

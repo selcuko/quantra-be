@@ -7,6 +7,7 @@ if TYPE_CHECKING:
 
 
 class IMarket:
+    WS_MAX_RETRIES = 30
     authenticated: bool
     testnet: bool
     name: str

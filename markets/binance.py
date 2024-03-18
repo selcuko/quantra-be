@@ -128,7 +128,7 @@ class BinanceMarket(IMarket):
                 ws = connect(ws_uri)
                 continue
             except:
-                if retries > 5:
+                if retries > self.WS_MAX_RETRIES:
                     logger.error(f'Error while initializing match engine for {symbol} on {self.name}', exc_info=True)
                     raise
                 retries += 1

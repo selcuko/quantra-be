@@ -128,7 +128,7 @@ class MEXCMarket(IMarket):
                 ws = self.get_match_engine_ws(symbol)
                 continue
             except:
-                if retries > 5:
+                if retries > self.WS_MAX_RETRIES:
                     logger.error(f'Error while initializing match engine for {symbol} on {self.name}', exc_info=True)
                     raise
                 retries += 1
