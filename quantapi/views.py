@@ -208,7 +208,6 @@ class SessionInitView(View):
         except Exception as e:
             raise e
             return render(request, 'session-init.html', {'markets': markets, 'form_error': f'Cannot initiate session: {e!r}'})
-        return redirect('session-detail', pk=ll.session.pk)
 
 
 

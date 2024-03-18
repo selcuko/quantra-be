@@ -3,22 +3,25 @@ import json
 from typing import TYPE_CHECKING, Callable, Literal, Optional
 from django.utils import timezone
 if TYPE_CHECKING:
-    from quantapi.models import Order, MarketSymbol, Market as DBMarket
+    from quantapi.models import Order, MarketSymbol, Market as DBMarket, Session
 
 
 class IMarket:
     WS_MAX_RETRIES = 30
     authenticated: bool
     testnet: bool
-    name: str
+    name: str = 'AbstractMarket'
     symbols: dict[str, 'MarketSymbol']
     spot_trading_enabled: bool
     capital: float
     assets: dict[str, float]
     commission: dict[str, float]
     market: Optional['DBMarket']
+
     def __init__(self, config:Optional[dict]=None, market:Optional['DBMarket']=None):
         """Initialize a market instance with config if provided."""
+        self.config = config
+        self.market = market
         raise NotImplementedError
     
     def json(self) -> dict:
@@ -29,7 +32,12 @@ class IMarket:
         """
         raise NotImplementedError(f'{self.name} does not implement json()')
 
-    def format_candle(self, candle:list) -> dict:
+    @staticmethod
+    def format_match(payload:dict) -> dict:
+        raise NotImplementedError(f'AbstractMarket does not implement format_match()')
+
+    @staticmethod
+    def format_candle(candle:list) -> dict:
         """Format candle to standard format
 
         Args:
@@ -38,7 +46,7 @@ class IMarket:
         Returns:
             dict: standard candle
         """
-        
+
         candle = {
             'time': candle[0],
             'open': candle[1],
@@ -50,12 +58,14 @@ class IMarket:
         candle['price'] = (candle['open'] + candle['close'] + candle['high'] + candle['low']) / 4
         return candle
 
-    def init_match_engine(self, symbol:str, interval:str, callback:Callable):
+    def init_match_engine(self, symbol:str, interval:str, callback:Callable, session:Session):
         """Blocking (sync) function to initialize a match engine for given symbol and interval. Run in a thread!
 
         Args:
             symbol (str): symbol name
             interval (str): in "1 min" format
+            callback (function): gets called for every new candle
+            session (Session): used to stop MatchEngine upon session termination/pausing
 
         Returns:
             str: websocket uri
@@ -68,6 +78,7 @@ class IMarket:
         Args:
             symbol (str): symbol name
             interval (str): in "1 min" format
+            callback (function): gets called for new candles
 
         Returns:
             str: websocket uri
@@ -96,7 +107,7 @@ class IMarket:
             symbol (str): symbol name
 
         Returns:
-            bool: True if symbol is present
+            bool: True if symbol is listed in market
         """
         raise NotImplementedError
 
@@ -226,7 +237,6 @@ class IMarket:
         """
         raise NotImplementedError
 
-    
     def get_current_prices(self, save=True) -> dict:
         raise NotImplemented
 
@@ -242,4 +252,3 @@ class IMarket:
             self.get_equity(save=False)
             self.market.save()
         return
-

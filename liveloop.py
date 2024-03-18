@@ -1,5 +1,4 @@
 import json
-import logging
 import threading
 import time
 from datetime import datetime, timedelta
@@ -18,8 +17,8 @@ from strategy import Strategy, get_strategy
 
 class LiveLoop:
     def __init__(self, symbol:str, market:Market, strategy:Strategy, capital_limit:float,
-            asset_limit:float, freq:str='15 min', end:Optional[datetime]=None,
-            session_type:Optional[str]=None, session=None, use_heikin_ashi=False) -> None:
+                 asset_limit:float, freq:str='15 min', end:Optional[datetime]=None,
+                 session_type:Optional[str]=None, session=None, use_heikin_ashi=False) -> None:
         self.will_stop = False
         self.market = market
         self.imarket = market.get_interface()
@@ -247,7 +246,6 @@ class LiveLoop:
 
     def buy(self, last_kline:dict):
         with self.order_lock:
-            last_order = None
             signal = Signal.objects.create(
                 session=self.session,
                 timestamp=self.last_kline_dt,
@@ -307,7 +305,6 @@ class LiveLoop:
             if not last_kline:
                 last_kline = {}
             last_order = None
-            signal = None
             signal = Signal.objects.create(
                 session=self.session,
                 timestamp=self.last_kline_dt,

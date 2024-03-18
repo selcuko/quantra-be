@@ -28,6 +28,7 @@ if typing.TYPE_CHECKING:
 
 class MEXCMarket(IMarket):
     name = 'MEXC'
+
     def __init__(self, config=None, market=None) -> None:
         self.authenticated = False
         self.session = requests.Session()
@@ -52,6 +53,8 @@ class MEXCMarket(IMarket):
         self.get_symbols()
         self.get_account()
 
+        self.spot_trading_enabled = False
+        self.margin_trading_enabled = False
         self.stop_websocket_stream = False
     
     def format_ws_candle(self, candle):
@@ -67,7 +70,8 @@ class MEXCMarket(IMarket):
                 'quantity': float(candle['v']),
             }
 
-    def interval_to_ws(self, interval:str):
+    @staticmethod
+    def interval_to_ws(interval:str):
         return {
             '1 min': 'Min1',
             '3 min': 'Min3',
@@ -81,7 +85,6 @@ class MEXCMarket(IMarket):
             '1 week': 'Week1',
             '1 month': 'Month1'
         }[interval]
-
 
     def format_match(self, data):
         return {
@@ -111,6 +114,7 @@ class MEXCMarket(IMarket):
         last_ping = datetime.now()
         me = MatchEngine(interval, callback)
         last_stop_check = datetime.now()
+        retries = 0
         while not self.stop_websocket_stream:
             if (datetime.now() - last_stop_check) > timedelta(minutes=interval_to_minutes(interval)):
                 last_stop_check = datetime.now()
@@ -122,6 +126,7 @@ class MEXCMarket(IMarket):
                 last_ping = datetime.now()
             try:
                 response = json.loads(ws.recv(timeout=10))
+                retries = 0
             except TimeoutError:
                 continue
             except (ConnectionClosed, ConnectionClosedOK):
@@ -170,7 +175,6 @@ class MEXCMarket(IMarket):
                 last_kline = candle['end']
             if not last_kline:
                 last_kline = candle['end']
-        
 
     def has_symbol(self, symbol: str) -> bool:
         if not self.symbols:
@@ -178,23 +182,27 @@ class MEXCMarket(IMarket):
         return symbol in self.symbols
 
     def _standardize_klines(self, klines):
-        klines = [[ self._standardize_datetime(kline[0]),
-                  float(kline[1]),
-                  float(kline[2]),
-                  float(kline[3]),
-                  float(kline[4]),
-                  float(kline[5]),
-                ] for kline in klines ]
+        klines = [[
+            self._standardize_datetime(kline[0]),
+            float(kline[1]),
+            float(kline[2]),
+            float(kline[3]),
+            float(kline[4]),
+            float(kline[5]),
+        ] for kline in klines ]
         return klines
     
-    def _standardize_symbol(self, symbol):
+    @staticmethod
+    def _standardize_symbol(symbol):
         return symbol.replace('USDT', '-USDT')
     
-    def _format_symbol(self, symbol):
+    @staticmethod
+    def _format_symbol(symbol):
         assert '-' in symbol, f'Symbol must be in the format BASE-QUOTE, you provided: {symbol}'
         return symbol.replace('-', '').upper()
     
-    def _format_interval(self, interval):
+    @staticmethod
+    def _format_interval(interval):
         return {
             '1 min': '1m',
             '3 min': '3m',
@@ -213,17 +221,21 @@ class MEXCMarket(IMarket):
             '1 month': '1M',
         }[interval]
     
-    def _format_datetime(self, dt):
+    @staticmethod
+    def _format_datetime(dt):
         return str(int(dt.timestamp()*1000))
 
-    def _standardize_datetime(self, dt):
+    @staticmethod
+    def _standardize_datetime(dt):
         return datetime.fromtimestamp(int(dt) // 1000, tz=pytz.UTC).replace(second=0, microsecond=0)
 
     def sign(self, query_string) -> str:
         signature = hmac.new(self.api_secret.encode('utf-8'), query_string.encode('utf-8'), hashlib.sha256).hexdigest()
         return query_string + '&signature=' + signature
 
-    def _prep_payload(self, payload={}) -> str:
+    def _prep_payload(self, payload=None) -> str:
+        if not payload:
+            payload = {}
         payload = { k:v for k,v in payload.items() if v is not None }
         payload['timestamp'] = self._format_datetime(datetime.now(tz=pytz.UTC))
         payload = urlencode(payload, doseq=True).replace('+', '%20')
@@ -285,14 +297,14 @@ class MEXCMarket(IMarket):
     def _prep_symbol(self, symbol):
         from quantapi.models import MarketSymbol
         return MarketSymbol(
-            market = self.market,
-            name = self._standardize_symbol(symbol['symbol']),
-            base = symbol['baseAsset'],
-            quote = symbol['quoteAsset'],
-            base_precision = symbol['baseSizePrecision'][:10],  # MEXC specific (they use ints)
-            quote_precision = symbol['quoteAmountPrecision'][:10], # MEXC specific (they use ints)
-            spot_trading_enabled = symbol['isSpotTradingAllowed'],
-            margin_trading_enabled = symbol['isMarginTradingAllowed'],
+            market=self.market,
+            name=self._standardize_symbol(symbol['symbol']),
+            base=symbol['baseAsset'],
+            quote=symbol['quoteAsset'],
+            base_precision=symbol['baseSizePrecision'][:10],      # MEXC specific (they use ints)
+            quote_precision=symbol['quoteAmountPrecision'][:10],  # MEXC specific (they use ints)
+            spot_trading_enabled=symbol['isSpotTradingAllowed'],
+            margin_trading_enabled=symbol['isMarginTradingAllowed'],
             details=json.dumps(symbol),
         )
 
@@ -311,7 +323,7 @@ class MEXCMarket(IMarket):
         MarketSymbol.objects.bulk_create(self.symbols.values(), ignore_conflicts=True)
         return self.symbols
 
-    def get_last_klines(self, symbol, interval, limit=100, retry=1):
+    def get_last_klines(self, symbol:'MarketSymbol|str', interval:str, limit=100, retry=1, silent=True):
         minutes = interval_to_minutes(interval)
         now = datetime.now(tz=pytz.UTC)
         start = now - timedelta(minutes=minutes*limit)
@@ -330,18 +342,18 @@ class MEXCMarket(IMarket):
             raise ValueError(f'Symbol {name} is not available on {self.name}')
         return self.symbols[name]
 
-    def _prep_order(self, order, symbol):
+    def _prep_order(self, order):
         order_time = order.get('time') or order.get('transactTime') or order.get('timestamp') or 0
         return Order(
-            oid = order.get('orderId'),
-            client_oid = order.get('clientOrderId'),
-            order_type = order.get('type', 'MARKET'),
-            price = order.get('price'),
-            market_timestamp = self._standardize_datetime(order_time),
-            deal_funds = float(order.get('origQuoteOrderQty', 0)),
-            deal_size = float(order.get('executedQty', 0)),
-            funds = float(order.get('origQuoteOrderQty', 0)),
-            status = order.get('status', 'NOT_FOUND'),
+            oid=order.get('orderId'),
+            client_oid=order.get('clientOrderId'),
+            order_type=order.get('type', 'MARKET'),
+            price=order.get('price'),
+            market_timestamp=self._standardize_datetime(order_time),
+            deal_funds=float(order.get('origQuoteOrderQty', 0)),
+            deal_size=float(order.get('executedQty', 0)),
+            funds=float(order.get('origQuoteOrderQty', 0)),
+            status=order.get('status', 'NOT_FOUND'),
             details=json.dumps(order),        
         )
 
@@ -370,7 +382,7 @@ class MEXCMarket(IMarket):
 
             response = self.session.request('POST', uri, params=order_query )
             order_data = response.json()
-            order = self._prep_order(order_data, symbol)
+            order = self._prep_order(order_data)
             if not order.oid:
                 if order_data.get('msg') == 'Oversold' and side == 'sell':
                     raise InsufficientBalance(f'Not enough balance to place order on {self.name} (we have {self.assets.get(symbol.base, 0)} {symbol.base} but tried to sell {quantity} {symbol.base}): {order_data}')
@@ -418,7 +430,7 @@ class MEXCMarket(IMarket):
             order_data = response.json()
             if order_data.get('msg') == 'Order does not exist':
                 return None
-            order = self._prep_order(order_data, symbol)
+            order = self._prep_order(order_data)
             return order
         except:
             logger.error(f'Error while getting order on {self.name}', exc_info=True)

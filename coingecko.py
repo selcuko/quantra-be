@@ -18,7 +18,8 @@ class CoinGecko:
         })
         self.coins = self.coins_list()
 
-    def handle_failed_request(self, response):
+    @staticmethod
+    def handle_failed_request(response):
         if not response.ok:
             raise ValueError('CoinGecko API request failed with', response.status_code, response.text)
 

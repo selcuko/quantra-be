@@ -468,6 +468,7 @@ class ComplexOrder(models.Model):
                 self.market_order = order
                 self.status = ComplexOrder.Status.FILLED
                 self.save()
+                return order
             elif self.side == Order.Side.SELL:
                 order = ll.imarket.place_market_order(
                     symbol=self.session.symbol,
@@ -480,6 +481,7 @@ class ComplexOrder(models.Model):
                 self.market_order = order
                 self.status = ComplexOrder.Status.FILLED
                 self.save()
+                return order
         raise ValueError('Invalid complex order type: ' + self.type)
 
 
@@ -737,7 +739,6 @@ class GlobalSymbol(models.Model):
             'data_updated': self.data_updated,
             'ath_prox': self.ath_prox,
             'atl_prox': self.atl_prox,
-            'supply_ratio': self.supply_ratio,
             'volume24h_to_mcap': self.volume24h_to_mcap,
             'is_favorite': self.is_favorite,
             'markets': self.markets,

@@ -33,7 +33,7 @@ def interval_to_minutes(interval:str) -> int:
 class OHLCVDataset(pd.DataFrame):
     def __init__(self, *args, **kwargs):
         if kwargs.pop('pass_thru', False):
-            return super().__init__(*args, **kwargs)
+            super().__init__(*args, **kwargs)
         kwargs.update({'columns': ['time', 'open', 'high', 'low', 'close', 'volume']})
         super().__init__(*args, **kwargs)
         self.set_index('time', inplace=True)
@@ -42,7 +42,8 @@ class OHLCVDataset(pd.DataFrame):
     def _validate(self):
         pass
     
-    def _standardize_freq(self, freq):
+    @staticmethod
+    def _standardize_freq(freq):
         return {
             '1 min': '1T',
             '3 min': '3T',
@@ -73,7 +74,7 @@ class OHLCVDataset(pd.DataFrame):
         return OHLCVDataset(new_ds, pass_thru=True)
 
     @classmethod
-    def from_csv_as_standard_candles(self, filename):
+    def from_csv_as_standard_candles(cls, filename):
         ds = pd.read_csv(filename)
         ds.columns = ['time', 'open', 'high', 'low', 'close', 'volume']
         ds['time'] = pd.to_datetime(ds['time'], unit='s')
@@ -96,7 +97,7 @@ class OHLCVDataset(pd.DataFrame):
         return OHLCVDataset(ds, pass_thru=True)
 
     @classmethod
-    def from_csv_as_heikin_ashi_candles(self, filename):
+    def from_csv_as_heikin_ashi_candles(cls, filename):
         ds = pd.read_csv(filename)
         ds.columns = ['time', 'open', 'high', 'low', 'close', 'volume']
         ds['time'] = pd.to_datetime(ds['time'], unit='s')
