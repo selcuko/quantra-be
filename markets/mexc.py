@@ -20,7 +20,7 @@ from markets.helper import authentication_required, float_to_precision
 from match import MatchEngine
 from models import interval_to_minutes
 from websockets.sync.client import connect
-from websockets.client import ClientConnection
+from websockets.sync.client import ClientConnection
 from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
 if typing.TYPE_CHECKING:
     from quantapi.models import Market, Order, MarketSymbol, Session
@@ -29,7 +29,7 @@ if typing.TYPE_CHECKING:
 class MEXCMarket(IMarket):
     name = 'MEXC'
 
-    def __init__(self, config=None, market=None) -> None:
+    def __init__(self, config, market) -> None:
         self.authenticated = False
         self.session = requests.Session()
         self.url = 'https://api.mexc.com'
@@ -42,8 +42,6 @@ class MEXCMarket(IMarket):
             })
         from quantapi.models import Market
         self.market = market
-        if not self.market:
-            self.market = Market.objects.filter(exchange_name=self.name).first()
 
         self.symbols = {}
         self.capital = 0
@@ -108,7 +106,7 @@ class MEXCMarket(IMarket):
             raise Exception(f'Error while subscribing to {topic}: {ack}')
         return ws
 
-    def init_match_engine(self, symbol:str, interval:str, callback:Callable, session:'Session'=None):
+    def init_match_engine(self, symbol:str, interval:str, callback:Callable, session:'Session'):
         from quantapi.models import Session
         ws = self.get_match_engine_ws(symbol)
         last_ping = datetime.now()
@@ -413,15 +411,17 @@ class MEXCMarket(IMarket):
             raise
 
     @authentication_required
-    def get_order(self, symbol:'MarketSymbol|str', order:'Order|str'):
+    def get_order(self, symbol:'MarketSymbol|str', order:'Order|str') -> 'Order':
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         if isinstance(order, Order):
-            order = order.oid
+            order_id = order.oid
+        else:
+            order_id = order
         try:
             order_query = self._prep_payload({ 
                                                     'symbol': self._format_symbol(symbol.name),
-                                                    'orderId': order,
+                                                    'orderId': order_id,
                                                     'timestamp': str(int(time.time()*1000)),
                                                 })
             
@@ -429,7 +429,7 @@ class MEXCMarket(IMarket):
             response = self.session.request('GET', uri, params=order_query )
             order_data = response.json()
             if order_data.get('msg') == 'Order does not exist':
-                return None
+                raise Exception(f'Order {order_id} does not exist on {self.name}')
             order = self._prep_order(order_data)
             return order
         except:

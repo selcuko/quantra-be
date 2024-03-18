@@ -16,9 +16,9 @@ class IMarket:
     capital: float
     assets: dict[str, float]
     commission: dict[str, float]
-    market: Optional['DBMarket']
+    market: 'DBMarket'
 
-    def __init__(self, config:Optional[dict]=None, market:Optional['DBMarket']=None):
+    def __init__(self, config:dict, market:'DBMarket'):
         """Initialize a market instance with config if provided."""
         self.config = config
         self.market = market
@@ -47,7 +47,7 @@ class IMarket:
             dict: standard candle
         """
 
-        candle = {
+        candle_mapped = {
             'time': candle[0],
             'open': candle[1],
             'high': candle[2],
@@ -55,10 +55,10 @@ class IMarket:
             'close': candle[4],
             'volume': candle[5] if len(candle) > 5 else None,
         }
-        candle['price'] = (candle['open'] + candle['close'] + candle['high'] + candle['low']) / 4
-        return candle
+        candle_mapped['price'] = (candle_mapped['open'] + candle_mapped['close'] + candle_mapped['high'] + candle_mapped['low']) / 4
+        return candle_mapped
 
-    def init_match_engine(self, symbol:str, interval:str, callback:Callable, session:Session):
+    def init_match_engine(self, symbol:str, interval:str, callback:Callable, session:'Session'):
         """Blocking (sync) function to initialize a match engine for given symbol and interval. Run in a thread!
 
         Args:

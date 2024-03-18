@@ -21,7 +21,7 @@ from match import MatchEngine
 from models import interval_to_minutes
 from websockets.sync.client import connect
 from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
-from websockets.client import ClientConnection
+from websockets.sync.client import ClientConnection
 
 
 class KucoinMarket(IMarket):
@@ -183,7 +183,7 @@ class KucoinMarket(IMarket):
             raise ValueError(f'Error while subscribing to {symbol} on {self.name}: {ack}')
         return ws
 
-    def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable, session:'Session'=None):
+    def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable, session:'Session'):
         from quantapi.models import Session
         ws = self.get_match_engine_socket(symbol)
         last_ping = datetime.now()

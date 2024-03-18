@@ -5,8 +5,9 @@ class Strategy:
     params: dict
     name: str
     ds: OHLCVDataset
+    freq: str
     
-    def __init__(self, params:dict=None) -> None:
+    def __init__(self, params:dict|None=None) -> None:
         raise NotImplementedError
     
     def __call__(self, ds:OHLCVDataset) -> OHLCVDataset:

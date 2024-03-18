@@ -20,7 +20,7 @@ class SessionAnalytics:
     @property
     def open_position(self):
         order = Order.objects.filter(signal__session=self.session, status=Order.Status.FILLED).last()
-        if order and order.signal.side == Signal.Side.BUY:
+        if order and order.side == Order.Side.BUY:
             return order
         return None
 
@@ -29,21 +29,18 @@ class SessionAnalytics:
         if not self.open_position:
             return None
         in_price = self.open_position.price
-        if not self.session.last_price:
-            return None
-        return (self.session.last_price - in_price) * self.session.assets
+        if in_price and self.session.last_price:
+            return (self.session.last_price - in_price) * self.session.assets
+        return None
 
     @property
     def open_position_delta_pct(self):
         if not self.open_position:
             return None
         in_price = self.open_position.price
-        if not self.session.last_price:
+        if not self.session.last_price or not in_price:
             return None
-        try:
-            return (self.session.last_price - in_price) / in_price * 100
-        except ZeroDivisionError:
-            return None
+        return (self.session.last_price - in_price) / in_price * 100
 
     @property
     def initial_value(self):
@@ -115,13 +112,15 @@ class SessionAnalytics:
         in_position = False
         in_time = None
         for order in orders:
-            if order.signal.side == Signal.Side.BUY:
+            if order.side == Order.Side.BUY:
                 in_position = True
                 in_time = order.created_at
-            elif order.signal.side == Signal.Side.SELL and in_position:
+            elif order.side == Order.Side.SELL and in_position:
                 in_position = False
                 out_time = order.created_at
-                hold_time = out_time - in_time
+                if out_time and in_time:
+                    hold_time = out_time - in_time
+    
                 if not max_hold_time or hold_time > max_hold_time:
                     max_hold_time = hold_time
         return max_hold_time

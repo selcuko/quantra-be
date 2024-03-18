@@ -18,7 +18,7 @@ from strategy import Strategy, get_strategy
 class LiveLoop:
     def __init__(self, symbol:str, market:Market, strategy:Strategy, capital_limit:float,
                  asset_limit:float, freq:str='15 min', end:Optional[datetime]=None,
-                 session_type:Optional[str]=None, session=None, use_heikin_ashi=False) -> None:
+                 session_type:Optional[str]=None, session:Session|None=None, use_heikin_ashi=False) -> None:
         self.will_stop = False
         self.market = market
         self.imarket = market.get_interface()
@@ -65,11 +65,13 @@ class LiveLoop:
         """Prechecks before starting the live loop"""
         self.imarket.get_account()
         # validate capital and asset amound
+        market_capital = self.imarket.capital
+        market_assets = self.imarket.assets.get(self.symbol.base, 0)
         if self.session.capital > self.imarket.capital:
-            logger.warning(f'Capital limit ({self.session.capital}) is greater than available capital ({self.imarket.capital}), updating capital limit to {self.session.capital}', extra={'loop': self})
+            logger.warning(f'Capital limit ({self.session.capital}) is greater than available capital ({market_capital}), updating capital limit to {market_capital}', extra={'loop': self})
             self.session.capital = self.imarket.capital
         if self.session.assets > self.imarket.assets.get(self.symbol.base, 0):
-            logger.warning(f'Asset limit ({self.session.assets}) is greater than available assets ({self.imarket.assets.get(self.symbol.base, 0)}), updating asset limit to {self.session.assets}', extra={'loop': self})
+            logger.warning(f'Asset limit ({self.session.assets}) is greater than available assets ({market_assets}), updating asset limit to {market_assets}', extra={'loop': self})
             self.session.assets = self.imarket.assets.get(self.symbol.base, 0)
         if self.session.capital < 5 and self.session.assets <= 0:
             logger.critical(f'Capital and asset limits are too low, terminating.', extra={'loop': self})
@@ -102,16 +104,18 @@ class LiveLoop:
         self.running = True
         if kwargs.get('match_engine'):
             self.thread = threading.Thread(target=self.__run_match_engine, name=f'LLME:{self.symbol.base}:{self.freq.replace(" ", "")}@{self.market.exchange_name}')
+            self.session.candle_source = Session.CandleSource.TRADE
         elif kwargs.get('websocket'):
             self.thread = threading.Thread(target=self.__run_websocket, name=f'LLWS:{self.symbol.base}:{self.freq.replace(" ", "")}@{self.market.exchange_name}')
-            self.session.use_websocket = True
+            self.session.candle_source = Session.CandleSource.WEBSOCKET
         else:
             self.thread = threading.Thread(target=self.__run_polling, name=f'LLAPI:{self.symbol.base}:{self.freq.replace(" ", "")}@{self.market.exchange_name}')
+            self.session.candle_source = Session.CandleSource.REST
         self.thread.start()
         logger.info(f'LiveLoop started in thread {self.thread.name}, id={self.thread.ident}.', extra={'loop': self})
         self.session.started = datetime.now(tz=pytz.UTC)
         self.session.thread_id = self.thread.ident
-        self.session.last_price = self.last_kline['close']
+        self.session.last_price = self.last_kline['close'] if self.last_kline else None
         self.session.last_kline_timestamp = self.last_kline_dt
         self.session.save()
 
@@ -191,9 +195,9 @@ class LiveLoop:
         if self.session.status != Session.Status.ONGOING:
             logger.warning(f'Received candle while session status is {self.session.status}, skipping.', extra={'loop': self})
             return
-        equity = self.session.capital + self.session.assets * self.session.last_price or 1
+        equity = self.session.capital + self.session.assets * (self.session.last_price or 1)
         if equity < 5:
-            logger.error(f'Ghost session found - no capital and no assets, pausing. [SessionID:{self.session.id}]', extra={'loop': self})
+            logger.error(f'Ghost session found - no capital and no assets, pausing. [SessionID:{self.session.pk}]', extra={'loop': self})
             self.session.status = Session.Status.PAUSED
             self.session.save()
         self.imarket.cache_to_db()
@@ -293,7 +297,7 @@ class LiveLoop:
                         details=repr(e),
                         market_timestamp=self.last_kline_dt or datetime.now(tz=pytz.UTC)
                     )
-                    logger.error(f'Failed to place BUY order for {self.session.capital} {self.symbol.quote} (olid:{last_order.id}), skipping.', exc_info=True, extra={'n_type': 'ORDER', 'loop': self})
+                    logger.error(f'Failed to place BUY order for {self.session.capital} {self.symbol.quote} (olid:{last_order.pk}), skipping.', exc_info=True, extra={'n_type': 'ORDER', 'loop': self})
                 self.session.save()
             else:
                 return False
@@ -342,7 +346,6 @@ class LiveLoop:
                         market_timestamp=self.last_kline_dt or datetime.now(tz=pytz.UTC)
                     )
                 except Exception as e:
-                    logger.error(f'Failed to place SELL order for {self.session.assets} {self.symbol.base} (olid:{last_order.id}), skipping.', exc_info=True, extra={'n_type': 'ORDER', 'loop': self})
                     last_order = Order.objects.create(
                         funds=self.session.capital,
                         deal_funds=self.session.capital,
@@ -353,6 +356,7 @@ class LiveLoop:
                         details=repr(e),
                         market_timestamp=self.last_kline_dt or datetime.now(tz=pytz.UTC)
                     )
+                    logger.error(f'Failed to place SELL order for {self.session.assets} {self.symbol.base} (olid:{last_order.pk}), skipping.', exc_info=True, extra={'n_type': 'ORDER', 'loop': self})
                 self.session.save()
             else:
                 return False

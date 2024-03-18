@@ -17,7 +17,7 @@ from markets.interface import IMarket
 from match import MatchEngine
 from models import interval_to_minutes
 if typing.TYPE_CHECKING:
-    from quantapi.models import MarketSymbol, Order, Session
+    from quantapi.models import MarketSymbol, Order, Session, Market
 from websockets.sync.client import connect
 from websockets.exceptions import ConnectionClosedOK, ConnectionClosed
 
@@ -25,7 +25,7 @@ from websockets.exceptions import ConnectionClosedOK, ConnectionClosed
 class BinanceMarket(IMarket):
     name = 'BINANCE'
 
-    def __init__(self, config=None, market=None):
+    def __init__(self, config, market:'Market'):
         if config is None:
             config = {}
         self.authenticated = bool(config.get('API_KEY') and config.get('API_SECRET'))
@@ -35,9 +35,6 @@ class BinanceMarket(IMarket):
         self.assets = {}
         self.commission = {}
         self.market = market
-        if not self.market:
-            from quantapi.models import Market
-            self.market = Market.objects.filter(exchange_name=self.name).first()
 
         try:
             if self.authenticated:
@@ -376,7 +373,7 @@ class BinanceMarket(IMarket):
             if not order.oid:
                 raise ValueError(f'Error while placing market order on {self.name}')
             if validate:
-                order = self.get_order(order.signal.session.symbol, order.oid)
+                order = self.get_order(symbol, order.oid)
             return order
         except:
             logger.error(f'Error placing limit order on {self.name}', exc_info=True)
@@ -488,7 +485,7 @@ class BinanceMarket(IMarket):
     def get_equity(self, save=True) -> float:
         prices = self.get_current_prices(save=False)
         if not prices:
-            prices = self.market.prices
+            prices = json.loads(self.market.prices or '{}')
         equity = self.capital + sum([ self.assets.get(asset, 0) * prices.get(asset+'-USDT', 0) for asset in self.assets ])
         if self.market and self.market.equity != equity:
             self.market.equity = equity
