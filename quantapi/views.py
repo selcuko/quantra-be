@@ -235,7 +235,7 @@ class SessionUpdateView(View):
     @staticmethod
     def terminate(request, pk):
         session = Session.objects.get(pk=pk)
-        if session.status in [Session.Status.ONGOING, Session.Status.PAUSED]:
+        if session.status not in [Session.Status.ONGOING, Session.Status.PAUSED]:
             return render(request, 'session-detail.html', {'session': session, 'error': {
                 'type': 'error',
                 'text': 'Session is not ongoing.'
