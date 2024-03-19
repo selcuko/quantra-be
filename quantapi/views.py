@@ -5,62 +5,24 @@ from datetime import datetime, timedelta
 import pytz
 from django.core.paginator import Paginator
 from django.db.models import Q
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.views import View
-from backtest import async_analyze
-from django.http import HttpResponse, JsonResponse
-from liveloop import LiveLoop
-from markets.errors import InsufficientBalance, MarketDisabledTrading, SymbolNotInMarket
-from quantapi.analytics import MarketAnalytics, TotalSessionAnalytics
-from quantapi.models import (Backtest, GlobalSymbol, Market, Order, Session, Signal,
-                             MarketSymbol)
-from strategy import get_strategy
-from logger import logger
 
-def get_open_position(session):
-    # get last filled order
-    orders = Order.objects.filter(signal__session=session, status=Order.Status.FILLED)
-    if not orders:
-        return None
-    last_order = orders.order_by('-created_at')[0]
-    if last_order.signal.side == 'BUY':
-        return last_order
-    else:
-        return None
+from backtest import async_analyze
+from liveloop import LiveLoop
+from logger import logger
+from markets.errors import (InsufficientBalance, MarketDisabledTrading,
+                            SymbolNotInMarket)
+from quantapi.analytics import MarketAnalytics, TotalSessionAnalytics
+from quantapi.models import (Backtest, GlobalSymbol, Market, MarketSymbol,
+                             Order, Session, Signal)
+from strategy import get_strategy
 
 
 class HomeView(View):
     def get(self, request):
-        sessions = Session.objects.filter(status=Session.Status.ONGOING, symbol__market__mainnet_enabled=True).order_by('-started')
-        session_ctx = []
-        total_open_positions = []
-        for session in sessions:
-            recent_orders = Order.objects.filter(signal__session=session)
-            open_position = get_open_position(session)
-            current_price = session.last_price or 0
-            if open_position:
-                capital_delta = (session.assets * current_price - session.initial_capital) / session.initial_capital * 100 if session.initial_capital else 0
-                capital_delta_pct = capital_delta / session.initial_capital * 100 if session.initial_capital else 0
-                open_position_delta = (current_price - open_position.price)
-                open_position_delta_pct = open_position_delta / open_position.price * 100 if open_position.price else 0
-                total_open_positions.append(open_position_delta_pct)
-            else:
-                capital_delta = (session.capital - session.initial_capital) if session.initial_capital else 0
-                capital_delta_pct = capital_delta / session.initial_capital * 100 if session.initial_capital else 0
-                open_position_delta = None
-                open_position_delta_pct = None
-            session_ctx.append({
-                'session': session,
-                'total_orders': recent_orders.count(),
-                'total_signals': Signal.objects.filter(session=session).count(),
-                'open_position': open_position,
-                'current_price': current_price,
-                'capital_delta': capital_delta,
-                'capital_delta_pct': capital_delta_pct,
-                'open_position_delta': open_position_delta,
-                'open_position_delta_pct': open_position_delta_pct,
-            })
-
+        sessions = Session.objects.filter(status=Session.Status.ONGOING).order_by('-started')
         recent_orders = Order.objects.filter(signal__session__in=sessions, status=Order.Status.FILLED).order_by('-created_at')[:8]
 
         ma = MarketAnalytics()
@@ -69,44 +31,24 @@ class HomeView(View):
         return render(request, 'index.html', {
             'sessions': sessions, 
             'orders': recent_orders,
-            'open_positions': total_open_positions,
             'analytics': { 'market': ma , 'session': sa },
-            'total_open_positions': total_open_positions,
-            'total_capital': sum([session.capital for session in sessions]),
         })
 
 
 class SessionDetailView(View):
-    def get_open_position(self, session):
-        # get last filled order
-        orders = Order.objects.filter(signal__session=session, status=Order.Status.FILLED)
-        if not orders:
-            return None
-        last_order = orders.order_by('-created_at')[0]
-        if last_order.signal.side == 'BUY':
-            return last_order
-        else:
-            return None
-
     def get(self, request, pk):
         session = Session.objects.get(pk=pk)
         signals = Signal.objects.filter(session=session)
         orders = Order.objects.filter(signal__in=signals)
-        error = request.session.pop('error', None)
         market = session.symbol.market
-        message = request.session.pop('message', None)
-        open_position = self.get_open_position(session)
         return render(request, 'session-detail.html', {
             'session': session, 
-            'error': error, 
             'orders': orders, 
             'signals': signals, 
             'market': market, 
-            'message': message, 
-            'open_position': open_position, 
             'buy_enabled': session.capital > 5,
             'sell_enabled': session.assets > 0,
-            })
+        })
 
 
 class SessionListView(View):
@@ -160,8 +102,6 @@ class SessionInitView(View):
 
     def post(self, request, *args, **kwargs):
         form_data = request.POST
-        print(form_data)
-        markets = Market.objects.filter(trading_enabled=True).order_by('exchange_name')
         try:
             market = Market.objects.get(pk=form_data['market'])
             imarket = market.get_interface()
@@ -182,7 +122,7 @@ class SessionInitView(View):
                 raise ValueError('Planned shutdown must be in the future')
             candle_source = form_data.get('candle_source', 'trade')
         except Exception as e:
-            return render(request, 'session-init.html', {'markets': markets, 'form_error': repr(e)})
+            return render(request, 'session-init.html', {'markets': Market.objects.filter(trading_enabled=True).order_by('exchange_name'), 'form_error': repr(e)})
         try:
             ll = LiveLoop(
                 symbol=symbol.name,
@@ -207,78 +147,13 @@ class SessionInitView(View):
                 ll.run(polling=True)
         except Exception as e:
             raise e
-            return render(request, 'session-init.html', {'markets': markets, 'form_error': f'Cannot initiate session: {e!r}'})
         return redirect('session-detail', pk=ll.session.pk)
-
-
-
-class SessionManageView(View):
-    def post(self, request, pk):
-        payload = request.POST
-        session = Session.objects.get(pk=pk)
-        action = payload['action']
-        match action:
-            case 'force_buy':
-                pass
-            case 'force_sell':
-                pass
-            case _:
-                pass
-        request.session['message'] = {
-            'type': 'warning',
-            'text': 'Action not implemented.'
-        }
-        return redirect('session-detail', pk=session.pk)
-
-
-class SessionTerminateView(View):
-    def get(self, request, pk):
-        session = Session.objects.get(pk=pk)
-        if not session.status in [Session.Status.ONGOING, Session.Status.PAUSED]:
-            return render(request, 'session-detail.html', {'session': session, 'error': {
-                'type': 'error',
-                'text': 'Session is not ongoing.'
-            }})
-        session.status = Session.Status.COMPLETED
-        session.ended = datetime.now(pytz.UTC)
-        session.planned_shutdown = datetime.now(pytz.UTC)
-        session.save()
-        return redirect('session-detail', pk=session.pk)
-
-
-class SessionPauseView(View):
-    def get(self, request, pk):
-        session = Session.objects.get(pk=pk)
-        if not session.status == Session.Status.ONGOING:
-            return render(request, 'session-detail.html', {'session': session, 'error': {
-                'type': 'error',
-                'text': 'Session is not ongoing.'
-            }})
-        session.status = Session.Status.PAUSED
-        session.save()
-        return redirect('session-detail', pk=session.pk)
-
-
-class SessionResumeView(View):
-    def get(self, request, pk):
-        session = Session.objects.get(pk=pk)
-        if not session.status == Session.Status.PAUSED:
-            return render(request, 'session-detail.html', {'session': session, 'error': {
-                'type': 'error',
-                'text': 'Session is not paused.'
-            }})
-        session.status = Session.Status.ONGOING
-        session.save()
-        session.resume()
-        return redirect('session-detail', pk=session.pk)
 
 
 class SessionUpdateView(View):
     def post(self, request, pk):
         session = Session.objects.get(pk=pk)
-        print(request.POST)
-        # Checkboxes are not included in POST data if they are unchecked,
-        # so we explicitly check for their presence.
+
         if 'session_buy_enabled' in request.POST:
             session.buy_enabled = bool(int(request.POST.get('session_buy_enabled', 0)))
         if 'session_sell_enabled' in request.POST:
@@ -331,12 +206,51 @@ class SessionUpdateView(View):
                 session.assets -= order.deal_size
         session.save()
         return redirect('session-detail', pk=session.pk)
-      
+
+    @staticmethod
+    def resume(request, pk):
+        session = Session.objects.get(pk=pk)
+        if not session.status == Session.Status.PAUSED:
+            return render(request, 'session-detail.html', {'session': session, 'error': {
+                'type': 'error',
+                'text': 'Session is not paused.'
+            }})
+        session.status = Session.Status.ONGOING
+        session.save()
+        session.resume()
+        return redirect('session-detail', pk=session.pk)
+
+    @staticmethod
+    def pause(request, pk):
+        session = Session.objects.get(pk=pk)
+        if not session.status == Session.Status.ONGOING:
+            return render(request, 'session-detail.html', {'session': session, 'error': {
+                'type': 'error',
+                'text': 'Session is not ongoing.'
+            }})
+        session.status = Session.Status.PAUSED
+        session.save()
+        return redirect('session-detail', pk=session.pk)
+
+    @staticmethod
+    def terminate(request, pk):
+        session = Session.objects.get(pk=pk)
+        if session.status not in [Session.Status.ONGOING, Session.Status.PAUSED]:
+            return render(request, 'session-detail.html', {'session': session, 'error': {
+                'type': 'error',
+                'text': 'Session is not ongoing.'
+            }})
+        session.status = Session.Status.COMPLETED
+        session.ended = datetime.now(pytz.UTC)
+        session.planned_shutdown = datetime.now(pytz.UTC)
+        session.save()
+        return redirect('session-detail', pk=session.pk)
+
 
 class MarketListView(View):
     def get(self, request):
         markets = Market.objects.filter(trading_enabled=True).order_by('exchange_name')
-        return render(request, 'market-list.html', {'markets': markets})
+        return render(request, 'market-list.html', { 'markets': markets })
 
 
 class MarketDetailView(View):
@@ -344,29 +258,21 @@ class MarketDetailView(View):
         market = Market.objects.get(pk=pk)
         interface = market.get_interface()
         symbols = MarketSymbol.objects.filter(market=market)
-        assets = json.loads(market.assets)
-        print(assets)
+        assets = json.loads(market.assets or '{}')
         available_assets = {symbol: assets[symbol] for symbol in assets if assets[symbol] > 0}
         return render(request, 'market-detail.html', {'market': market, 'symbols': symbols, 'interface': interface, 'available_assets': available_assets})
-    
 
-def raw_market_data(request, pk):
-    market = Market.objects.get(pk=pk)
-    return JsonResponse({
-        'assets': json.loads(market.assets) if market.assets else {},
-        'prices': json.loads(market.prices) if market.prices else {},
-        'capital': market.usdt,
-        'equity': market.equity,
-        'updated': market.assets_updated_at,
-        'available_capital': market.available_capital,
-    })
-
-
-class SearchSymbolView(View):
-    def post(self, request):
-        symbol = request.POST.get('symbol')
-        query = MarketSymbol.objects.filter(Q(name__icontains=symbol) | Q(market__name__icontains=symbol))
-        return [symbol.name for symbol in query]
+    @staticmethod
+    def raw(request, pk):
+        market = Market.objects.get(pk=pk)
+        return JsonResponse({
+            'assets': json.loads(market.assets) if market.assets else {},
+            'prices': json.loads(market.prices) if market.prices else {},
+            'capital': market.usdt,
+            'equity': market.equity,
+            'updated': market.assets_updated_at,
+            'available_capital': market.available_capital,
+        })
 
 
 class RunningThreadsView(View):
@@ -379,7 +285,7 @@ class BacktestInitView(View):
     def get(self, request):
         markets = set(Market.objects.filter(trading_enabled=True).order_by('exchange_name').values_list('exchange_name', flat=True))
         return render(request, 'backtest-init.html', {'markets': markets})
-    
+
     def post(self, request):
         form_data = request.POST
         exchange = form_data['market']
@@ -425,7 +331,7 @@ class BacktestResultView(View):
 class WatchdogView(View):
     def get(self, request):
         from watchdog import watchdog
-        return render(request, 'watchdog.html', context={'watchdog': watchdog()})
+        return render(request, 'watchdog.html', context={ 'watchdog': watchdog() })
 
 
 class OrderManagementView(View):
@@ -467,7 +373,7 @@ class PriceView(View):
             symbol = symbol + '-USDT'
 
         market = Market.objects.get(pk=market_id)
-        prices = json.loads(market.prices)
+        prices = json.loads(market.prices or '{}')
         if not symbol in prices:
             response['message'] = f'No price found for {symbol}'
             return JsonResponse(response)
@@ -484,7 +390,6 @@ class CoinScanView(View):
     def post(self, request):
         payload = json.loads(request.body.decode('utf-8'))
         query = {}
-        print(payload)
         if payload.get('volumeMin'):
             query['volume__gte'] = int(payload['volumeMin'])
         if payload.get('volumeMax'):
@@ -520,7 +425,6 @@ class CoinScanView(View):
         market_query = Q()
         if payload.get('markets'):
             markets = payload['markets']
-            # available_markets is a stringified JSON, and markets is a list of strings
             for market in markets:
                 if market == 'NOTNULL':
                     market_query &= Q(available_markets__isnull=False) & ~Q(available_markets='') & ~Q(available_markets='[]')
@@ -532,10 +436,8 @@ class CoinScanView(View):
             start = int(payload['start'])
         if payload.get('end'):
             end = int(payload['end'])
-        print('Start:', start, 'End:', end)
         sort_col = sort.replace('-', '')
         globals = GlobalSymbol.objects.filter(volume__gte=100)
-        # exclude sort_col=null values
         globals = globals.exclude(**{f'{sort_col}__isnull': True}).exclude(is_stablecoin=True)
         symbols = globals.filter(**query).filter(market_query).order_by(sort)
         count = symbols.count()
@@ -562,7 +464,6 @@ class FavoritesView(View):
     def post(self, request):
         payload = json.loads(request.body.decode('utf-8'))
         query = {}
-        print(payload)
         if payload.get('volumeMin'):
             query['volume__gte'] = int(payload['volumeMin'])
         if payload.get('volumeMax'):
@@ -598,7 +499,6 @@ class FavoritesView(View):
         market_query = Q()
         if payload.get('markets'):
             markets = payload['markets']
-            # available_markets is a stringified JSON, and markets is a list of strings
             for market in markets:
                 if market == 'NOTNULL':
                     market_query &= Q(available_markets__isnull=False) & ~Q(available_markets='') & ~Q(available_markets='[]')
@@ -610,10 +510,8 @@ class FavoritesView(View):
             start = int(payload['start'])
         if payload.get('end'):
             end = int(payload['end'])
-        print('Start:', start, 'End:', end)
         sort_col = sort.replace('-', '')
         globals = GlobalSymbol.objects.filter(volume__gte=100)
-        # exclude sort_col=null values
         globals = globals.exclude(**{f'{sort_col}__isnull': True}).exclude(tags__contains='stablecoin').exclude(is_favorite=False)
         symbols = globals.filter(**query).filter(market_query).order_by(sort)
         count = symbols.count()

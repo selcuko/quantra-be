@@ -21,7 +21,7 @@ from match import MatchEngine
 from models import interval_to_minutes
 from websockets.sync.client import connect
 from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
-from websockets.client import ClientConnection
+from websockets.sync.client import ClientConnection
 
 
 class KucoinMarket(IMarket):
@@ -55,7 +55,7 @@ class KucoinMarket(IMarket):
                     passphrase=config['API_PASSPHRASE']) 
             else:
                 self.kmarket = Market()               
-        except Exception as e:
+        except:
             logger.fatal(f'Error while initializing {self.name}', exc_info=True)
             raise
         
@@ -183,7 +183,7 @@ class KucoinMarket(IMarket):
             raise ValueError(f'Error while subscribing to {symbol} on {self.name}: {ack}')
         return ws
 
-    def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable, session:'Session'=None):
+    def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable, session:'Session'):
         from quantapi.models import Session
         ws = self.get_match_engine_socket(symbol)
         last_ping = datetime.now()
@@ -237,18 +237,20 @@ class KucoinMarket(IMarket):
     def _standardize_klines(self, klines:list) -> list[list]:
         try:
             klines.reverse()
-            return [[ self._standardize_datetime(kline[0]),
-                        float(kline[1]),
-                        float(kline[2]),
-                        float(kline[3]),
-                        float(kline[4]),
-                        float(kline[5]),
-                    ] for kline in klines ]
+            return [[
+                self._standardize_datetime(kline[0]),
+                float(kline[1]),
+                float(kline[2]),
+                float(kline[3]),
+                float(kline[4]),
+                float(kline[5]),
+            ] for kline in klines ]
         except:
             logger.error(f'Error while standardizing klines for {self.name}: {klines}', exc_info=True)
             raise
     
-    def _standardize_symbol(self, symbol:str) -> str:
+    @staticmethod
+    def _standardize_symbol(symbol:str) -> str:
         return symbol
     
     def _standardize_datetime(self, dt:int|str) -> "datetime|None":
@@ -259,13 +261,16 @@ class KucoinMarket(IMarket):
         except:
             logger.error(f'Error while standardizing datetime for {self.name}: {dt}', exc_info=True)
 
-    def _format_symbol(self, symbol:str) -> str:
+    @staticmethod
+    def _format_symbol(symbol:str) -> str:
         return symbol.upper()
     
-    def _format_interval(self, interval:str) -> str:
+    @staticmethod
+    def _format_interval(interval:str) -> str:
         return interval.replace(' ', '')
     
-    def _format_datetime(self, dt:datetime) -> int:
+    @staticmethod
+    def _format_datetime(dt:datetime) -> int:
         assert isinstance(dt, datetime), f'Expected datetime, got {type(dt)}'
         return int(dt.timestamp())
     
@@ -280,16 +285,16 @@ class KucoinMarket(IMarket):
         from quantapi.models import MarketSymbol
         return MarketSymbol(
             market=self.market,
-            name = self._standardize_symbol(symbol['symbol']),
-            base = symbol['baseCurrency'],
-            quote = symbol['quoteCurrency'],
-            base_precision = symbol['baseIncrement'],
-            quote_precision = symbol['quoteIncrement'],
-            spot_trading_enabled = symbol['enableTrading'],
-            margin_trading_enabled = symbol['isMarginEnabled'],
+            name=self._standardize_symbol(symbol['symbol']),
+            base=symbol['baseCurrency'],
+            quote=symbol['quoteCurrency'],
+            base_precision=symbol['baseIncrement'],
+            quote_precision=symbol['quoteIncrement'],
+            spot_trading_enabled=symbol['enableTrading'],
+            margin_trading_enabled=symbol['isMarginEnabled'],
             details=json.dumps(symbol))
 
-    def _prep_order(self, order:dict, symbol:'MarketSymbol') -> 'Order':
+    def _prep_order(self, order:dict) -> 'Order':
         from quantapi.models import Order
         oid = order.get('orderId') or order.get('id')
         return Order(
@@ -338,8 +343,7 @@ class KucoinMarket(IMarket):
         now = datetime.now(tz=pytz.UTC)
         start = now - timedelta(minutes=minutes*limit)
         klines = self.get_klines(symbol, interval, start, now, limit=limit*2)
-        if klines == []:
-            logger.warning(f'No klines found for {symbol} at {start} -> {now}')
+        if not klines:
             return []
         last_kline_dt = klines[-1][0]
         if (now - last_kline_dt) > timedelta(minutes=minutes*2):
@@ -385,7 +389,7 @@ class KucoinMarket(IMarket):
             if not order:
                 raise ValueError(f'Error while placing market order on {self.name}')
             logger.info(f'Market order placed on {self.name} for {symbol} with side {side} and funds {funds} and quantity {quantity} with order id {order["orderId"]}')
-            order = self._prep_order(order, symbol)
+            order = self._prep_order(order)
             if not order.oid:
                 raise ValueError(f'Error while placing market order on {self.name}')
             if validate:
@@ -433,7 +437,7 @@ class KucoinMarket(IMarket):
             if not order:
                 raise ValueError(f'Error while placing limit order on {self.name}')
             logger.info(f'Limit order placed on {self.name} for {symbol} with side {side} and price {price} and size {quantity} with order id {order["orderId"]}')
-            order = self._prep_order(order, symbol)
+            order = self._prep_order(order)
             if not order.oid:
                 raise ValueError(f'Error while placing limit order on {self.name}')
             if validate:
@@ -458,7 +462,7 @@ class KucoinMarket(IMarket):
             _order = self.trade.get_order_details(orderId=order)
             if not _order:
                 raise ValueError(f'Error while getting order {order} on {self.name}')
-            return self._prep_order(_order, symbol)
+            return self._prep_order(_order)
         except:
             logger.error(f'Error while getting order {order} on {self.name}', exc_info=True)
             raise
@@ -473,7 +477,7 @@ class KucoinMarket(IMarket):
             orders = self.trade.get_order_list(symbol=symbol.name)
             if not orders:
                 raise ValueError(f'Error while getting orders on {self.name}')
-            return [self._prep_order(order, symbol) for order in orders['items']]
+            return [self._prep_order(order) for order in orders['items']]
         except:
             logger.error(f'Error while getting orders on {self.name}', exc_info=True)
             raise
@@ -491,7 +495,7 @@ class KucoinMarket(IMarket):
                 orders = self.trade.get_order_list(status='active')
             if not orders:
                 raise ValueError(f'Error while getting open orders on {self.name}')
-            return [self._prep_order(order, symbol) for order in orders['items']]
+            return [self._prep_order(order) for order in orders['items']]
         except:
             logger.error(f'Error while getting open orders on {self.name}', exc_info=True)
             raise
@@ -510,7 +514,7 @@ class KucoinMarket(IMarket):
             _order_payload = self.trade.cancel_order(orderId=_order_oid)
             if not _order_payload:
                 raise ValueError(f'Error while cancelling order {order} on {self.name}')
-            return self._prep_order(_order_payload, symbol)
+            return self._prep_order(_order_payload)
         except:
             logger.error(f'Error while cancelling order {order} on {self.name}', exc_info=True)
             raise
@@ -528,7 +532,7 @@ class KucoinMarket(IMarket):
                 orders = self.trade.cancel_all_orders()
             if not orders:
                 raise ValueError(f'Error while cancelling all orders on {self.name}')
-            return [self._prep_order(order, symbol) for order in orders['cancelledOrderIds']]
+            return [self._prep_order(order) for order in orders['cancelledOrderIds']]
         except:
             logger.error(f'Error while cancelling all orders on {self.name}', exc_info=True)
             raise
@@ -551,8 +555,8 @@ class KucoinMarket(IMarket):
             self.commission = {
                 'maker': float(fees['makerFeeRate']),
                 'taker': float(fees['takerFeeRate']),
-                'buyer': float(fees['takerFeeRate']),  # market orders count as taker
-                'seller': float(fees['takerFeeRate']), # market orders count as taker
+                'buyer': float(fees['takerFeeRate']),   # market orders count as taker
+                'seller': float(fees['takerFeeRate']),  # market orders count as taker
             }
         if not self.spot_trading_enabled:
             logger.error(f'No assets found for account, spot trading disabled on {self.name}')
@@ -585,5 +589,3 @@ class KucoinMarket(IMarket):
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         return self.kmarket.get_aggregated_orderv3(symbol.name)
-
-

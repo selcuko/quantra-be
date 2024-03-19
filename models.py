@@ -37,12 +37,12 @@ class OHLCVDataset(pd.DataFrame):
         kwargs.update({'columns': ['time', 'open', 'high', 'low', 'close', 'volume']})
         super().__init__(*args, **kwargs)
         self.set_index('time', inplace=True)
-        self._validate()
 
-    def _validate(self):
-        pass
-    
-    def _standardize_freq(self, freq):
+    def __new__(cls, *args, **kwargs):
+        return super().__new__(cls)
+
+    @staticmethod
+    def _standardize_freq(freq):
         return {
             '1 min': '1T',
             '3 min': '3T',
@@ -60,7 +60,7 @@ class OHLCVDataset(pd.DataFrame):
             '1 week': '1W',
             '1 month': '1M',
         }[freq]
-    
+
     def change(self, freq) -> "OHLCVDataset":
         freq = self._standardize_freq(freq)
         new_ds = self.resample(freq).agg({
@@ -73,7 +73,7 @@ class OHLCVDataset(pd.DataFrame):
         return OHLCVDataset(new_ds, pass_thru=True)
 
     @classmethod
-    def from_csv_as_standard_candles(self, filename):
+    def from_csv_as_standard_candles(cls, filename):
         ds = pd.read_csv(filename)
         ds.columns = ['time', 'open', 'high', 'low', 'close', 'volume']
         ds['time'] = pd.to_datetime(ds['time'], unit='s')
@@ -96,7 +96,7 @@ class OHLCVDataset(pd.DataFrame):
         return OHLCVDataset(ds, pass_thru=True)
 
     @classmethod
-    def from_csv_as_heikin_ashi_candles(self, filename):
+    def from_csv_as_heikin_ashi_candles(cls, filename):
         ds = pd.read_csv(filename)
         ds.columns = ['time', 'open', 'high', 'low', 'close', 'volume']
         ds['time'] = pd.to_datetime(ds['time'], unit='s')
@@ -127,7 +127,7 @@ class OHLCVDataset(pd.DataFrame):
             return cls.from_csv_as_heikin_ashi_candles(filename)
         else:
             raise ValueError(f'Invalid candle_type "{candle_type}", must be either "standard" or "heikin_ashi"')
-    
+
     # modify [] operator to return a OHLCVDataset
     def __getitem__(self, key):
         k = super().__getitem__(key)

@@ -8,6 +8,7 @@ class BacktestAdmin(admin.ModelAdmin):
     search_fields = ('symbol', 'market',)
     list_filter = ('market', 'status')
 
+
 class MarketAdmin(admin.ModelAdmin):
     list_display = ('exchange_name', 'friendly_name', 'testnet_enabled', 'trading_enabled', 'mainnet_enabled')
     search_fields = ('exchange_name', 'friendly_name')
@@ -61,7 +62,8 @@ class NotificationAdmin(admin.ModelAdmin):
 
     actions = ['send']
 
-    def send(self, request, queryset):
+    @staticmethod
+    def send(request, queryset):
         for notification in queryset:
             notification.send()
 
@@ -86,7 +88,7 @@ class GlobalSymbolAdmin(admin.ModelAdmin):
             """
             # Compare the requested value (either '80s' or '90s')
             # to decide how to filter the queryset.
-            if self.value() == 'vol0' or self.value() == None:
+            if self.value() == 'vol0' or self.value() is None:
                 return queryset.filter(volume__gt=0)
             if self.value() == 'vol100':
                 return queryset.filter(volume__gt=100)

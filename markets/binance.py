@@ -17,7 +17,7 @@ from markets.interface import IMarket
 from match import MatchEngine
 from models import interval_to_minutes
 if typing.TYPE_CHECKING:
-    from quantapi.models import MarketSymbol, Order, Session
+    from quantapi.models import MarketSymbol, Order, Session, Market
 from websockets.sync.client import connect
 from websockets.exceptions import ConnectionClosedOK, ConnectionClosed
 
@@ -25,7 +25,7 @@ from websockets.exceptions import ConnectionClosedOK, ConnectionClosed
 class BinanceMarket(IMarket):
     name = 'BINANCE'
 
-    def __init__(self, config=None, market=None):
+    def __init__(self, config, market:'Market'):
         if config is None:
             config = {}
         self.authenticated = bool(config.get('API_KEY') and config.get('API_SECRET'))
@@ -35,9 +35,6 @@ class BinanceMarket(IMarket):
         self.assets = {}
         self.commission = {}
         self.market = market
-        if not self.market:
-            from quantapi.models import Market
-            self.market = Market.objects.filter(exchange_name=self.name).first()
 
         try:
             if self.authenticated:
@@ -92,7 +89,8 @@ class BinanceMarket(IMarket):
             'taker_buy_quote_asset_volume': float(candle['Q']),
         }
 
-    def format_match(self, payload:dict) -> dict:
+    @staticmethod
+    def format_match(payload:dict) -> dict:
         return {
             'time': datetime.fromtimestamp(payload['E']/1000, tz=pytz.UTC).replace(second=0, microsecond=0),
             'price': float(payload['p']),
@@ -154,26 +152,31 @@ class BinanceMarket(IMarket):
             raise
                 
     def _standardize_klines(self, klines:list[list]) -> list[list]:
-        return [[ self._standardize_datetime(kline[0]),
-                  float(kline[1]),
-                  float(kline[2]),
-                  float(kline[3]),
-                  float(kline[4]),
-                  float(kline[5]),
-                ] for kline in klines ]
+        return [[
+            self._standardize_datetime(kline[0]),
+            float(kline[1]),
+            float(kline[2]),
+            float(kline[3]),
+            float(kline[4]),
+            float(kline[5]),
+        ] for kline in klines ]
 
-    def _standardize_symbol(self, symbol:str) -> str:
+    @staticmethod
+    def _standardize_symbol(symbol:str) -> str:
         return symbol.replace('-', '').replace('USDT', '-USDT').upper()
 
-    def _standardize_datetime(self, dtstr:str) -> datetime:
+    @staticmethod
+    def _standardize_datetime(dtstr:str) -> datetime:
         return datetime.fromtimestamp(int(dtstr) // 1000, tz=pytz.UTC).replace(second=0, microsecond=0)
 
-    def _format_symbol(self, symbol:str) -> str:
+    @staticmethod
+    def _format_symbol(symbol:str) -> str:
         assert '-' in symbol, f'Symbol must be in the format BASE-QUOTE (e.g. BTC-USDT), you provided: "{symbol}"'
         symbol = symbol.replace('-', '').upper()
         return symbol
 
-    def _format_interval(self, interval) -> str:
+    @staticmethod
+    def _format_interval(interval:str) -> str:
         return {
             '1 min': Client.KLINE_INTERVAL_1MINUTE,
             '3 min': Client.KLINE_INTERVAL_3MINUTE,
@@ -199,7 +202,7 @@ class BinanceMarket(IMarket):
     def has_symbol(self, symbol_name:str) -> bool:
         if not self.symbols:
             self.symbols = self.get_symbols()
-        return (symbol_name) in self.symbols
+        return symbol_name in self.symbols
 
     def _get_symbol_from_name(self, symbol_name:str) -> 'MarketSymbol':
         try:
@@ -212,18 +215,19 @@ class BinanceMarket(IMarket):
     def _prep_symbol(self, symbol:dict) -> 'MarketSymbol':
         from quantapi.models import MarketSymbol
         exc_symbol = MarketSymbol(
-                market = self.market,
-                name = self._standardize_symbol(symbol['symbol']),
-                base = symbol['baseAsset'],
-                quote = symbol['quoteAsset'],
-                base_precision = symbol['baseAssetPrecision'],
-                quote_precision = symbol['quotePrecision'],
-                spot_trading_enabled = symbol['isSpotTradingAllowed'],
-                margin_trading_enabled = symbol['isMarginTradingAllowed'],
+                market=self.market,
+                name=self._standardize_symbol(symbol['symbol']),
+                base=symbol['baseAsset'],
+                quote=symbol['quoteAsset'],
+                base_precision=symbol['baseAssetPrecision'],
+                quote_precision=symbol['quotePrecision'],
+                spot_trading_enabled=symbol['isSpotTradingAllowed'],
+                margin_trading_enabled=symbol['isMarginTradingAllowed'],
                 details=json.dumps(symbol))
         return exc_symbol
 
-    def _prep_order(self, order:dict, symbol:'MarketSymbol') -> 'Order':
+    @staticmethod
+    def _prep_order(order:dict) -> 'Order':
         from quantapi.models import Order
         order_time = order.get('time') or order.get('workingTime') or order.get('transactTime') or order.get('updateTime') or 0
         return Order(
@@ -261,7 +265,7 @@ class BinanceMarket(IMarket):
         return self._standardize_klines(klines)
 
     def get_klines(self, symbol:str, interval:str, start:datetime, end:Optional[datetime]=None, limit=1000, retry=0) -> list[list]:
-        if not symbol in self.symbols:
+        if symbol not in self.symbols:
             raise ValueError(f'Symbol {symbol} is not present on {self.name}')
         try:
             return self._get_klines(symbol, interval, start, end, limit, retry=retry)
@@ -273,9 +277,8 @@ class BinanceMarket(IMarket):
         now = datetime.now(tz=pytz.UTC) + timedelta(minutes=1)
         start = now - timedelta(minutes=minutes*limit+1)
         klines = self.get_klines(symbol, interval, start, now, limit=limit*2)
-        if klines == []:
-            logger.warning(f'No klines found for {symbol} at {start} -> {now}')
-            raise ValueError(f'No klines found for {symbol} at {start} -> {now}')
+        if not klines:
+            return []
         last_kline_dt = klines[-1][0]
         if (now - last_kline_dt) > timedelta(minutes=minutes*2):
             error = f'Last kline dt {last_kline_dt} does not match current time {now}, total klines: {len(klines)}, {start} -> {now}'
@@ -322,7 +325,7 @@ class BinanceMarket(IMarket):
             elif 'insufficient' in str(e).lower():
                 raise InsufficientBalance(f'Insufficient funds to place order on {self.name}')
             raise
-        order = self._prep_order(_order_payload, symbol)
+        order = self._prep_order(_order_payload)
         amount_txt = f'{funds} USDT' if funds else f'{quantity} {symbol.base}'
         logger.info(f'Market {side.upper()} {symbol} order placed on {self.name} for {amount_txt} (oid {_order_payload["orderId"]})')
         if not order.oid:
@@ -366,11 +369,11 @@ class BinanceMarket(IMarket):
                 quantity=quantity,
                 newClientOrderId=client_oid)
             logger.info(f'Limit order placed on {self.name} for {symbol} with side {side} and price {price} and quantity {quantity} with order id {order["orderId"]}')
-            order = self._prep_order(order, symbol)
+            order = self._prep_order(order)
             if not order.oid:
                 raise ValueError(f'Error while placing market order on {self.name}')
             if validate:
-                order = self.get_order(order.signal.session.symbol, order.oid)
+                order = self.get_order(symbol, order.oid)
             return order
         except:
             logger.error(f'Error placing limit order on {self.name}', exc_info=True)
@@ -387,7 +390,7 @@ class BinanceMarket(IMarket):
             _order_oid = order
         try:
             _order_payload = self.client.get_order(symbol=self._format_symbol(symbol.name), orderId=_order_oid)
-            return self._prep_order(_order_payload, symbol)
+            return self._prep_order(_order_payload)
         except:
             logger.error(f'Error while getting order on {self.name}', exc_info=True)
             raise
@@ -398,7 +401,7 @@ class BinanceMarket(IMarket):
             symbol = self._get_symbol_from_name(symbol)
         try:
             orders = self.client.get_all_orders(symbol=self._format_symbol(symbol.name))
-            return [self._prep_order(order, symbol) for order in orders]
+            return [self._prep_order(order) for order in orders]
         except:
             logger.error(f'Error while getting order list on {self.name}', exc_info=True)
             raise
@@ -409,7 +412,7 @@ class BinanceMarket(IMarket):
             symbol = self._get_symbol_from_name(symbol)
         try:
             orders = self.client.get_open_orders(symbol=self._format_symbol(symbol.name))
-            return [self._prep_order(order, symbol) for order in orders]
+            return [self._prep_order(order) for order in orders]
         except:
             logger.error(f'Error while getting open orders on {self.name}', exc_info=True)
             raise
@@ -425,7 +428,7 @@ class BinanceMarket(IMarket):
             _order_oid = order
         try:
             _order_payload = self.client.cancel_order(symbol=self._format_symbol(symbol.name), orderId=_order_oid)
-            return self._prep_order(_order_payload, symbol)
+            return self._prep_order(_order_payload)
         except Exception as e:
             if 'Unknown order sent' in str(e):
                 logger.error(f'Order {_order_oid} not found on {self.name}')
@@ -443,7 +446,7 @@ class BinanceMarket(IMarket):
                 orders = self.client._delete('openOrders', True, data={'symbol': self._format_symbol(symbol.name)})
             else:
                 orders = self.client._delete('openOrders', True)
-            return [self._prep_order(order, symbol) for order in orders]
+            return [self._prep_order(order) for order in orders]
         except:
             logger.error(f'Error while canceling all orders on {self.name}', exc_info=True)
             raise
@@ -482,7 +485,7 @@ class BinanceMarket(IMarket):
     def get_equity(self, save=True) -> float:
         prices = self.get_current_prices(save=False)
         if not prices:
-            prices = self.market.prices
+            prices = json.loads(self.market.prices or '{}')
         equity = self.capital + sum([ self.assets.get(asset, 0) * prices.get(asset+'-USDT', 0) for asset in self.assets ])
         if self.market and self.market.equity != equity:
             self.market.equity = equity

@@ -18,7 +18,8 @@ class CoinMarketCap:
         })
 
 
-    def handle_failed_request(self, response):
+    @staticmethod
+    def handle_failed_request(response):
         if not response.ok:
             raise ValueError('CMC API request failed with', response.status_code, response.text)
 

@@ -1,5 +1,6 @@
+import django
+django.setup()
 import json
-import logging
 import threading
 import time
 from datetime import datetime, timedelta
@@ -18,9 +19,9 @@ from strategy import Strategy, get_strategy
 
 class LiveLoop:
     def __init__(self, symbol:str, market:Market, strategy:Strategy, capital_limit:float,
-            asset_limit:float, freq:str='15 min', end:Optional[datetime]=None,
-            session_type:Optional[str]=None, session=None, use_heikin_ashi=False) -> None:
-        self.will_stop = False
+                 asset_limit:float, freq:str='15 min', end:Optional[datetime]=None,
+                 session_type:Optional[str]=None, session:Session|None=None, use_heikin_ashi=False) -> None:
+
         self.market = market
         self.imarket = market.get_interface()
         self.strategy = strategy
@@ -29,14 +30,22 @@ class LiveLoop:
         self.end = end
         self.capital_limit = capital_limit
         self.asset_limit = asset_limit
+        self.use_heikin_ashi = use_heikin_ashi
+        self.symbol = MarketSymbol.objects.get(name=symbol, market=market)
+
         self.thread = None
         self.running = False
         self.last_kline = None
-        self.use_heikin_ashi = use_heikin_ashi
-        self.symbol = MarketSymbol.objects.get(name=symbol, market=market)
+        self.will_stop = False
+        self.last_kline_dt = None
+        self.last_100_klines = None
+
+        self.order_lock = threading.Lock()
+        self.loop_interval_s = interval_to_minutes(freq) * 60
+
         if not (strategy_model := StrategyModel.objects.filter(name=strategy.name).first()):
-            strategy_model = StrategyModel.objects.create(name=strategy.name, parameters=json.dumps(strategy.params))
-        strategy_model.save()
+            strategy_model = StrategyModel.objects.create(name=strategy.name)
+
         self.session = session or Session.objects.create(
             symbol=self.symbol,
             session_type=session_type or Session.Type.LIVE_MAINNET,
@@ -50,69 +59,75 @@ class LiveLoop:
             initial_assets=asset_limit,
             strategy_parameters=json.dumps(strategy.params)
         )
-        logger.info(f'Initializing LiveLoop', extra={'loop': self})
 
-        self.loop_interval_s = interval_to_minutes(freq) * 60
-        self.last_kline_dt = None
-        self.order_lock = threading.Lock()
-        self.last_100_klines = None
-
+        logger.info(f'LiveLoop initialized.', extra={'loop': self})
 
     def __str__(self):
         return f'LL:{self.symbol.base}@{self.market.exchange_name}:{self.freq}'
-
 
     def precheck(self):
         """Prechecks before starting the live loop"""
         self.imarket.get_account()
         # validate capital and asset amound
+        market_capital = self.imarket.capital
+        market_assets = self.imarket.assets.get(self.symbol.base, 0)
         if self.session.capital > self.imarket.capital:
-            logger.warning(f'Capital limit ({self.session.capital}) is greater than available capital ({self.imarket.capital}), updating capital limit to {self.session.capital}', extra={'loop': self})
+            logger.warning(f'Capital limit ({self.session.capital}) is greater than available capital ({market_capital}), updating capital limit to {market_capital}', extra={'loop': self})
             self.session.capital = self.imarket.capital
         if self.session.assets > self.imarket.assets.get(self.symbol.base, 0):
-            logger.warning(f'Asset limit ({self.session.assets}) is greater than available assets ({self.imarket.assets.get(self.symbol.base, 0)}), updating asset limit to {self.session.assets}', extra={'loop': self})
+            logger.warning(f'Asset limit ({self.session.assets}) is greater than available assets ({market_assets}), updating asset limit to {market_assets}', extra={'loop': self})
             self.session.assets = self.imarket.assets.get(self.symbol.base, 0)
         if self.session.capital < 5 and self.session.assets <= 0:
-            logger.critical(f'Capital and asset limits are too low, terminating.', extra={'loop': self})
+            logger.critical(f'Capital and asset limits are too low, terminating ({self.session.capital} {self.symbol.quote}, {self.session.assets} {self.symbol.base}).', extra={'loop': self})
             self.session.status = Session.Status.TERMINATED
             self.session.save()
             return False
+        return True
+
+    def prepare_kline_snapshot(self):
+        """Prepares the last kline and last 100 klines for the session."""
         last_klines = self.imarket.get_last_klines(self.symbol.name, self.freq)
         if not last_klines:
             logger.critical(f'Cannot get last klines from {self.market.exchange_name}, terminating.', extra={'loop': self})
             self.session.status = Session.Status.TERMINATED
             self.session.save()
             return False
+
         last_klines = OHLCVDataset(last_klines)
         self.last_kline_dt = last_klines.index[-1].to_pydatetime()
         self.session.last_kline_timestamp = self.last_kline_dt
         self.last_kline = last_klines.iloc[-1].to_dict()
         self.last_100_klines = last_klines
         self.session.save()
-        logger.info(f'Precheck passed, capital={self.session.capital}, assets={self.session.assets}', extra={'loop': self})
         return True
-
 
     def run(self, **kwargs):
         """Fire and forget function to start the live loop and keep it running in a seperate thread."""
         if self.running and self.thread:
             logger.error(f'LiveLoop is already running in thread {self.thread.name}, id={self.thread.ident} - refusing to start another thread.', extra={'loop': self})
             return
-        self.precheck()
+        precheck_ok = self.precheck()
+        if not precheck_ok:
+            return
+        snapshot_ok = self.prepare_kline_snapshot()
+        if not snapshot_ok:
+            return
         self.will_stop = False
         self.running = True
         if kwargs.get('match_engine'):
             self.thread = threading.Thread(target=self.__run_match_engine, name=f'LLME:{self.symbol.base}:{self.freq.replace(" ", "")}@{self.market.exchange_name}')
+            self.session.candle_source = Session.CandleSource.TRADE
         elif kwargs.get('websocket'):
             self.thread = threading.Thread(target=self.__run_websocket, name=f'LLWS:{self.symbol.base}:{self.freq.replace(" ", "")}@{self.market.exchange_name}')
-            self.session.use_websocket = True
+            self.session.candle_source = Session.CandleSource.WEBSOCKET
         else:
             self.thread = threading.Thread(target=self.__run_polling, name=f'LLAPI:{self.symbol.base}:{self.freq.replace(" ", "")}@{self.market.exchange_name}')
+            self.session.candle_source = Session.CandleSource.REST
         self.thread.start()
         logger.info(f'LiveLoop started in thread {self.thread.name}, id={self.thread.ident}.', extra={'loop': self})
         self.session.started = datetime.now(tz=pytz.UTC)
         self.session.thread_id = self.thread.ident
-        self.session.last_price = self.last_kline['close']
+        self.session.last_price = self.last_kline['close'] if self.last_kline else None
         self.session.last_kline_timestamp = self.last_kline_dt
         self.session.save()
 
@@ -192,9 +207,9 @@ class LiveLoop:
         if self.session.status != Session.Status.ONGOING:
             logger.warning(f'Received candle while session status is {self.session.status}, skipping.', extra={'loop': self})
             return
-        equity = self.session.capital + self.session.assets * self.session.last_price or 1
+        equity = self.session.capital + self.session.assets * (self.session.last_price or 1)
         if equity < 5:
-            logger.error(f'Ghost session found - no capital and no assets, pausing. [SessionID:{self.session.id}]', extra={'loop': self})
+            logger.error(f'Ghost session found - no capital and no assets, pausing. [SessionID:{self.session.pk}]', extra={'loop': self})
             self.session.status = Session.Status.PAUSED
             self.session.save()
         self.imarket.cache_to_db()
@@ -207,7 +222,8 @@ class LiveLoop:
             return
         if self.last_100_klines is None:
             logger.error(f'Recent klines are not available, skipping candle.', extra={'loop': self})
-        self.last_100_klines = (pd.concat([self.last_100_klines, OHLCVDataset([candle])]))
+        candle = OHLCVDataset([candle])
+        self.last_100_klines = pd.concat([self.last_100_klines, candle])
         self.last_100_klines = self.last_100_klines.iloc[-100:]
         raw_dataset = OHLCVDataset(self.last_100_klines, pass_thru=True)
         if self.use_heikin_ashi:
@@ -233,6 +249,7 @@ class LiveLoop:
         self.session.save()
 
         self.run_complex_orders()
+        return True
 
 
     def can_buy(self):
@@ -247,7 +264,6 @@ class LiveLoop:
 
     def buy(self, last_kline:dict):
         with self.order_lock:
-            last_order = None
             signal = Signal.objects.create(
                 session=self.session,
                 timestamp=self.last_kline_dt,
@@ -295,7 +311,7 @@ class LiveLoop:
                         details=repr(e),
                         market_timestamp=self.last_kline_dt or datetime.now(tz=pytz.UTC)
                     )
-                    logger.error(f'Failed to place BUY order for {self.session.capital} {self.symbol.quote} (olid:{last_order.id}), skipping.', exc_info=True, extra={'n_type': 'ORDER', 'loop': self})
+                    logger.error(f'Failed to place BUY order for {self.session.capital} {self.symbol.quote} (olid:{last_order.pk}), skipping.', exc_info=True, extra={'n_type': 'ORDER', 'loop': self})
                 self.session.save()
             else:
                 return False
@@ -307,7 +323,6 @@ class LiveLoop:
             if not last_kline:
                 last_kline = {}
             last_order = None
-            signal = None
             signal = Signal.objects.create(
                 session=self.session,
                 timestamp=self.last_kline_dt,
@@ -345,7 +360,6 @@ class LiveLoop:
                         market_timestamp=self.last_kline_dt or datetime.now(tz=pytz.UTC)
                     )
                 except Exception as e:
-                    logger.error(f'Failed to place SELL order for {self.session.assets} {self.symbol.base} (olid:{last_order.id}), skipping.', exc_info=True, extra={'n_type': 'ORDER', 'loop': self})
                     last_order = Order.objects.create(
                         funds=self.session.capital,
                         deal_funds=self.session.capital,
@@ -356,6 +370,7 @@ class LiveLoop:
                         details=repr(e),
                         market_timestamp=self.last_kline_dt or datetime.now(tz=pytz.UTC)
                     )
+                    logger.error(f'Failed to place SELL order for {self.session.assets} {self.symbol.base} (olid:{last_order.pk}), skipping.', exc_info=True, extra={'n_type': 'ORDER', 'loop': self})
                 self.session.save()
             else:
                 return False
@@ -415,7 +430,7 @@ class LiveLoop:
 
 if __name__ == '__main__':
     """Example usage of LiveLoop class."""
-    market = Market.objects.get(exchange_name='BINANCE')
+    market = Market.objects.get(exchange_name='BINANCE', mainnet_enabled=True)
     ll = LiveLoop(
         'BNB-USDT', 
         market,
@@ -424,7 +439,9 @@ if __name__ == '__main__':
         ),
         capital_limit=10,
         asset_limit=0,
-        freq='1 min',
-        use_heikin_ashi=True)
+        freq='1 min')
     ll.run()
-    ll.idle()
+    started = datetime.now()
+    while datetime.now() - started < timedelta(minutes=10):
+        time.sleep(1)
+        print('.', end='', flush=True)

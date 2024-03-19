@@ -468,6 +468,7 @@ class ComplexOrder(models.Model):
                 self.market_order = order
                 self.status = ComplexOrder.Status.FILLED
                 self.save()
+                return order
             elif self.side == Order.Side.SELL:
                 order = ll.imarket.place_market_order(
                     symbol=self.session.symbol,
@@ -480,6 +481,7 @@ class ComplexOrder(models.Model):
                 self.market_order = order
                 self.status = ComplexOrder.Status.FILLED
                 self.save()
+                return order
         raise ValueError('Invalid complex order type: ' + self.type)
 
 
@@ -609,7 +611,6 @@ class GlobalSymbol(models.Model):
     base = models.CharField(max_length=200)
     quote = models.CharField(max_length=200, default='USDT')
     data_source = models.CharField(max_length=30, choices=DataSource.choices, default=DataSource.COINGECKO)
-    payload = models.TextField(null=True, blank=True)
     coingecko_response = models.TextField(null=True, blank=True)
     coinmarketcap_response = models.TextField(null=True, blank=True)
     image = models.URLField(null=True, blank=True, max_length=1024, help_text='URL to image of this symbol')
@@ -628,6 +629,7 @@ class GlobalSymbol(models.Model):
     total_supply = models.FloatField(null=True, blank=True)
     max_supply = models.FloatField(null=True, blank=True)
     last_updated = models.DateTimeField(null=True, blank=True, auto_now=True, help_text='Last time this symbol was updated')
+    price = models.FloatField(null=True, blank=True, help_text='Current price')
     price_change_24h = models.FloatField(null=True, blank=True, help_text='Price change in the last 24 hours')
     price_change_percentage_24h = models.FloatField(null=True, blank=True, help_text='Price change percentage in the last 24 hours')
     high_24h = models.FloatField(null=True, blank=True, help_text='Highest price in the last 24 hours')
@@ -659,10 +661,6 @@ class GlobalSymbol(models.Model):
             self.markets = markets
             if save:
                 self.save()
-
-    @property
-    def price(self):
-        return json.loads(self.payload).get('current_price')
     
     def mainnet_symbols(self):
         return MarketSymbol.objects.filter(symbol=self, market__mainnet_enabled=True)
@@ -715,7 +713,6 @@ class GlobalSymbol(models.Model):
             'base': self.base,
             'quote': self.quote,
             'data_source': self.data_source,
-            'payload': self.payload,
             'image': self.image,
             'ath': self.ath,
             'atl': self.atl,
@@ -737,7 +734,6 @@ class GlobalSymbol(models.Model):
             'data_updated': self.data_updated,
             'ath_prox': self.ath_prox,
             'atl_prox': self.atl_prox,
-            'supply_ratio': self.supply_ratio,
             'volume24h_to_mcap': self.volume24h_to_mcap,
             'is_favorite': self.is_favorite,
             'markets': self.markets,
