@@ -48,7 +48,7 @@ INSTALLED_APPS = [
     'allauth.socialaccount.providers.google',
     'allauth.socialaccount.providers.apple',
     'allauth.socialaccount.providers.github',
-
+    'silk',
 ]
 
 MIDDLEWARE = [
@@ -62,6 +62,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'allauth.account.middleware.AccountMiddleware',
     'quantapi.middleware.WhitelistedUserMiddleware',
+    'silk.middleware.SilkyMiddleware'
 ]
 
 LOGIN_REQUIRED_IGNORE_PATHS = [
@@ -96,15 +97,21 @@ WSGI_APPLICATION = 'quant.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
-DATABASES = {
-    'default': {
+QUANTDEV_RDS = {
         'ENGINE': 'django.db.backends.postgresql_psycopg2',
         'NAME': os.environ.get('DATABASE_NAME', 'quantdev'),
         'USER': 'postgres',
         'PASSWORD': 'REDACTED',
         'HOST': 'db.example.invalid',
         'PORT': '5432',
-  }
+}
+
+DATABASES = {
+    'default': {
+        # sqlite
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
+    }
 }
 
 

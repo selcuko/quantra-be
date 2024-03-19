@@ -33,15 +33,14 @@ def interval_to_minutes(interval:str) -> int:
 class OHLCVDataset(pd.DataFrame):
     def __init__(self, *args, **kwargs):
         if kwargs.pop('pass_thru', False):
-            super().__init__(*args, **kwargs)
+            return super().__init__(*args, **kwargs)
         kwargs.update({'columns': ['time', 'open', 'high', 'low', 'close', 'volume']})
         super().__init__(*args, **kwargs)
         self.set_index('time', inplace=True)
-        self._validate()
 
-    def _validate(self):
-        pass
-    
+    def __new__(cls, *args, **kwargs):
+        return super().__new__(cls)
+
     @staticmethod
     def _standardize_freq(freq):
         return {
@@ -61,7 +60,7 @@ class OHLCVDataset(pd.DataFrame):
             '1 week': '1W',
             '1 month': '1M',
         }[freq]
-    
+
     def change(self, freq) -> "OHLCVDataset":
         freq = self._standardize_freq(freq)
         new_ds = self.resample(freq).agg({
@@ -128,7 +127,7 @@ class OHLCVDataset(pd.DataFrame):
             return cls.from_csv_as_heikin_ashi_candles(filename)
         else:
             raise ValueError(f'Invalid candle_type "{candle_type}", must be either "standard" or "heikin_ashi"')
-    
+
     # modify [] operator to return a OHLCVDataset
     def __getitem__(self, key):
         k = super().__getitem__(key)

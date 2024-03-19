@@ -147,6 +147,7 @@ class SessionInitView(View):
                 ll.run(polling=True)
         except Exception as e:
             raise e
+        return redirect('session-detail', pk=ll.session.pk)
 
 
 class SessionUpdateView(View):

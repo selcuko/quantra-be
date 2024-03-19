@@ -37,6 +37,7 @@ def symbol_metrics_update_loop():
     from quantapi.management.commands.update_symbol_metrics import Command
     while True:
         try:
+            threading.Event().wait(60 * 60)
             Command().handle()
             threading.Event().wait(60 * 60 * 4)
         except:
