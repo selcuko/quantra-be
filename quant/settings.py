@@ -107,11 +107,7 @@ QUANTDEV_RDS = {
 }
 
 DATABASES = {
-    'default': {
-        # sqlite
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
+    'default': QUANTDEV_RDS
 }
 
 
