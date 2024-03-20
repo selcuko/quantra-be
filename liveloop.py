@@ -285,7 +285,7 @@ class LiveLoop:
                 except InsufficientBalance:
                     self.imarket.get_account()
                     self.session.capital = max(self.imarket.capital, 0)
-                    self.session.assets = max(self.imarket.assets.get(self.symbol.base, 0), 0)
+                    # self.session.assets = max(self.imarket.assets.get(self.symbol.base, 0), 0)
                     self.session.save()
                     logger.warning(f'Insufficient balance, assets updated to {self.session.assets} and capital updated to {self.session.capital}', extra={'loop': self})
                     return self.buy(last_kline)
@@ -343,7 +343,7 @@ class LiveLoop:
                         logger.error(f'{signal.side} order for {last_order.deal_size} {self.symbol.base} not filled, status is {last_order.status} (oid={last_order.oid}))', extra={'n_type': 'ORDER', 'loop': self})
                 except InsufficientBalance:
                     self.imarket.get_account()
-                    self.session.capital = max(self.imarket.capital, 0)
+                    # self.session.capital = max(self.imarket.capital, 0)
                     self.session.assets = max(self.imarket.assets.get(self.symbol.base, 0), 0)
                     self.session.save()
                     logger.warning(f'Insufficient balance, assets updated to {self.session.assets} and capital updated to {self.session.capital}', extra={'loop': self})

@@ -41,6 +41,8 @@ class SessionDetailView(View):
         signals = Signal.objects.filter(session=session)
         orders = Order.objects.filter(signal__in=signals)
         market = session.symbol.market
+        orders = orders.order_by('-created_at')
+        signals = signals.order_by('-timestamp')
         return render(request, 'session-detail.html', {
             'session': session, 
             'orders': orders, 
@@ -165,9 +167,10 @@ class SessionUpdateView(View):
             corrected_amt = min(amt, session.capital)
             if amt != corrected_amt:
                 logger.warning(f'Manual buy amount {amt} exceeds available capital {session.capital} USDT. Corrected to {corrected_amt} USDT.', extra={'loop': session, 'n_type': 'ORDER'})
-            order = iface.place_market_order(session.symbol.name, 'buy', funds=amt)
+            order = iface.place_market_order(session.symbol.name, 'buy', funds=corrected_amt)
             order.force = True
             signal = Signal.objects.create(session=session, side='BUY', price=order.display_price, timestamp=datetime.now(pytz.UTC))
+            order.price = order.display_price
             order.signal = signal
             order.save()
             ts = datetime.now()
@@ -188,9 +191,10 @@ class SessionUpdateView(View):
             corrected_amt = min(amt, session.assets)
             if amt != corrected_amt:
                 logger.warning(f'Manual sell amount {amt} exceeds available assets {session.assets} {session.symbol.base}. Corrected to {corrected_amt} {session.symbol.base}.', extra={'loop': session, 'n_type': 'ORDER'})
-            order = iface.place_market_order(session.symbol.name, 'sell', quantity=amt)
+            order = iface.place_market_order(session.symbol.name, 'sell', quantity=corrected_amt)
             order.force = True
             signal = Signal.objects.create(session=session, side='SELL', price=order.display_price, timestamp=datetime.now(pytz.UTC))
+            order.price = order.display_price
             order.signal = signal
             order.save()
             ts = datetime.now()
