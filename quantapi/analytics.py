@@ -25,6 +25,14 @@ class SessionAnalytics:
         return None
 
     @property
+    def real_price(self):
+        orders = Order.objects.filter(signal__session=self.session, status=Order.Status.FILLED)
+        if orders:
+            buyable_amount = (self.initial_value + self.total_pnl) / self.session.last_price
+        return self.initial_value / buyable_amount if buyable_amount else None
+
+
+    @property
     def open_position_delta(self):
         if not self.open_position:
             return None
@@ -100,6 +108,32 @@ class SessionAnalytics:
 
         """
         return (self.capital_delta / self.session.initial_capital) * 100
+       
+    @property
+    def weighted_pnl_pct(self):
+        """
+        Calculate the weighted percentage profit or loss for the sell order.
+
+        """
+        orders = Order.objects.filter(signal__session=self.order.signal.session, status=Order.Status.FILLED)
+        if self.order.side == Order.Side.SELL:
+            weighted_pnl = sum([order.pnl * order.deal_size for order in orders])
+            weighted_cost = sum([order.average_cost * order.deal_size for order in orders])
+            return weighted_pnl / weighted_cost * 100
+        else:
+            return None
+
+    @property
+    def total_pnl(self):
+        """
+        Calculate the total profit or loss for the sell order.
+
+        """
+        orders = Order.objects.filter(signal__session=self.order.signal.session, status=Order.Status.FILLED)
+        if self.order.side == Order.Side.SELL:
+            return sum([order.pnl for order in Order.objects.filter(signal__session=self.session, status=Order.Status.FILLED)])
+        else:
+            return None
 
     @property
     def max_hold_time(self):
@@ -124,6 +158,55 @@ class SessionAnalytics:
                 if not max_hold_time or hold_time > max_hold_time:
                     max_hold_time = hold_time
         return max_hold_time
+
+class OrderAnalytics:
+
+    def __init__(self, order:Order) -> None:
+        self.order = order
+
+    @property
+    def average_cost(self):
+        """
+        Calculate the average cost of the buy order.        
+
+        """
+        orders = Order.objects.filter(signal__session=self.order.signal.session, status=Order.Status.FILLED)
+
+        if self.order.side == Order.Side.BUY:
+            total_cost = sum([order.deal_funds for order in orders])
+            total_amount = sum([order.deal_size for order in orders if order.Side == Order.Side.BUY])
+            total_amount = sum([-order.deal_size for order in orders if order.Side == Order.Side.SELL])
+            self.order.average_cost = total_cost / total_amount if total_amount else None
+            return self.order.average_cost
+        else:
+            return None
+        
+    @property
+    def pnl(self):
+        """
+        Calculate the profit or loss for the sell order.
+
+        """
+        if self.order.side == Order.Side.SELL:
+            self.order.pnl = (self.order.display_price - self.average_cost) * self.order.deal_size
+            return self.order.pnl
+        else:
+            return None
+    
+    @property
+    def pnl_pct(self):
+        """
+        Calculate the percentage profit or loss for the sell order.
+
+        """
+        if self.order.side == Order.Side.SELL:
+            self.order.pnl_pct = (self.order.display_price - self.average_cost) / self.average_cost * 100
+            return self.order.pnl_pct
+        else:
+            return None
+        
+
+
 
 
 class TotalSessionAnalytics:

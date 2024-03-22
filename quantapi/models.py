@@ -353,6 +353,9 @@ class Order(models.Model):
     placed_at = models.DateTimeField(null=True, blank=True)
     side = models.CharField(max_length=30, choices=Side.choices, null=True)
     messages_raw = models.TextField(default='')
+    pnl = models.FloatField(null=True, blank=True)
+    pnl_pct = models.FloatField(null=True, blank=True)
+    average_cost = models.FloatField(null=True, blank=True)
 
     @property
     def messages(self):
