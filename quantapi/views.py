@@ -44,6 +44,7 @@ class SessionDetailView(View):
         symbol = session.symbol
         orders = orders.order_by('-created_at')
         signals = signals.order_by('-timestamp')
+        market_assets = json.loads(market.assets or '{}').get(symbol.base, 0)
         return render(request, 'session-detail.html', {
             'session': session, 
             'orders': orders, 
@@ -52,6 +53,7 @@ class SessionDetailView(View):
             'symbol': symbol,
             'buy_enabled': session.capital > 5,
             'sell_enabled': session.assets > 0,
+            'market_assets': market_assets,
         })
 
 
@@ -212,6 +214,12 @@ class SessionUpdateView(View):
             else:
                 session.capital += order.deal_funds
                 session.assets -= order.deal_size
+        if 'capital_update' in request.POST:
+            session.capital = float(request.POST.get('capital_update', 0))
+        if 'asset_update' in request.POST:
+            session.assets = float(request.POST.get('asset_update', 0))
+
+
         session.save()
         return redirect('session-detail', pk=session.pk)
 
