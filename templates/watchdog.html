@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <p>All</p>
+    <ol>
+        {% for item in all %}
+            <li>{{ item }}</li>
+        {% endfor %}
+    </ol>
+    <br>
+    <p>Current</p>
+    <ol>
+        {% for item in current %}
+            <li>{{ item }}</li>
+        {% endfor %}
+    </ol>
+    <br>
+    <p>Crashed</p>
+    <ol>
+        {% for item in crashed %}
+            <li>{{ item }}</li>
+        {% endfor %}
+    </ol>
+    <br>
+    <code>
+        {{ watchdog }}
+    </code>
+</body>
+</html>

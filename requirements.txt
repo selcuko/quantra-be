@@ -7,3 +7,12 @@ requests==2.31.0
 websockets==11.0.3
 sqlalchemy==2.0.21
 pytest==7.4.2
+cryptography==41.0.7
+Django==4.2.6
+django-allauth==0.59.0
+django-login-required-middleware==0.9.0
+gunicorn==21.2.0
+urllib3==2.0.4
+logtail-python==0.2.6
+psycopg2-binary==2.9.9
+django-silk

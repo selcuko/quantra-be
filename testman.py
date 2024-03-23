@@ -1,13 +1,17 @@
-from dataclasses import dataclass
-from datetime import datetime, timedelta
 import json
 import os
-from typing import Literal
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from typing import Callable, Literal, Optional
+import typing
 
 import pytz
+
 from logger import logger
-from markets import Market
-from models import Order
+from markets import IMarket
+if typing.TYPE_CHECKING:
+    from quantapi.models import Order
+
 
 class Performance:
     def __init__(self, trades:list["Trade"], initial_capital:float=1000.):
@@ -140,14 +144,15 @@ class Trade:
 class TestManager:
     def __init__(self, 
                  symbol:str, 
-                 market:Market, 
+                 market:IMarket, 
                  type:Literal['live.basic', 'live.sandbox', 'live.mainnet', 'backtest'],
-                 strategy:callable,
+                 strategy:Callable,
                  capital:float,
+                 assets:float,
                  interval:str,
                  commission:dict={},
-                 start:datetime=None,
-                 end:datetime=None,
+                 start:Optional[datetime]=None,
+                 end:Optional[datetime]=None,
                  verbose:bool=False,):
         """Manager class to hold testing data, analyze results, and keep track of trades."""
         self.symbol = symbol
@@ -155,15 +160,17 @@ class TestManager:
         self.start = start
         self.end = end
         self.interval = interval
-        self.initial_capital = capital
+        self.initial_capital = capital if capital > 0.01 else 0.01
         self.type = type
         self.strategy = strategy
 
         self.trades:list['Trade'] = []
-        self.assets = 0
-        self.commissions = commission
-        if isinstance(self.commissions, float):
-            self.commissions = {'buyer': self.commission, 'seller': self.commission}
+        self.assets = assets
+        
+        if isinstance(commission, float):
+            self.commissions = {'buyer': commission, 'seller': commission}
+        else:
+            self.commissions = commission
         self.buyer_commission = self.commissions.get('buyer', 0)
         self.seller_commission = self.commissions.get('seller', 0)
         self.wins = 0
@@ -179,12 +186,18 @@ class TestManager:
         self.capital = capital   
         self.last_kline = None
 
-    def buy(self, kline, sync:Order=None):
+    def can_buy(self):
+        return self.capital > 0.01
+    
+    def can_sell(self):
+        return self.assets > 0.000001
+    
+    def buy(self, kline:dict, sync:Optional['Order']=None):
         self.buy_signals += 1
-        if self.bought:
+        if not self.can_buy():
             return
         self.update(kline)
-        price = self.last_kline['close']
+        price = kline.get('close', -1)
         self.bought = True
         self.bought_price = price
         if sync:
@@ -203,23 +216,23 @@ class TestManager:
             price=price,
             assets=self.assets,
             capital=self.capital,
-            datetime=kline['time'],
+            datetime=kline.get('time', datetime.now(tz=pytz.UTC)),
             position='buy',
             equity=self.equity,
-            profit=None,
-            profit_pct=None,
-            hold_time=None,
+            profit=0,
+            profit_pct=0,
+            hold_time=timedelta(seconds=0),
             rawrow=kline
         )
         self.trades.append(trade)
         return True
 
-    def sell(self, kline, sync:Order=None):
+    def sell(self, kline, sync:Optional['Order']=None):
         self.sell_signals += 1
-        if not self.bought:
+        if not self.can_sell():
             return
         self.update(kline)
-        price = self.last_kline['close']
+        price = kline['close']
         self.bought = False
         if sync:
             self.capital += sync.deal_funds
@@ -263,7 +276,8 @@ class TestManager:
     @property
     def equity(self):
         """Total equity in USD."""
-        return self.capital + self.assets * self.last_kline['close']
+        in_assets = self.assets * self.last_kline['close'] if self.last_kline else 0
+        return self.capital + in_assets
 
     @property
     def profit(self):
@@ -277,10 +291,11 @@ class TestManager:
         elif self.last_kline_dt:
             dtime = self.last_kline_dt.strftime("%d-%m-%Y %H:%M:%S")
         number = self.trades[-1].number if self.trades else 0
+        price = self.last_kline["close"] if self.last_kline else 'N/A'
         txt = f'''\
 [{dtime}][{number:>3d}:{" IN" if self.bought else "OUT"}] \
 Equity: {self.equity:>3.2f} USDT | \
-Price: {self.last_kline["close"]:>3.4f} USDT | \
+Price: {price:>3.4f} USDT | \
 Profit: {self.profit:>4.2f}% | \
 Last trade: {self.last_profit_pct:>3.2f}% | \
 Assets: {self.assets:>3.2f} | \
@@ -305,7 +320,7 @@ Capital: {self.capital:>3.2f} USDT '''
             'buy_signals': self.buy_signals,
             'sell_signals': self.sell_signals,
             'symbol': self.symbol,
-            'market': self.market.json(),
+            'market': str(self.market),
             'strategy': self.strategy.json(),
             'performance': Performance(self.trades, self.initial_capital).to_dict(),
             'trades': [trade.to_dict() for trade in self.trades],
@@ -314,7 +329,7 @@ Capital: {self.capital:>3.2f} USDT '''
     def save_to_disk(self, filedir=None):
         if not filedir:
             if self.symbol and self.market and self.strategy:
-                filedir = f'testman/testman-{datetime.now()}-{self.symbol.upper()}-{self.market.name.upper()}-{self.strategy.name}.json'
+                filedir = f'testman/testman-{datetime.now()}-{self.symbol.upper()}-{str(self.market).upper()}-{self.strategy.name}.json'
             else:
                 filedir = f'testman/testman-{datetime.now()}.json'
         filedir = str(filedir.replace(' ', '_').replace(':', '-'))
@@ -328,5 +343,7 @@ Capital: {self.capital:>3.2f} USDT '''
         return filedir
 
     def update(self, kline):
+        if not kline:
+            return
         self.last_kline = kline
         self.last_kline_dt = kline['time']

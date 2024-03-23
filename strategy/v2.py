@@ -1,14 +1,15 @@
-from datetime import datetime, timedelta
-from logger import logger
 import pandas as pd
-from indicators import StochRSI, T3, MACD
-from models import OHLCVDataset
 
-class StrategyV2:
+from indicators import MACD, T3, StochRSI
+from models import OHLCVDataset
+from strategy.interface import Strategy
+
+
+class StrategyV2(Strategy):
     def __init__(self, params={}):
         self.params = {**self.default_params(), **params}
         self.name = 'StrategyV2.Lisa.NumPy'
-        self.ds = None
+        self.ds = OHLCVDataset(pd.DataFrame())
     
     def __call__(self, ds:OHLCVDataset):
         return self.calculate(ds)
@@ -59,6 +60,8 @@ class StrategyV2:
             b=self.params['t3']['a'], 
             inplace=True)
     def indicator_signals(self):
+        if self.ds.empty:
+            return
         self.ds['macd_buy']  = (self.ds['macd_diff'] > self.ds['macd_diff'].shift()) & (self.ds['macd_diff'] <= 0)
         self.ds['macd_sell'] = (self.ds['macd_diff'] < self.ds['macd_diff'].shift()) & (self.ds['macd_diff'] >= 0)
         self.ds['stochrsi_buy']  = self.ds['stochrsi_k'] > self.ds['stochrsi_d']
@@ -67,6 +70,8 @@ class StrategyV2:
         self.ds['t3_sell'] = (self.ds['t3'] < self.ds['t3'].shift()) & (self.ds['t3'] >= 0)
 
     def signals(self):
+        if self.ds.empty:
+            return
         self.ds['buy'] = self.ds['macd_buy'] & self.ds['stochrsi_buy'] & self.ds['t3_buy']
         self.ds['sell'] = self.ds['macd_sell'] & self.ds['stochrsi_sell'] & self.ds['t3_sell']
 

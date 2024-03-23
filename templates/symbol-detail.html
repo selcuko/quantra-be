@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% block title %}{{ symbol.name }}{% endblock %}
+{% block content %}
+
+<div class="m-3 p-3 flex flex-col">
+    <h1 class="flex items-center text-4xl font-extrabold dark:text-white">
+        <img src="{{ symbol.image }}" alt="" class="w-16 h-16 mr-1">
+        {{ symbol.base }} <small class="ms-2 font-semibold text-gray-500 dark:text-gray-400">{{ symbol.cid }}</small>
+    </h1>
+</div>
+
+<div class="m-3">
+    <div class="flow-root rounded-lg border border-gray-300 p-3 shadow-sm">
+        <dl class="-my-3 divide-y divide-gray-100 text-sm">
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">Symbol</dt>
+                <dd class="text-gray-700 sm:col-span-2">{{ symbol.base }} (CID: {{ symbol.cid }})</dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">Markets</dt>
+                <dd class="text-gray-700 sm:col-span-2">{{ symbol.markets_display }}</dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">Tags</dt>
+                <dd class="text-gray-700 sm:col-span-2">{{ symbol.tags_display }}</dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">Current price</dt>
+                <dd class="text-gray-700 sm:col-span-2">$ {{ symbol.price|intcomma }} ({{ symbol.data_updated|timesince }})</dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">High / low 24H</dt>
+                <dd class="text-gray-700 sm:col-span-2">$ {{ symbol.high_24h|intcomma }} / $ {{ symbol.low_24h|intcomma }}</dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">ATH</dt>
+                <dd class="text-gray-700 sm:col-span-2">$ {{ symbol.ath|intcomma }} ({{ symbol.ath_date }}) <b>({{ symbol.ath_ratio|floatformat:2 }}%)</b> ({{ symbol.ath_prox|floatformat:2 }} prox.)</dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">ATL</dt>
+                <dd class="text-gray-700 sm:col-span-2">$ {{ symbol.atl|intcomma }} ({{ symbol.atl_date }}) <b>({{ symbol.atl_ratio|floatformat:2 }}x)</b> ({{ symbol.atl_prox|floatformat:2 }} prox.)</dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">Volume 24H</dt>
+                <dd class="text-gray-700 sm:col-span-2">$ {{ symbol.volume|intcomma }}</dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">Market capitalization</dt>
+                <dd class="text-gray-700 sm:col-span-2">$ {{ symbol.market_cap|intcomma }}</dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">Volume 24H / MCap</dt>
+                <dd class="text-gray-700 sm:col-span-2">{{ symbol.volume24h_to_mcap|floatformat:2 }}</dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">Supply</dt>
+                <dd class="text-gray-700 sm:col-span-2">Ratio: {{ symbol.supply_ratio|floatformat:2 }} | Circulating: {{ symbol.circulating_supply|intcomma }} | Total: {{ symbol.total_supply|intcomma }}</dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">CoinGecko</dt>
+                <dd class="text-gray-700 sm:col-span-2"><a class="text-blue-700 hover:underline" target='_blank' href="https://www.coingecko.com/en/coins/{{ symbol.cid }}">View in CoinGecko</a></dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">CoinMarketCap</dt>
+                <dd class="text-gray-700 sm:col-span-2"><a class="text-blue-700 hover:underline" target='_blank' href="https://coinmarketcap.com/currencies/{{ symbol.cid }}/">View in CoinMarketCap</a></dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">TradingView</dt>
+                <dd class="text-gray-700 sm:col-span-2">
+                    
+                    {% for market_symbol in symbol.mainnet_symbols %}
+                        <a class="text-blue-700 hover:underline mr-2" target='_blank' href="https://www.tradingview.com/chart/?symbol={{ market_symbol.market.exchange_name }}%3A{{ symbol.base }}{{ symbol.quote }}">{{ market_symbol.market.exchange_name }}</a>
+                    {% endfor %}
+                </dd>
+            </div>
+        </dl>
+    </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,478 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% block title %}{{ symbol.name }}{% endblock %}
+{% block content %}
+<style>
+    th.cursor-pointer {
+        position: relative;
+    }
+    
+    .sorting-indicator {
+        width: 0;
+        border-left: 4px solid transparent;
+        border-right: 4px solid transparent;
+        border-top: 4px solid #cbd5e0; /* Default color */
+    }
+    
+    th.sorting-asc .sorting-indicator {
+        border-top-color: #4a5568; /* Ascending color */
+    }
+    
+    th.sorting-desc .sorting-indicator {
+        border-bottom: 4px solid #4a5568; /* Descending color */
+        border-top: none;
+    }
+    
+</style>
+<!-- Incomplete -->
+<div class="flex flex-row items-center justify-between">
+    <h1 class="m-4 text-3xl font-extrabold leading-none tracking-tight text-gray-900 md:text-3xl lg:text-4xl">
+        Coin
+        <span class="underline underline-offset-3 decoration-8 decoration-blue-400 dark:decoration-blue-600">
+            Scanner
+        </span>
+    </h1>
+    <a href="{% url 'symbol-favorites' %}" target="_blank" style="color: #a61414" class="flex flex-row font-large text-xl hover:underline items-center mr-6"><svg class="w-6 h-6 text-gray-800 dark:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="#a61414" viewBox="0 0 24 24">
+        <path d="m12.75 20.66 6.184-7.098c2.677-2.884 2.559-6.506.754-8.705-.898-1.095-2.206-1.816-3.72-1.855-1.293-.034-2.652.43-3.963 1.442-1.315-1.012-2.678-1.476-3.973-1.442-1.515.04-2.825.76-3.724 1.855-1.806 2.201-1.915 5.823.772 8.706l6.183 7.097c.19.216.46.34.743.34a.985.985 0 0 0 .743-.34Z"/>
+      </svg>
+      See favorites</a>
+</div>
+
+<section class="p-4 flex flex-col md:flex-row">
+    <aside id="default-sidebar" class="md:w-1/4 w-full transition-transform"
+        aria-label="Sidebar">
+        {% csrf_token %}
+        <div class="flow-root rounded-lg border border-gray-300 p-3 shadow-sm">
+            <dl class="-my-3 divide-y divide-gray-100 text-sm">
+                <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                    <dt class="font-medium text-gray-900">Search</dt>
+                    <dd class="text-gray-700 sm:col-span-2">
+                        <div class="relative">
+                            <input type="search" id="search" class="block w-full text-sm text-gray-900 border border-gray-300 rounded-lg bg-gray-50 focus:ring-blue-500 focus:border-blue-500" placeholder="Symbol name" />
+                        </div>
+                    </dd>
+                </div>
+                <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                    <dt class="font-medium text-gray-900">Count</dt>
+                    <dd class="text-gray-700 sm:col-span-2">
+                        <p id="symbol-count">0</p>
+                    </dd>
+                </div>
+                <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                    <dt class="font-medium text-gray-900">Markets</dt>
+                    <dd class="text-gray-700 sm:col-span-2">
+                        <div class="flex items-center mb-4">
+                            <input id="NOTNULL" type="checkbox" value="NOTNULL" class="market-selector w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500">
+                            <label for="default-checkbox" class="ms-2 text-sm font-medium text-gray-900 dark:text-gray-300">At least one</label>
+                        </div>
+                        <div class="flex items-center mb-4">
+                            <input id="BINANCE" type="checkbox" value="BINANCE" class="market-selector w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500">
+                            <label for="default-checkbox" class="ms-2 text-sm font-medium text-gray-900 dark:text-gray-300">Binance</label>
+                        </div>
+                        <div class="flex items-center mb-4">
+                            <input id="KUCOIN" type="checkbox" value="KUCOIN" class="market-selector w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500">
+                            <label class="ms-2 text-sm font-medium text-gray-900 dark:text-gray-300">Kucoin</label>
+                        </div>
+                        <div class="flex items-center">
+                            <input id="MEXC" type="checkbox" value="MEXC" class="market-selector w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500">
+                            <label class="ms-2 text-sm font-medium text-gray-900 dark:text-gray-300">MEXC</label>
+                        </div>
+                    </dd>
+                </div>
+                <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                    <dt class="font-medium text-gray-900">ATH proximity</dt>
+                    <dd class="text-gray-700 sm:col-span-2">
+                        max
+                        <input id="ath-prox-max" type="number" min="0" max="1" step="0.01"
+                            class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                        min
+                        <input id="ath-prox-min" type="number" min="0" max="1" step="0.01"
+                            class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                    </dd>
+                </div>
+                <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                    <dt class="font-medium text-gray-900">Volume 24H</dt>
+                    <dd class="text-gray-700 sm:col-span-2">
+                        max
+                        <input id="volume-max" type="number" min="100"
+                            class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                        min
+                        <input id="volume-min" type="number" min="100"
+                            class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                    </dd>
+                </div>
+                <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                    <dt class="font-medium text-gray-900">Supply ratio</dt>
+                    <dd class="text-gray-700 sm:col-span-2">
+                        max
+                        <input id="supply-max" type="number" min="0" step="0.01" max="1"
+                            class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                        min
+                        <input id="supply-min" type="number" min="0" step="0.01" max="1"
+                            class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                    </dd>
+                </div>
+                <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                    <dt class="font-medium text-gray-900">Market cap</dt>
+                    <dd class="text-gray-700 sm:col-span-2">
+                        max
+                        <input id="marketcap-max" type="number" min="100"
+                            class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                        min
+                        <input id="marketcap-min" type="number" min="100"
+                            class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                    </dd>
+                </div>
+                <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                    <dt class="font-medium text-gray-900">Vol 24h / Mcap</dt>
+                    <dd class="text-gray-700 sm:col-span-2">
+                        max
+                        <input id="vol-to-mcap-max" type="number"
+                            class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                        min
+                        <input id="vol-to-mcap-min" type="number"
+                            class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                    </dd>
+                </div>
+            </dl>
+        </div>
+    </aside>
+
+
+    <div class="overflow-x-auto p-3 md:w-3/4 w-full">
+        <table class="w-full text-sm text-left rtl:text-right text-gray-500 dark:text-gray-400 whitespace-nowrap">
+            <thead class="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
+                <tr>
+                    <th scope="col" class="p-3" id="symbol">
+                        Symbol
+                    </th>
+                    <th scope="col" class="p-3" id="markets">
+                        Markets
+                    </th>
+                    <th scope="col" class="p-3" id="volume" >
+                        <div>Volume</div>
+                        <div class="ml-1 sorting-indicator"></div>
+                    </th>
+                    <th scope="col" class="p-3" id="market_cap">
+                        Market cap
+                        <div class="ml-1 sorting-indicator"></div>
+                    </th>
+                    <th scope="col" class="p-3" id="price">
+                        Price
+                    </th>
+                    <th scope="col" class="p-3" id="ath_prox">
+                        ATH/ATL proximity
+                        <div class="ml-1 sorting-indicator"></div>
+                    </th>
+                    <th scope="col" class="p-3" id="ath_ratio">
+                        ATH %
+                        <div class="ml-1 sorting-indicator"></div>
+                    </th>
+                    <th scope="col" class="p-3" id="atl_ratio">
+                        ATL x
+                        <div class="ml-1 sorting-indicator"></div>
+                    </th>
+                    <th scope="col" class="p-3" id="supply_ratio">
+                        Supply ratio
+                        <div class="ml-1 sorting-indicator"></div>
+                    </th>
+                    <th scope="col" class="p-3" id="price_change_percentage_24h">
+                        Price change 24h
+                        <div class="ml-1 sorting-indicator"></div>
+                    </th>
+                    <th scope="col" class="p-3" id="high_24h">
+                        High/low 24h
+                        <div class="ml-1 sorting-indicator"></div>
+                    </th>
+                    <th scope="col" class="p-3" id="volume24h_to_mcap">
+                        Vol 24h / MCap
+                        <div class="sorting-indicator"></div>
+                    </th>
+                </tr>
+            </thead>
+            <tbody id="symbol-list">
+                <tr class="bg-white dark:bg-gray-800">
+                    <th scope="row"
+                        class="p-3 font-medium text-gray-900 whitespace-nowrap dark:text-white flex flex-row items-center">
+                        <p>Symbols not loaded.</p>
+                    </th>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<script>
+    let symbols = [];
+    let marketFilter = [];
+    let sortBy = null;
+    const symbolTable = document.getElementById('symbol-list');
+    const athProxMax = document.getElementById('ath-prox-max');
+    const athProxMin = document.getElementById('ath-prox-min');
+    const volumeMax = document.getElementById('volume-max');
+    const volumeMin = document.getElementById('volume-min');
+    const supplyMax = document.getElementById('supply-max');
+    const supplyMin = document.getElementById('supply-min');
+    const marketcapMax = document.getElementById('marketcap-max');
+    const marketcapMin = document.getElementById('marketcap-min');
+    const volToMcapMax = document.getElementById('vol-to-mcap-max');
+    const volToMcapMin = document.getElementById('vol-to-mcap-min');
+    const marketSelectors = document.querySelectorAll('.market-selector');
+    const search = document.getElementById('search');
+    const inputs = [volumeMax, volumeMin, supplyMax, supplyMin, marketcapMax, marketcapMin, athProxMax, athProxMin, volToMcapMax, volToMcapMin, search].concat(Array.from(marketSelectors));
+    const csrf_token = document.getElementsByName('csrfmiddlewaretoken')[0].value;
+
+    const tableHeaders = document.querySelectorAll('th');
+
+    let debounceTimeout;
+
+    tableHeaders.forEach(header => {
+        if (header.id === 'symbol' || header.id === 'price' || header.id === 'markets') return;
+        header.addEventListener('click', () => {
+            let direction = null;
+            // remove all other sorting indicators
+            tableHeaders.forEach(h => {
+                if (h !== header) {
+                    h.classList.remove('sorting-asc');
+                    h.classList.remove('sorting-desc');
+                    h.classList.remove('bg-gray-200');
+                }
+            });
+            if (header.classList.contains('sorting-asc')) {
+                header.classList.remove('sorting-asc');
+                header.classList.add('sorting-desc');
+                header.classList.add('bg-gray-200')
+                direction = 'desc';
+                sortBy = header.id;
+            } else if (header.classList.contains('sorting-desc')) {
+                header.classList.remove('sorting-desc');
+                header.classList.remove('bg-gray-200');
+                direction = null;
+                sortBy = null;
+            } else {
+                header.classList.add('sorting-asc');
+                header.classList.add('bg-gray-200')
+                direction = 'asc';
+                sortBy = header.id;
+            }
+            
+            
+            if (direction == 'asc' && sortBy) {
+                sortBy = `-${sortBy}`;
+            }
+            fetchSymbols();
+        });
+    });
+
+    // fetch symbols on input change
+    inputs.forEach(input => {
+        input.addEventListener('input', () => {
+            clearTimeout(debounceTimeout);
+            debounceTimeout = setTimeout(fetchSymbols, 150);
+        });
+    });
+
+    // fetch symbols on page load
+    fetchSymbols();
+    
+    function fetchSymbols() {
+        
+        marketSelectors.forEach(selector => {
+            if (selector.checked) {
+                marketFilter.push(selector.value);
+            } else {
+                marketFilter = marketFilter.filter(market => market !== selector.value);
+            }
+        });
+        fetch('', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrf_token
+            },
+            body: JSON.stringify({
+                csrfmiddleware_token: csrf_token,
+                athProxMax: athProxMax.value,
+                athProxMin: athProxMin.value,
+                volumeMax: volumeMax.value,
+                volumeMin: volumeMin.value,
+                supplyMax: supplyMax.value,
+                supplyMin: supplyMin.value,
+                marketcapMax: marketcapMax.value,
+                marketcapMin: marketcapMin.value,
+                volToMcapMax: volToMcapMax.value,
+                volToMcapMin: volToMcapMin.value,
+                sortBy: sortBy,
+                markets: marketFilter,
+                search: search.value,
+            }),
+        }).then(response => {
+            if (response.ok) {
+                return response.json();
+            }
+            throw new Error('Request failed.');
+        }).then(data => {
+            symbols = data.symbols;
+            document.getElementById('symbol-count').innerText = data.count;
+            renderSymbols();
+        }).catch(error => {
+            console.log(error);
+        });
+    }
+
+
+    const favHeart       = '<svg class="w-[24px] h-[24px] text-gray-800 dark:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24"><path stroke="#a61414" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12.01 6.001C6.5 1 1 8 5.782 13.001L12.011 20l6.23-7C23 8 17.5 1 12.01 6.002Z"/></svg>'
+    const favHeartFilled = '<svg class="w-[24px] h-[24px] text-gray-800 dark:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="#a61414" viewBox="0 0 24 24"><path d="m12.75 20.66 6.184-7.098c2.677-2.884 2.559-6.506.754-8.705-.898-1.095-2.206-1.816-3.72-1.855-1.293-.034-2.652.43-3.963 1.442-1.315-1.012-2.678-1.476-3.973-1.442-1.515.04-2.825.76-3.724 1.855-1.806 2.201-1.915 5.823.772 8.706l6.183 7.097c.19.216.46.34.743.34a.985.985 0 0 0 .743-.34Z"/></svg>'
+    function toggleFavorite(cid) {
+            const favButton = document.querySelector(`button[data-cid="${cid}"]`);
+            let isFavorite = false;
+            if (favButton.classList.contains('favorite')) {
+                favButton.innerHTML = favHeart;
+                favButton.classList.remove('favorite');
+            } else {
+                favButton.innerHTML = favHeartFilled;
+                favButton.classList.add('favorite');
+                isFavorite = true;
+            }
+            fetch('/favorites/modify/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrf_token
+                },
+                body: JSON.stringify({
+                    csrfmiddleware_token: csrf_token,
+                    cid: cid,
+                    isFavorite: isFavorite,
+                }),
+            }).then(response => {
+                if (response.ok) {
+                    return response.json();
+                }
+                throw new Error('Request failed.');
+            }).then(data => {
+                console.log(data);
+            }).catch(error => {
+                console.log(error);
+            });
+        }
+
+    function renderSymbols(nextPage=false, add=[]) {
+        if (!nextPage) {
+            symbolTable.innerHTML = '';
+        } else {
+            symbols = add;
+        }
+        const binanceIcon = 'https://cryptologos.cc/logos/binance-coin-bnb-logo.png';
+        const kucoinIcon = 'https://cryptologos.cc/logos/kucoin-shares-kcs-logo.png';
+        const mexcIcon = 'https://cryptologos.cc/logos/mxc-mxc-logo.png';
+        symbols.forEach(symbol => {
+            const tr = document.createElement('tr');
+            let heart = symbol.is_favorite ? favHeartFilled : favHeart;
+            let isFavorite = symbol.is_favorite ? 'favorite' : '';
+            let marketIcons = '';
+            if (symbol.markets.includes('BINANCE')) {
+                marketIcons += `<img src="${binanceIcon}" alt="Binance" class="w-6 h-6 mr-1">`;
+            }
+            if (symbol.markets.includes('KUCOIN')) {
+                marketIcons += `<img src="${kucoinIcon}" alt="Kucoin" class="w-6 h-6 mr-1">`;
+            }
+            if (symbol.markets.includes('MEXC')) {
+                marketIcons += `<img src="${mexcIcon}" alt="MEXC" class="w-6 h-6 mr-1">`;
+            }
+            tr.innerHTML = `
+                <th scope="row" class="p-3 font-medium text-gray-900 whitespace-nowrap dark:text-white flex flex-row items-center w-max">
+                    <button class="hover:text-blue-500 mr-3 ${isFavorite}" onclick="toggleFavorite('${symbol.cid}')" data-cid=${symbol.cid}>${heart}</button>
+                    <a href="/symbol/${symbol.cid}/" class="hover:text-blue-500 whitespace-nowrap flex items-center"><img src="${symbol.image}" alt="${symbol.base}" class="w-6 h-6 mr-3"> ${symbol.base}</a>
+                </th>
+                <td class="p-3">
+                    <div class="flex w-max"> ${marketIcons} </div>
+                </td>
+                <td class="p-3">
+                    $ ${symbol.volume ? symbol.volume.toLocaleString() : '---'}
+                </td>
+                <td class="p-3">
+                    $ ${symbol.market_cap ? symbol.market_cap.toLocaleString() : '---'}
+                </td>
+                <td class="p-3">
+                    $ ${symbol.price ? symbol.price : '---'}
+                </td>
+                <td class="p-3">
+                    ${symbol.ath_prox ? symbol.ath_prox.toFixed(2) : '---'} / ${symbol.atl_prox ? symbol.atl_prox.toFixed(2) : '---'}
+                </td>
+                <td class="p-3">
+                    ${symbol.ath_ratio ? symbol.ath_ratio.toFixed(2) : '---'}%
+                </td>
+                <td class="p-3">
+                    ${symbol.atl_ratio ? symbol.atl_ratio.toFixed(2) : '---'}x
+                </td>
+                <td class="p-3">
+                    ${symbol.supply_ratio ? symbol.supply_ratio.toFixed(2) : '---'}
+                </td>
+                <td class="p-3">
+                    ${symbol.price_change_percentage_24h ? symbol.price_change_percentage_24h.toFixed(2) : '---'}%
+                </td>
+                <td class="p-3">
+                    $ ${symbol.high_24h ? symbol.high_24h : '---'} / $ ${symbol.low_24h ? symbol.low_24h : '---'}
+                </td>
+                <td class="p-3">
+                    ${symbol.volume24h_to_mcap ? symbol.volume24h_to_mcap.toFixed(2) : '---'}
+                </td>
+            `;
+            symbolTable.appendChild(tr);
+        });
+    }
+
+    let nextStart = 50;
+    let nextEnd = 100;
+    let stopLoadingMore = false;
+    function loadMore() {
+        if (symbols.length < 50) return;
+        fetch('', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrf_token
+            },
+            body: JSON.stringify({
+                csrfmiddleware_token: csrf_token,
+                athProxMax: athProxMax.value,
+                athProxMin: athProxMin.value,
+                volumeMax: volumeMax.value,
+                volumeMin: volumeMin.value,
+                supplyMax: supplyMax.value,
+                supplyMin: supplyMin.value,
+                marketcapMax: marketcapMax.value,
+                marketcapMin: marketcapMin.value,
+                volToMcapMax: volToMcapMax.value,
+                volToMcapMin: volToMcapMin.value,
+                sortBy: sortBy,
+                markets: marketFilter,
+                start: nextStart,
+                end: nextEnd,
+            }),
+        }).then(response => {
+            if (response.ok) {
+                return response.json();
+            }
+            throw new Error('Request failed.');
+        }).then(data => {
+            if (data.length < 50) {
+                stopLoadingMore = true;
+            }
+            renderSymbols(true, data.symbols);
+            nextStart += 50;
+            nextEnd += 50;
+        }).catch(error => {
+            console.log(error);
+        });
+    }
+
+    window.onscroll = function(ev) {
+        if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight) {
+            loadMore();
+        }
+    };
+
+</script>
+
+{% endblock %}

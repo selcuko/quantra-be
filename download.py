@@ -1,9 +1,14 @@
+import os
+import sys
 from datetime import datetime, timedelta
-import os, sys
+from typing import Optional
 
 import pytz
-from markets import get_market
+import django
+django.setup()
+
 from logger import logger
+from markets import get_market
 
 
 def _get_filename(market_name, symbol):
@@ -78,42 +83,41 @@ def _get_starting_point(filename):
             return datetime.fromtimestamp(int(line.split(',')[0]), tz=pytz.UTC)
 
 
-def _validate_file(filename, interpolate=True, drop_duplicates=True):
+def _validate_file(filename, interpolate=True, drop_duplicates=True) -> datetime|bool:
     """Returns last datetime on record"""
     if not os.path.exists(filename):
         return True
     infile = open(filename, 'r')
-    notempty = False
     last = None
     logger.debug(f'Validating file {filename}')
+    line = None
     for i, line in enumerate(infile):
-        notempty = True
         ts = int(line.split(',')[0])
         if last and ts - 60 != last:
             if ts == last:
                 if drop_duplicates:
-                    logger.debug(f'Duplicate candles detected in file {filename}:{i+1}, fixing it by dropping duplicates.')
+                    logger.debug(f'Duplicate candles detected in file {filename}:{i + 1}, fixing it by dropping duplicates.')
                     infile.close()
                     _drop_duplicates(filename)
                     return _validate_file(filename, interpolate, drop_duplicates)
                 else:
-                    logger.error(f'Duplicate candles detected in file {filename}:{i+1} but drop duplicates is disabled.')
+                    logger.error(f'Duplicate candles detected in file {filename}:{i + 1} but drop duplicates is disabled.')
                     return False
             elif (ts - last) % 60:
-                logger.error(f'Found an irregular discontinuity at line {i+1}, halted.')
+                logger.error(f'Found an irregular discontinuity at line {i + 1}, halted.')
                 return False
             elif ts - last > 60:
                 if interpolate:
-                    logger.debug(f'Gaps detected in file {filename}:{i+1}, fixing it by interpolating.')
+                    logger.debug(f'Gaps detected in file {filename}:{i + 1}, fixing it by interpolating.')
                     infile.close()
                     _interpolate_gaps(filename)
                     return _validate_file(filename, interpolate, drop_duplicates)
                 else:
-                    logger.error(f'Gaps detected in file {filename}:{i+1} but interpolation is disabled.')
+                    logger.error(f'Gaps detected in file {filename}:{i + 1} but interpolation is disabled.')
                     return False
         last = int(line.split(',')[0])
     logger.debug(f'File {filename} is valid.')
-    if notempty:
+    if line:
         return datetime.fromtimestamp(int(line.split(',')[0]) + 60, tz=pytz.UTC).replace(second=0, microsecond=0)
     return True
 
@@ -129,12 +133,13 @@ def _handle_earlier_starting(market_name, symbol, start, lasttime):
     os.remove(filename + '.tmp')
 
 
-def download_symbol(market_name:str, symbol:str, start:datetime, end:datetime=None, interpolate=True, drop_duplicates=True):
+def download_symbol(market_name: str, symbol: str, start: datetime, end:Optional[datetime]=None, interpolate=True,
+                    drop_duplicates=True):
     market = get_market(market_name)
     symbol = symbol.upper()
     lasttime = _validate_file(_get_filename(market.name, symbol), interpolate, drop_duplicates)
     starting = _get_starting_point(_get_filename(market.name, symbol))
-    if starting and start < starting:
+    if starting and start < starting and isinstance(lasttime, datetime):
         logger.info(f'Starting date {start} is earlier than first kline on record {starting}.')
         _handle_earlier_starting(market.name, symbol, start, starting)
         return download_symbol(market_name, symbol, lasttime, end)
@@ -162,18 +167,20 @@ def download_symbol(market_name:str, symbol:str, start:datetime, end:datetime=No
         klines = market.get_klines(symbol, '1 min', prev_batch_end)
         if len(klines) == 0:
             if empty_file:
-                logger.error('There are no records of {symbol} on {market.name} at {prev_batch_end}. Please confirm your settings.')
+                logger.error(f'There are no records of {symbol} on {market.name} at {prev_batch_end}. Please confirm your settings.')
             break
         empty_file = False
         if prev_batch_end == klines[-1][0]:
             break
-        prev_batch_end = klines[-1][0] + timedelta(minutes=1)
+        try:
+            prev_batch_end = klines[-1][0] + timedelta(minutes=1)
+        except:
+            print(klines[-1])
         for kline in klines:
             new_klines += 1
             line = f'{int(kline[0].timestamp())},{kline[1]},{kline[2]},{kline[3]},{kline[4]},{kline[5]}\n'
             outfile.write(line)
         logger.info(f'[DownloadInProgress][{datetime.now(tz=pytz.UTC)}] Klines: {new_klines} | Last kline: {klines[-1][0]}')
-    if new_klines: print()
     outfile.close()
     validation_ok = _validate_file(_get_filename(market.name, symbol), interpolate, drop_duplicates)
     if not validation_ok:
@@ -184,12 +191,12 @@ def download_symbol(market_name:str, symbol:str, start:datetime, end:datetime=No
 
 
 if __name__ == '__main__':
-    symbol = sys.argv[1] if len(sys.argv) > 1 else 'doge-usdt'
-    market = sys.argv[2] if len(sys.argv) > 2 else 'kucoin'
+    symbol_arg = sys.argv[1] if len(sys.argv) > 1 else 'doge-usdt'
+    market_arg = sys.argv[2] if len(sys.argv) > 2 else 'kucoin'
     download_symbol(
-        market, 
-        symbol, 
-        start=datetime(2023, 1, 10, tzinfo=pytz.UTC), 
+        market_arg,
+        symbol_arg,
+        start=datetime(2023, 1, 10, tzinfo=pytz.UTC),
         end=datetime(2023, 9, 10, tzinfo=pytz.UTC),
-        interpolate=False, 
+        interpolate=False,
         drop_duplicates=False)

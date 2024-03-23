@@ -1,6 +1,7 @@
-import os
 import json
 import logging
+import os
+
 from logtail import LogtailHandler
 
 
@@ -12,15 +13,15 @@ class ColoredFormatter(logging.Formatter):
     red = "\x1b[31;21m"
     bold_red = "\x1b[31;1m"
     reset = "\x1b[0m"
-    format = "%(threadName)s::%(asctime)s %(levelname)s %(filename)s:%(lineno)d >> %(message)s"
+    log_format = "%(threadName)s::%(asctime)s %(levelname)s %(filename)s:%(lineno)d >> %(message)s"
 
     FORMATS = {
-        logging.DEBUG: grey + format + reset,
-        logging.INFO: grey + format + reset,
-        logging.WARNING: yellow + format + reset,
-        logging.ERROR: red + format + reset,
-        logging.CRITICAL: bold_red + format + reset,
-        logging.FATAL: bold_red + format + reset
+        logging.DEBUG: grey + log_format + reset,
+        logging.INFO: grey + log_format + reset,
+        logging.WARNING: yellow + log_format + reset,
+        logging.ERROR: red + log_format + reset,
+        logging.CRITICAL: bold_red + log_format + reset,
+        logging.FATAL: bold_red + log_format + reset
     }
 
     def format(self, record):
@@ -30,24 +31,35 @@ class ColoredFormatter(logging.Formatter):
 
 
 class LogTailFormatter(logging.Formatter):
-    format = "%(processName)s %(asctime)s %(levelname)s %(filename)s:%(lineno)d >> %(message)s"
+    log_format = "%(processName)s %(asctime)s %(levelname)s %(filename)s:%(lineno)d >> %(message)s"
 
     def format(self, record):
-        formatter = logging.Formatter(self.format)
+        formatter = logging.Formatter(self.log_format)
         return formatter.format(record)
+
+
+class DetailPrefixFilter(logging.Filter):
+    # 'loop' param is in extras, print that too
+    def filter(self, record):
+        if 'loop' in record.__dict__:
+            loop = record.__dict__.get('loop')
+            record.msg = f"[{loop!s}] {record.msg}"
+        return True
 
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-formatter = ColoredFormatter()
+colored_formatter = ColoredFormatter()
+plain_formatter = logging.Formatter("%(threadName)s::%(asctime)s %(levelname)s %(filename)s:%(lineno)d >> %(message)s")
 
 console_handler = logging.StreamHandler()
-console_handler.setFormatter(formatter)
+console_handler.setFormatter(colored_formatter)
 console_handler.setLevel(logging.DEBUG)
 logger.addHandler(console_handler)
 
 file_handler = logging.FileHandler('quant-be.log')
-file_handler.setFormatter(formatter)
+file_handler.setFormatter(plain_formatter)
+file_handler.setLevel(logging.WARNING)
 logger.addHandler(file_handler)
 
 LOGTAIL_TOKEN = os.getenv('LOGTAIL_TOKEN')
@@ -56,7 +68,29 @@ if not LOGTAIL_TOKEN and os.path.exists('api.json'):
 
 if LOGTAIL_TOKEN:
     logtail_handler = LogtailHandler(LOGTAIL_TOKEN)
-    logtail_handler.setFormatter(formatter)
+    logtail_handler.setFormatter(colored_formatter)
     logger.addHandler(logtail_handler)
-else:
-    logger.warning('LOGTAIL_TOKEN not set, logging locally.')
+
+
+class NotificationHandler(logging.Handler):
+    def emit(self, record):
+        from quantapi.models import Notification
+        if record.levelno <= logging.WARNING:
+            return
+        message = record.getMessage()
+        if 'loop' in record.__dict__:
+            loop = record.__dict__.get('loop')
+            message = f"[{loop!s}] {message}"
+        n_type = Notification.Type.LOG
+        if 'n_type' in record.__dict__:
+            n_type = record.__dict__.get('n_type')
+        n = Notification.objects.create(
+            message=message,
+            severity=record.levelname,
+            notification_type=n_type
+        )
+        n.send()
+
+
+logger.addHandler(NotificationHandler())
+logger.addFilter(DetailPrefixFilter())

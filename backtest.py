@@ -1,64 +1,126 @@
 from datetime import datetime
-from markets import Market
+import json
+from typing import Optional
+import threading
+
+from download import download_symbol
+from markets import IMarket
 from models import OHLCVDataset
+from strategy import get_strategy
+from strategy.interface import Strategy
 from testman import TestManager
-from datalayer import add_session, db_session as sql_session
-from datalayer import get_market as get_db_market
-from datalayer import add_symbol as add_db_symbol
+from quantapi.models import Backtest, Strategy as StrategyModel
 
-def analyze(ds:OHLCVDataset, strategy:callable, freq:str='15 min', start:datetime=None, end:datetime=None, symbol:str=None, market:Market=None, verbose=False, capital:float=1000):
+from logger import logger
+
+def analyze(ds:OHLCVDataset, symbol:str, market:IMarket, strategy:Strategy, freq:str='15 min', start:Optional[datetime]=None, end:Optional[datetime]=None, verbose=False, capital:float=1000, backtest=None):
     """Analyze the dataset and return a report."""
-    print(f'Starting backtest for {symbol}@{market.name} from {start} to {end}')
-    db_market = get_db_market(market.name)
-    db_symbol = add_db_symbol(symbol, db_market)
-    db_session = add_session(
-        symbol=db_symbol,
-        market=db_market,
-        strategy=strategy.name,
-        strategy_parameters=strategy.params,
-        test_type='backtest',
-        freq=freq,
-        planned_shutdown=end)
-    
-    ds = ds.change(freq)
-    ds = ds[start:end]
-    ds = strategy(ds)
+    print(f'Starting backtest for {symbol}@{market} from {start} to {end}')
+    assert start is not None, 'Start date is required'
+    if backtest is None:
+        backtest = Backtest.objects.create(
+            start=start,
+            end=end,
+            freq=freq,
+            symbol=symbol,
+            market=str(market),
+            status='INIT'
+        )
+    if end is None:
+        end = datetime.now(tz=None)
+    else:
+        end = end.replace(tzinfo=None)
+    start = start.replace(tzinfo=None)
+    try:
+        ds = ds.change(freq)
+        ds = ds[start:end]
+        ds = strategy(ds)
 
-    testman = TestManager(
-        symbol=symbol, 
-        market=market, 
-        strategy=strategy, 
-        start=start, 
-        end=end, 
-        interval=freq, 
-        capital=capital, 
-        type='backtest',
-        commission={'buyer': 0.002, 'seller': 0.002})
+        testman = TestManager(
+            symbol=symbol, 
+            market=market, 
+            strategy=strategy, 
+            start=start, 
+            end=end, 
+            interval=freq, 
+            capital=capital, 
+            type='backtest',
+            commission={'buyer': 0.002, 'seller': 0.002},
+            assets=0)
+        backtest.status = Backtest.Status.ONGOING
+        backtest.save()
+        for i, row in ds.iterrows():
+            if row['buy']:
+                ok = testman.buy({'time': i, **row.to_dict()})
+                if ok and verbose:
+                    print(testman.summary())
+            elif row['sell']:
+                ok = testman.sell({'time': i, **row.to_dict()})
+                if ok and verbose:
+                    print(testman.summary())
+        
+        report = testman.shutdown()
+        backtest.status = Backtest.Status.COMPLETED
+        backtest.report = report
+        backtest.save()
+    except Exception as e:
+        logger.error(f'Error while backtesting {symbol}@{market}', exc_info=True)
+        backtest.status = Backtest.Status.ERROR
+        backtest.report = repr(e)
+        backtest.save()
+    return backtest
 
-    for i, row in ds.iterrows():
-        if row['buy']:
-            ok = testman.buy({'time': i, **row.to_dict()})
-            if ok and verbose:
-                print(testman.summary())
-        elif row['sell']:
-            ok = testman.sell({'time': i, **row.to_dict()})
-            if ok and verbose:
-                print(testman.summary())
-    
-    testman_dir = testman.shutdown()
-    db_session.status = 'completed'
-    db_session.end = datetime.utcnow()
-    db_session.testman_dir = testman_dir
-    sql_session.commit()
-    return testman
+
+def async_analyze(**kwargs):
+    start = kwargs.pop('start')
+    end = kwargs.pop('end')
+    backtest = Backtest.objects.create(
+            start=start,
+            end=end,
+            freq=kwargs['freq'],
+            symbol=kwargs['symbol'],
+            market=kwargs['market'],
+            status='INIT',
+            parameters=json.dumps(kwargs),
+            use_heikin_ashi=kwargs.get('candle_type') == 'heikin_ashi')
+    def download_and_analyze():
+        try:
+            strategy = get_strategy('v1')({
+                'stochrsi': {'length': kwargs.get('stoch_length')},
+                'volume': {'ma': kwargs.get('volume_ma')},
+                'source': kwargs.get('source'),
+            })
+            if not (strategy_model := StrategyModel.objects.filter(name='v1').first()):
+                strategy_model = StrategyModel.objects.create(name='v1')
+                strategy_model.save()
+        except Exception as e:
+            logger.error(f'Error while loading strategy {kwargs.get("strategy_name", "v1")}', exc_info=True)
+            backtest.status = Backtest.Status.ERROR
+            backtest.report = repr(e)
+            backtest.save()
+            return
+        download_symbol(kwargs['market'], kwargs['symbol'], start, end)
+        ds = OHLCVDataset.from_csv(f'./data/{kwargs["symbol"]}-{kwargs["market"]}.csv')
+        if kwargs.get('candle_type') == 'heikin_ashi':
+            ds = ds.convert_to_heikin_ashi()
+        analyze(ds, symbol=kwargs['symbol'], market=kwargs['market'], strategy=strategy, freq=kwargs['freq'], start=start   , end=end, backtest=backtest)
+    analyze_thread = threading.Thread(target=download_and_analyze)
+    analyze_thread.start()
+    return backtest
 
 
 if __name__ == '__main__':
-    from strategy import get_strategy
     from markets import get_market
     symbol = 'XRP-USDT'
     market = get_market('KUCOIN')
-    ds = OHLCVDataset.from_csv(f'./data/{symbol}-{market.name}.csv')
-    strategy = get_strategy('v2')()
-    tm = analyze(ds, strategy, freq='15 min', symbol=symbol, market=market, verbose=True, start=datetime(2023, 7, 1), end=datetime(2023, 9, 13))
-    
+    ds = OHLCVDataset.from_csv(f'./data/{symbol}-{market.name}.csv', candle_type='heikin_ashi')
+    strategy = get_strategy('v1')()
+    tm = analyze(
+        ds=ds, 
+        strategy=strategy, 
+        freq='15 min', 
+        symbol=symbol, 
+        market=market, 
+        verbose=True, 
+        start=datetime(2023, 7, 1), 
+        end=datetime(2023, 9, 13))
