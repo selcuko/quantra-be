@@ -16,6 +16,7 @@ from logger import logger
 def analyze(ds:OHLCVDataset, symbol:str, market:IMarket, strategy:Strategy, freq:str='15 min', start:Optional[datetime]=None, end:Optional[datetime]=None, verbose=False, capital:float=1000, backtest=None):
     """Analyze the dataset and return a report."""
     print(f'Starting backtest for {symbol}@{market} from {start} to {end}')
+    assert start is not None, 'Start date is required'
     if backtest is None:
         backtest = Backtest.objects.create(
             start=start,

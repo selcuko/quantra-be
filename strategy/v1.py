@@ -21,7 +21,7 @@ class StrategyV1(Strategy):
         self.params = merge_dicts(self.default_params(), params)
         self.name = 'StrategyV1.Lisa.PandasTA'
         self.ds = OHLCVDataset(pd.DataFrame())
-        self.freq = None
+        self.freq = ''
     
     def __call__(self, ds:OHLCVDataset):
         return self.calculate(ds)

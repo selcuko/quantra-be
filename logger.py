@@ -41,8 +41,9 @@ class LogTailFormatter(logging.Formatter):
 class DetailPrefixFilter(logging.Filter):
     # 'loop' param is in extras, print that too
     def filter(self, record):
-        if hasattr(record, 'loop'):
-            record.msg = f"[{record.loop!s}] {record.msg}"
+        if 'loop' in record.__dict__:
+            loop = record.__dict__.get('loop')
+            record.msg = f"[{loop!s}] {record.msg}"
         return True
 
 
@@ -77,11 +78,12 @@ class NotificationHandler(logging.Handler):
         if record.levelno <= logging.WARNING:
             return
         message = record.getMessage()
-        if hasattr(record, 'loop'):
-            message = f"[{record.loop!s}] {message}"
+        if 'loop' in record.__dict__:
+            loop = record.__dict__.get('loop')
+            message = f"[{loop!s}] {message}"
         n_type = Notification.Type.LOG
-        if hasattr(record, 'n_type'):
-            n_type = record.n_type
+        if 'n_type' in record.__dict__:
+            n_type = record.__dict__.get('n_type')
         n = Notification.objects.create(
             message=message,
             severity=record.levelname,
