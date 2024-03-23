@@ -136,6 +136,10 @@
                 <dd class="text-gray-700 sm:col-span-2">{{ session.analytics.max_hold_time }}</dd>
             </div>
             <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">PNL</dt>
+                <dd class="text-gray-700 sm:col-span-2">$ {{ session.analytics.total_pnl|floatformat:2|default:'-' }} ({{ session.analytics.weighted_pnl_pct|floatformat:2|default:'-' }}%)</dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
                 <dt class="font-medium text-gray-900">Candle source</dt>
                 <dd class="text-gray-700 sm:col-span-2">{{ session.get_candle_source_display }}</dd>
             </div>
@@ -337,7 +341,7 @@ rangeInputSell.addEventListener('input', () => {
                         <span
                             class="nowrap bg-gray-100 text-gray-800 mr-2 px-2.5 py-0.5 rounded-full dark:bg-gray-900 dark:text-gray-300">
                             {{ order.signal.timestamp }} 
-                                                    </span>
+                        </span>
                         {% if order.force %}
                             <span class="nowrap bg-blue-100 text-blue-800 mr-2 px-2.5 py-0.5 rounded-full dark:bg-blue-900 dark:text-blue-300">
                             FORCE

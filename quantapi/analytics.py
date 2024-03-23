@@ -115,8 +115,8 @@ class SessionAnalytics:
         """
         buy_orders = Order.objects.filter(signal__session=self.session, status=Order.Status.FILLED, side=Order.Side.BUY)
         sell_orders = Order.objects.filter(signal__session=self.session, status=Order.Status.FILLED, side=Order.Side.SELL)
-        weighted_pnl_sum =  [ order.pnl          * order.deal_size for order in sell_orders if order.pnl          and order.deal_size ]
-        weighted_cost_sum = [ order.average_cost * order.deal_size for order in buy_orders  if order.average_cost and order.deal_size ]
+        weighted_pnl_sum =  [ order.pnl / order.deal_size for order in sell_orders if order.pnl and order.deal_size ]
+        weighted_cost_sum = [ order.deal_size for order in sell_orders  if order.deal_size ]
         return sum(weighted_pnl_sum) * 100 / sum(weighted_cost_sum) if weighted_cost_sum else None
 
     @property
@@ -164,29 +164,31 @@ class OrderAnalytics:
         Calculate the average cost of the buy order.        
 
         """
-        orders = Order.objects.filter(signal__session=self.order.session, status=Order.Status.FILLED)
+        orders = self.order.session.orders.filter(status=Order.Status.FILLED)
+        assets = 0
+
+        orders_except_self = orders.exclude(pk=self.order.pk)
+        for order in orders_except_self:
+            if order.side == Order.Side.BUY:
+                assets += order.deal_size
+            elif order.side == Order.Side.SELL:
+                assets -= order.deal_size
 
         if self.order.side != Order.Side.BUY:
             return
 
-        total_buy_cost        = sum([(order.deal_funds or 0) for order in orders if order.side == Order.Side.BUY])
-        total_sell_cost       = sum([(order.deal_funds or 0) for order in orders if order.side == Order.Side.SELL])
-        total_buy_amount  = sum([(order.deal_size or 0) for order in orders if order.side == Order.Side.BUY])
-        total_sell_amount = sum([(order.deal_size or 0) for order in orders if order.side == Order.Side.SELL])
-        total_cost = total_buy_cost - total_sell_cost
-        total_amount = total_buy_amount - total_sell_amount
-        avg_cost = total_cost / total_amount if total_amount else None
-        print(f"""
-        total_cost: {total_cost}
-        total_buy_amount: {total_buy_amount}
-        total_sell_amount: {total_sell_amount}
-        total_amount: {total_amount}
-        avg_cost: {avg_cost}""")
+        
+        avg_cost = (((self.last_average_cost or 0) * assets) + (self.order.price * self.order.deal_size)) / (assets + self.order.deal_size)
+        print(f"""{self.last_average_cost=}, {assets=}, {self.order.price=}, {self.order.deal_size=}, {avg_cost=}""")
         return avg_cost
 
     @property
     def last_average_cost(self):
-        last_buy = Order.objects.filter(signal__session=self.order.session, status=Order.Status.FILLED, side=Order.Side.BUY).last()
+        last_buy = self.order.session.orders.filter(status=Order.Status.FILLED, side=Order.Side.BUY)
+        if self.order.side == Order.Side.BUY:
+            last_buy = last_buy.exclude(pk=self.order.pk).last()
+        else:
+            last_buy = last_buy.last()
         if not last_buy:
             return
         return last_buy.average_cost

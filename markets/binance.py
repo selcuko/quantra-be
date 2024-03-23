@@ -7,7 +7,6 @@ from decimal import Decimal
 from typing import Callable, Literal, Optional
 
 import pytz
-from regex import F
 import requests
 from binance.client import Client
 
@@ -301,9 +300,10 @@ class BinanceMarket(IMarket):
 
     def get_symbols(self) -> dict[str, 'MarketSymbol']:
         from quantapi.models import MarketSymbol
-        self.symbols = { self._standardize_symbol(symbol['symbol']): self._prep_symbol(symbol) for symbol in self.client.get_exchange_info()['symbols']}
+        self.symbols = { self._standardize_symbol(symbol['symbol']): self._prep_symbol(symbol) for symbol in self.client.get_exchange_info().get('symbols', []) }
         self.symbols = { key: value for key, value in self.symbols.items() if value.quote == 'USDT'}
-        MarketSymbol.objects.bulk_create(self.symbols.values(), ignore_conflicts=True)
+        if self.market: 
+            MarketSymbol.objects.bulk_create(self.symbols.values(), ignore_conflicts=True)
         return self.symbols
 
     @authentication_required
@@ -318,7 +318,7 @@ class BinanceMarket(IMarket):
             funds = float_to_precision(Decimal(funds), Decimal(symbol.quote_precision))
         if quantity and symbol.base_precision:
             quantity = float_to_precision(Decimal(quantity), Decimal(symbol.base_precision))
-        filters = self.market.filters(symbol)
+        filters = self.market.filters(symbol) if self.market else {}
         lot_step = filters.get('lot_step')
         if lot_step and quantity:
             quantity = float_to_precision(Decimal(quantity), Decimal(lot_step))

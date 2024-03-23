@@ -60,10 +60,13 @@ class LiveLoop:
             strategy_parameters=json.dumps(strategy.params)
         )
 
-        logger.info(f'LiveLoop initialized.', extra={'loop': self})
+        logger.info(f'LiveLoop initialized.', extra={'loop': repr(self)})
 
     def __str__(self):
         return f'LL:{self.symbol.base}@{self.market.exchange_name}:{self.freq}'
+    
+    def __repr__(self):
+        return f'{self.symbol.base}@{self.market.exchange_name}:{self.freq}'
 
     def precheck(self):
         """Prechecks before starting the live loop"""
@@ -72,13 +75,13 @@ class LiveLoop:
         market_capital = self.imarket.capital
         market_assets = self.imarket.assets.get(self.symbol.base, 0)
         if self.session.capital > self.imarket.capital:
-            logger.warning(f'Capital limit ({self.session.capital}) is greater than available capital ({market_capital}), updating capital limit to {market_capital}', extra={'loop': self})
+            logger.warning(f'Capital limit ({self.session.capital}) is greater than available capital ({market_capital}), updating capital limit to {market_capital}', extra={'loop': repr(self)})
             self.session.capital = self.imarket.capital
         if self.session.assets > self.imarket.assets.get(self.symbol.base, 0):
-            logger.warning(f'Asset limit ({self.session.assets}) is greater than available assets ({market_assets}), updating asset limit to {market_assets}', extra={'loop': self})
+            logger.warning(f'Asset limit ({self.session.assets}) is greater than available assets ({market_assets}), updating asset limit to {market_assets}', extra={'loop': repr(self)})
             self.session.assets = self.imarket.assets.get(self.symbol.base, 0)
         if self.session.capital < 5 and self.session.assets <= 0:
-            logger.critical(f'Capital and asset limits are too low, terminating ({self.session.capital} {self.symbol.quote}, {self.session.assets} {self.symbol.base}).', extra={'loop': self})
+            logger.critical(f'Capital and asset limits are too low, terminating ({self.session.capital} {self.symbol.quote}, {self.session.assets} {self.symbol.base}).', extra={'loop': repr(self)})
             self.session.status = Session.Status.TERMINATED
             self.session.save()
             return False
@@ -88,7 +91,7 @@ class LiveLoop:
         """Prepares the last kline and last 100 klines for the session."""
         last_klines = self.imarket.get_last_klines(self.symbol.name, self.freq)
         if not last_klines:
-            logger.critical(f'Cannot get last klines from {self.market.exchange_name}, terminating.', extra={'loop': self})
+            logger.critical(f'Cannot get last klines from {self.market.exchange_name}, terminating.', extra={'loop': repr(self)})
             self.session.status = Session.Status.TERMINATED
             self.session.save()
             return False
@@ -104,7 +107,7 @@ class LiveLoop:
     def run(self, **kwargs):
         """Fire and forget function to start the live loop and keep it running in a seperate thread."""
         if self.running and self.thread:
-            logger.error(f'LiveLoop is already running in thread {self.thread.name}, id={self.thread.ident} - refusing to start another thread.', extra={'loop': self})
+            logger.error(f'LiveLoop is already running in thread {self.thread.name}, id={self.thread.ident} - refusing to start another thread.', extra={'loop': repr(self)})
             return
         precheck_ok = self.precheck()
         if not precheck_ok:
@@ -124,7 +127,7 @@ class LiveLoop:
             self.thread = threading.Thread(target=self.__run_polling, name=f'LLAPI:{self.symbol.base}:{self.freq.replace(" ", "")}@{self.market.exchange_name}')
             self.session.candle_source = Session.CandleSource.REST
         self.thread.start()
-        logger.info(f'LiveLoop started in thread {self.thread.name}, id={self.thread.ident}.', extra={'loop': self})
+        logger.info(f'LiveLoop started in thread {self.thread.name}, id={self.thread.ident}.', extra={'loop': repr(self)})
         self.session.started = datetime.now(tz=pytz.UTC)
         self.session.thread_id = self.thread.ident
         self.session.last_price = self.last_kline['close'] if self.last_kline else None
@@ -136,7 +139,7 @@ class LiveLoop:
         """Stops the live loop"""
         self.will_stop = True
         self.session.planned_shutdown = datetime.now(tz=pytz.UTC)
-        logger.info(f'LiveLoop planned to shutdown after the next candle.', extra={'loop': self})
+        logger.info(f'LiveLoop planned to shutdown after the next candle.', extra={'loop': repr(self)})
 
 
     def __run_polling(self):
@@ -149,25 +152,25 @@ class LiveLoop:
                     last_klines = self.imarket.get_last_klines(self.symbol.name, self.freq)
                     break
                 except:
-                    logger.warning(f'Failed to fetch last klines, retrying ({i+1}/3)', exc_info=True, extra={'loop': self})
+                    logger.warning(f'Failed to fetch last klines, retrying ({i+1}/3)', exc_info=True, extra={'loop': repr(self)})
                     time.sleep(1)
                     failed_kline_requests += 1
                     continue
             if not last_klines:
                 if failed_kline_requests > MAX_FAILED_KLINE_REQUESTS:
-                    logger.critical(f'Cannot get last klines, failed {failed_kline_requests} times, terminating.', extra={'loop': self})
+                    logger.critical(f'Cannot get last klines, failed {failed_kline_requests} times, terminating.', extra={'loop': repr(self)})
                     break
                 if not self.last_kline_dt:
                     self.last_kline_dt = datetime.now(tz=pytz.UTC)
                 next_candle_time = self.last_kline_dt + timedelta(minutes=interval_to_minutes(self.freq))
-                logger.error(f'Failed to fetch last klines, skipping candle ({next_candle_time})', extra={'loop': self})
+                logger.error(f'Failed to fetch last klines, skipping candle ({next_candle_time})', extra={'loop': repr(self)})
                 continue
             failed_kline_requests = 0
             last_klines = OHLCVDataset(last_klines)
             last_kline = {**last_klines.iloc[-1].to_dict(), 'time': last_klines.index[-1].to_pydatetime()}
             processed_ok = self.on_candle(last_kline)
             if not processed_ok:
-                logger.error(f'Failed to process candle, skipping.', extra={'loop': self})
+                logger.error(f'Failed to process candle, skipping.', extra={'loop': repr(self)})
                 continue
         self.running = False
         self.session.ended = datetime.now(tz=pytz.UTC)
@@ -181,7 +184,7 @@ class LiveLoop:
         try:
             self.imarket.init_websocket(self.symbol.name, self.freq, self.on_candle)
         except Exception as e:
-            logger.critical(f'Failed to connect to websocket, terminating.', exc_info=True, extra={'loop': self})
+            logger.critical(f'Failed to connect to websocket, terminating.', exc_info=True, extra={'loop': repr(self)})
             self.session.status = Session.Status.ERROR
             self.session.details = repr(e)
         self.running = False
@@ -194,7 +197,7 @@ class LiveLoop:
         try:
             self.imarket.init_match_engine(self.symbol.name, self.freq, self.on_candle, self.session)
         except Exception as e:
-            logger.critical(f'Failed to connect to match engine, terminating.', exc_info=True, extra={'loop': self})
+            logger.critical(f'Failed to connect to match engine, terminating.', exc_info=True, extra={'loop': repr(self)})
             self.session.status = Session.Status.ERROR
             self.session.details = repr(e)
         self.running = False
@@ -205,23 +208,23 @@ class LiveLoop:
 
     def on_candle(self, candle):
         if self.session.status != Session.Status.ONGOING:
-            logger.warning(f'Received candle while session status is {self.session.status}, skipping.', extra={'loop': self})
+            logger.warning(f'Received candle while session status is {self.session.status}, skipping.', extra={'loop': repr(self)})
             return
         equity = self.session.capital + self.session.assets * (self.session.last_price or 1)
         if equity < 5:
-            logger.error(f'Ghost session found - no capital and no assets, pausing. [SessionID:{self.session.pk}]', extra={'loop': self})
+            logger.error(f'Ghost session found - no capital and no assets, pausing. [SessionID:{self.session.pk}]', extra={'loop': repr(self)})
             self.session.status = Session.Status.PAUSED
             self.session.save()
         self.imarket.cache_to_db()
         try:
             self.last_kline_dt = candle['time']
         except KeyError:
-            logger.error(f'Invalid candle received: {candle}', extra={'loop': self})
+            logger.error(f'Invalid candle received: {candle}', extra={'loop': repr(self)})
             return False
         if self.session.last_kline_timestamp and self.last_kline_dt <= self.session.last_kline_timestamp:
             return
         if self.last_100_klines is None:
-            logger.error(f'Recent klines are not available, skipping candle.', extra={'loop': self})
+            logger.error(f'Recent klines are not available, skipping candle.', extra={'loop': repr(self)})
         candle = OHLCVDataset([candle])
         self.last_100_klines = pd.concat([self.last_100_klines, candle])
         self.last_100_klines = self.last_100_klines.iloc[-100:]
@@ -282,13 +285,13 @@ class LiveLoop:
                         self.session.assets += last_order.deal_size
                         self.session.capital -= last_order.deal_funds
                     else:
-                        logger.error(f'{signal.side} order for {last_order.deal_funds} {self.symbol.quote} not filled, status is {last_order.status} (oid={last_order.oid}))', extra={'n_type': 'ORDER', 'loop': self})
+                        logger.error(f'{signal.side} order for {last_order.deal_funds} {self.symbol.quote} not filled, status is {last_order.status} (oid={last_order.oid}))', extra={'n_type': 'ORDER', 'loop': repr(self)})
                 except InsufficientBalance:
                     self.imarket.get_account()
                     self.session.capital = max(self.imarket.capital, 0)
                     # self.session.assets = max(self.imarket.assets.get(self.symbol.base, 0), 0)
                     self.session.save()
-                    logger.warning(f'Insufficient balance, assets updated to {self.session.assets} and capital updated to {self.session.capital}', extra={'loop': self})
+                    logger.warning(f'Insufficient balance, assets updated to {self.session.assets} and capital updated to {self.session.capital}', extra={'loop': repr(self)})
                     return self.buy(last_kline)
                 except RejectedOrder as ro:
                     last_order = Order.objects.create(
@@ -314,7 +317,7 @@ class LiveLoop:
                         market_timestamp=self.last_kline_dt or datetime.now(tz=pytz.UTC),
                         session=self.session
                     )
-                    logger.error(f'Failed to place BUY order for {self.session.capital} {self.symbol.quote} (olid:{last_order.pk}), skipping.', exc_info=True, extra={'n_type': 'ORDER', 'loop': self})
+                    logger.error(f'Failed to place BUY order for {self.session.capital} {self.symbol.quote} (olid:{last_order.pk}), skipping.', exc_info=True, extra={'n_type': 'ORDER', 'loop': repr(self)})
                 self.session.save()
             else:
                 return False
@@ -344,13 +347,13 @@ class LiveLoop:
                         self.session.assets -= last_order.deal_size
                         self.session.capital += last_order.deal_funds
                     else:
-                        logger.error(f'{signal.side} order for {last_order.deal_size} {self.symbol.base} not filled, status is {last_order.status} (oid={last_order.oid}))', extra={'n_type': 'ORDER', 'loop': self})
+                        logger.error(f'{signal.side} order for {last_order.deal_size} {self.symbol.base} not filled, status is {last_order.status} (oid={last_order.oid}))', extra={'n_type': 'ORDER', 'loop': repr(self)})
                 except InsufficientBalance:
                     self.imarket.get_account()
                     # self.session.capital = max(self.imarket.capital, 0)
                     self.session.assets = max(self.imarket.assets.get(self.symbol.base, 0), 0)
                     self.session.save()
-                    logger.warning(f'Insufficient balance, assets updated to {self.session.assets} and capital updated to {self.session.capital}', extra={'loop': self})
+                    logger.warning(f'Insufficient balance, assets updated to {self.session.assets} and capital updated to {self.session.capital}', extra={'loop': repr(self)})
                     return self.sell(last_kline)
                 except RejectedOrder as ro:
                     last_order = Order.objects.create(
@@ -376,7 +379,7 @@ class LiveLoop:
                         market_timestamp=self.last_kline_dt or datetime.now(tz=pytz.UTC),
                         session=self.session
                     )
-                    logger.error(f'Failed to place SELL order for {self.session.assets} {self.symbol.base} (olid:{last_order.pk}), skipping.', exc_info=True, extra={'n_type': 'ORDER', 'loop': self})
+                    logger.error(f'Failed to place SELL order for {self.session.assets} {self.symbol.base} (olid:{last_order.pk}), skipping.', exc_info=True, extra={'n_type': 'ORDER', 'loop': repr(self)})
                 self.session.save()
             else:
                 return False
@@ -422,11 +425,11 @@ class LiveLoop:
     def idle(self):
         """Idle indefinitely (for development purposes)"""
         if not self.thread:
-            logger.critical('Thread is not initialized yet.', extra={'loop': self})
+            logger.critical('Thread is not initialized yet.', extra={'loop': repr(self)})
             return
         while True:
             if not self.thread.is_alive():
-                logger.critical(f'Thread ({self.thread.name}) died, exiting.', extra={'loop': self})
+                logger.critical(f'Thread ({self.thread.name}) died, exiting.', extra={'loop': repr(self)})
                 break
             try:
                 time.sleep(1)

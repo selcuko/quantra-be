@@ -166,7 +166,7 @@ class SessionUpdateView(View):
             amt = float(request.POST.get('session_buy'))
             corrected_amt = min(amt, session.capital)
             if amt != corrected_amt:
-                logger.warning(f'Manual buy amount {amt} exceeds available capital {session.capital} USDT. Corrected to {corrected_amt} USDT.', extra={'loop': session, 'n_type': 'ORDER'})
+                logger.warning(f'Manual buy amount {amt} exceeds available capital {session.capital} USDT. Corrected to {corrected_amt} USDT.', extra={'loop': repr(session), 'n_type': 'ORDER'})
             order = iface.place_market_order(session.symbol.name, 'buy', funds=corrected_amt)
             order.force = True
             signal = Signal.objects.create(session=session, side='BUY', price=order.display_price, timestamp=datetime.now(pytz.UTC))
@@ -191,7 +191,7 @@ class SessionUpdateView(View):
             amt = float(request.POST.get('session_sell'))
             corrected_amt = min(amt, session.assets)
             if amt != corrected_amt:
-                logger.warning(f'Manual sell amount {amt} exceeds available assets {session.assets} {session.symbol.base}. Corrected to {corrected_amt} {session.symbol.base}.', extra={'loop': session, 'n_type': 'ORDER'})
+                logger.warning(f'Manual sell amount {amt} exceeds available assets {session.assets} {session.symbol.base}. Corrected to {corrected_amt} {session.symbol.base}.', extra={'loop': repr(session), 'n_type': 'ORDER'})
             order = iface.place_market_order(session.symbol.name, 'sell', quantity=corrected_amt)
             order.force = True
             signal = Signal.objects.create(session=session, side='SELL', price=order.display_price, timestamp=datetime.now(pytz.UTC))

@@ -219,6 +219,7 @@ class Session(models.Model):
     buy_enabled = models.BooleanField(default=True)
     sell_enabled = models.BooleanField(default=True)
     initiated_at = models.DateTimeField(auto_now_add=True)
+    orders: models.QuerySet['Order']
 
     def __str__(self):
         return f'{self.strategy} - {self.symbol} - {self.status}'
@@ -355,7 +356,7 @@ class Order(models.Model):
     messages_raw = models.TextField(default='')
     pnl = models.FloatField(null=True, blank=True)
     average_cost = models.FloatField(null=True, blank=True)
-    session = models.ForeignKey(Session, on_delete=models.PROTECT, related_name='orders', null=True)
+    session = models.ForeignKey(Session, on_delete=models.PROTECT, related_name='orders')
 
     @property
     def messages(self):
@@ -413,10 +414,7 @@ class Order(models.Model):
 
     @property
     def symbol(self):
-        try:
-            return self.signal.symbol
-        except:
-            return None
+        return self.session.symbol
 
     @property
     def display_price(self):
