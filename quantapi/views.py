@@ -22,8 +22,8 @@ from strategy import get_strategy
 
 class HomeView(View):
     def get(self, request):
-        sessions = Session.objects.filter(status=Session.Status.ONGOING, symbol__market__mainnet_enabled=True).order_by('-started')
-        recent_orders = Order.objects.filter(signal__session__in=sessions, status=Order.Status.FILLED).order_by('-created_at')[:8]
+        sessions = Session.objects.filter(status=Session.Status.ONGOING, symbol__market__mainnet_enabled=True).order_by('-started').prefetch_related('symbol', 'symbol__market')
+        recent_orders = Order.objects.filter(signal__session__in=sessions, status=Order.Status.FILLED).order_by('-created_at').prefetch_related('session', 'session__symbol')[:8]
 
         ma = MarketAnalytics()
         sa = TotalSessionAnalytics(sessions)
