@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.http import HttpRequest
 
 from quantapi.models import *
 
@@ -36,10 +37,19 @@ class SignalAdmin(admin.ModelAdmin):
 
 
 class OrderAdmin(admin.ModelAdmin):
-    list_display = ('__str__', 'oid', 'status', 'order_type', 'symbol', 'deal_funds', 'force')
-    search_fields = ('signal__session__symbol__name', 'signal__session__symbol__market__exchange_name')
-    list_filter = ('status', 'order_type', 'force', 'signal__side', 'signal__session__symbol__market__exchange_name')
-    readonly_fields = ('signal_display', 'session_display', 'symbol_display')
+    list_display = ('__str__', 'oid', 'status', 'order_type','deal_funds', 'force')
+    list_filter = ('status', 'order_type', 'force')
+    raw_id_fields = ('signal', 'session')
+
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request)
+        return queryset.prefetch_related('signal__session__symbol', 'signal__session__symbol__market')
+
+    def get_object(self, request, object_id, *args, **kwargs):
+        obj = super().get_object(request, object_id, **kwargs)
+        if obj:
+            print('Returning object', obj)
+        return obj
 
     def signal_display(self, obj):
         return obj.signal

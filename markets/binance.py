@@ -7,11 +7,12 @@ from decimal import Decimal
 from typing import Callable, Literal, Optional
 
 import pytz
+from regex import F
 import requests
 from binance.client import Client
 
 from logger import logger
-from markets.errors import InsufficientBalance, KlineFetchFailed, RejectedOrder
+from markets.errors import InsufficientBalance, KlineFetchFailed, MarketAPIError, RejectedOrder
 from markets.helper import authentication_required, float_to_precision
 from markets.interface import IMarket
 from match import MatchEngine
@@ -25,7 +26,7 @@ from websockets.exceptions import ConnectionClosedOK, ConnectionClosed
 class BinanceMarket(IMarket):
     name = 'BINANCE'
 
-    def __init__(self, config, market:'Market'):
+    def __init__(self, config, market:'Market', retries=0):
         if config is None:
             config = {}
         self.authenticated = bool(config.get('API_KEY') and config.get('API_SECRET'))
@@ -35,7 +36,8 @@ class BinanceMarket(IMarket):
         self.assets = {}
         self.commission = {}
         self.market = market
-
+        self.stop_websocket_stream = False
+        max_init_retry = 3
         try:
             if self.authenticated:
                 self.testnet = config.get('TESTNET', False)
@@ -45,17 +47,19 @@ class BinanceMarket(IMarket):
                     testnet=self.testnet)
             else:
                 self.client = Client()
-        except:
+        except Exception as e:
+            if retries < max_init_retry:
+                retries += 1
+                time.sleep(1)
+                return self.__init__(config, market)
             logger.fatal(f'Error while initializing {self.name}', exc_info=True)
-            raise
+            raise MarketAPIError(f'Cannot initialize {self.name} (tried {retries}) times).') from e
         self.symbols = self.get_symbols()
         if self.authenticated:
             self.get_account()
-        
-        self.stop_websocket_stream = False
 
     def __str__(self) -> str:
-        return f'{self.name} (Authenticated: {self.authenticated})'
+        return f'{self.name} ({"Mainnet" if not self.testnet else "Testnet"})'
 
     def json(self) -> dict:
         return {
@@ -125,16 +129,17 @@ class BinanceMarket(IMarket):
                 time.sleep(5)
                 ws = connect(ws_uri)
                 continue
-            except:
+            except Exception as e:
                 if retries > self.WS_MAX_RETRIES:
-                    logger.error(f'Error while initializing match engine for {symbol} on {self.name}', exc_info=True)
-                    raise
+                    msg = f'Cannot start websocket connection for match engine for {symbol} on {self.name} (tried {retries} times).'
+                    logger.error(msg, exc_info=True)
+                    raise MarketAPIError(msg) from e
                 retries += 1
                 time.sleep(5)
                 ws = connect(ws_uri)
                 continue
 
-    def init_websocket(self, symbol:str, interval:str, callback:Callable):
+    def init_websocket(self, symbol:str, interval:str, callback:Callable, retries=0):
         ws_uri = self.get_websocket_uri(symbol, interval)
         try:
             ws = connect(ws_uri)
@@ -148,9 +153,14 @@ class BinanceMarket(IMarket):
                 if candle['last']:
                     callback(candle)
         except:
-            logger.error(f'Error while initializing websocket for {symbol} on {self.name}', exc_info=True)
-            raise
-                
+            if retries < self.WS_MAX_RETRIES:
+                retries += 1
+                time.sleep(1)
+                return self.init_websocket(symbol, interval, callback, retries)
+            msg = f'Cannot start websocket connection for {symbol} on {self.name} (tried {retries} times).'
+            logger.error(msg, exc_info=True)
+            raise MarketAPIError(msg)
+
     def _standardize_klines(self, klines:list[list]) -> list[list]:
         return [[
             self._standardize_datetime(kline[0]),
@@ -255,7 +265,7 @@ class BinanceMarket(IMarket):
                         start_str=self._format_datetime(start),
                         end_str=self._format_datetime(calculated_end),
                         limit=limit)
-        except:
+        except Exception as e:
             logger.error(f'Error fetching klines for {symbol} from {self.name}', exc_info=True)
             if retry > 0:
                 logger.warning(f'Retrying {retry} more times')

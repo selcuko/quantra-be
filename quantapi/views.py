@@ -172,6 +172,7 @@ class SessionUpdateView(View):
             signal = Signal.objects.create(session=session, side='BUY', price=order.display_price, timestamp=datetime.now(pytz.UTC))
             order.price = order.display_price
             order.signal = signal
+            order.session = session
             order.save()
             ts = datetime.now()
             while not order.status == Order.Status.FILLED and datetime.now() - ts < timedelta(seconds=10):
@@ -196,6 +197,7 @@ class SessionUpdateView(View):
             signal = Signal.objects.create(session=session, side='SELL', price=order.display_price, timestamp=datetime.now(pytz.UTC))
             order.price = order.display_price
             order.signal = signal
+            order.session = session
             order.save()
             ts = datetime.now()
             while not order.status == Order.Status.FILLED and datetime.now() - ts < timedelta(seconds=10):

@@ -248,6 +248,12 @@ rangeInputSell.addEventListener('input', () => {
                         Amount {{ session.symbol.base }}
                     </th>
                     <th scope="col" class="px-6 py-3">
+                        PNL
+                    </th>
+                    <th scope="col" class="px-6 py-3">
+                        Average Cost
+                    </th>
+                    <th scope="col" class="px-6 py-3">
                         Side
                     </th>
                     <th scope="col" class="px-6 py-3">
@@ -259,7 +265,7 @@ rangeInputSell.addEventListener('input', () => {
                 </tr>
             </thead>
             <tbody>
-                {% for order in orders reversed %}
+                {% for order in orders %}
                 <tr class="bg-white border-b dark:bg-gray-800 dark:border-gray-700">
                     <td class="hyphens-auto px-6 py-4 whitespace-nowrap">
                         {{ order.symbol.name }}
@@ -272,6 +278,12 @@ rangeInputSell.addEventListener('input', () => {
                     </td>
                     <td class="whitespace-nowrap px-6 py-4">
                         {{ order.deal_size }} {{ order.symbol.base }}
+                    </td>
+                    <td class="whitespace-nowrap px-6 py-4">
+                        {{ order.pnl|floatformat:2|default:'---' }}
+                    </td>
+                    <td class="whitespace-nowrap px-6 py-4">
+                        {{ order.average_cost|default:'---' }}
                     </td>
                     <td class="px-6 py-4">
                         {% if order.signal.side == 'BUY' %}
@@ -366,7 +378,7 @@ rangeInputSell.addEventListener('input', () => {
                 </tr>
             </thead>
             <tbody>
-                {% for signal in signals reversed %}
+                {% for signal in signals %}
                 <tr class="bg-white border-b dark:bg-gray-800 dark:border-gray-700">
                     <td class="hyphens-auto px-6 py-4 whitespace-nowrap">
                         {{ signal.symbol.name }}

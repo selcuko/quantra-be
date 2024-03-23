@@ -338,10 +338,10 @@ class Order(models.Model):
         ERROR = 'ERROR'
     oid = models.CharField(max_length=256, unique=True, null=True, blank=True)
     client_oid = models.CharField(max_length=256, unique=True, null=True, blank=True)
-    deal_size = models.FloatField(help_text='Amount of quote currency in this order (e.g. BTC)', null=True, blank=True)
-    price = models.FloatField(help_text='Price represented as (price of base)/(price of quote)', null=True, blank=True)
-    deal_funds = models.FloatField(help_text='Amount of base currency in this order (e.g. USDT)', null=True, blank=True)
-    funds = models.FloatField(help_text='Amount of base currency of this order initially placed with', null=True, blank=True)
+    deal_size = models.FloatField(help_text='Amount of quote currency in this order (e.g. BTC)')
+    price = models.FloatField(help_text='Price represented as (price of base)/(price of quote)')
+    deal_funds = models.FloatField(help_text='Amount of base currency in this order (e.g. USDT)')
+    funds = models.FloatField(help_text='Amount of base currency of this order initially placed with')
     order_type = models.CharField(max_length=30, choices=Type.choices, default=Type.MARKET)
     signal = models.OneToOneField(Signal, on_delete=models.PROTECT, related_name='order', null=True, blank=True)
     market_timestamp = models.DateTimeField(null=True, blank=True)
@@ -354,8 +354,8 @@ class Order(models.Model):
     side = models.CharField(max_length=30, choices=Side.choices, null=True)
     messages_raw = models.TextField(default='')
     pnl = models.FloatField(null=True, blank=True)
-    pnl_pct = models.FloatField(null=True, blank=True)
     average_cost = models.FloatField(null=True, blank=True)
+    session = models.ForeignKey(Session, on_delete=models.PROTECT, related_name='orders', null=True)
 
     @property
     def messages(self):
@@ -425,8 +425,18 @@ class Order(models.Model):
         return self.deal_funds / self.deal_size
 
     def save(self, *args, **kwargs):
-        if not self.side: self.side = self.signal.side
+        if not self.side and self.signal: 
+            self.side = self.signal.side
+        print('Saving order')
         super().save(*args, **kwargs)
+        if not self.pnl and not self.average_cost:
+            from quantapi.analytics import OrderAnalytics
+            order_analytics = OrderAnalytics(self)
+            self.pnl = order_analytics.pnl
+            self.average_cost = order_analytics.average_cost
+            print('PnL:', self.pnl, 'Average Cost:', self.average_cost)
+            self.save()
+        
 
 
 class ComplexOrder(models.Model):

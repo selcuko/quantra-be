@@ -275,6 +275,7 @@ class LiveLoop:
                     last_order = self.imarket.place_market_order(self.symbol.name, 'buy', funds=self.session.capital)
                     last_order.signal = signal
                     last_order.price = last_kline['close']
+                    last_order.session = self.session
                     last_order.market_timestamp = last_order.market_timestamp or self.last_kline_dt or datetime.now(tz=pytz.UTC)
                     last_order.save()
                     if last_order.status == Order.Status.FILLED:
@@ -298,7 +299,8 @@ class LiveLoop:
                         signal=signal,
                         status=Order.Status.REJECTED,
                         details=repr(ro),
-                        market_timestamp=self.last_kline_dt or datetime.now(tz=pytz.UTC)
+                        market_timestamp=self.last_kline_dt or datetime.now(tz=pytz.UTC),
+                        session=self.session
                     )
                 except Exception as e:
                     last_order = Order.objects.create(
@@ -309,7 +311,8 @@ class LiveLoop:
                         signal=signal,
                         status=Order.Status.ERROR,
                         details=repr(e),
-                        market_timestamp=self.last_kline_dt or datetime.now(tz=pytz.UTC)
+                        market_timestamp=self.last_kline_dt or datetime.now(tz=pytz.UTC),
+                        session=self.session
                     )
                     logger.error(f'Failed to place BUY order for {self.session.capital} {self.symbol.quote} (olid:{last_order.pk}), skipping.', exc_info=True, extra={'n_type': 'ORDER', 'loop': self})
                 self.session.save()
@@ -334,6 +337,7 @@ class LiveLoop:
                     last_order = self.imarket.place_market_order(self.symbol.name, 'sell', quantity=self.session.assets)
                     last_order.signal = signal
                     last_order.price = last_kline['close']
+                    last_order.session = self.session
                     last_order.market_timestamp = last_order.market_timestamp or self.last_kline_dt or datetime.now(tz=pytz.UTC)
                     last_order.save()
                     if last_order.status == Order.Status.FILLED:
@@ -357,7 +361,8 @@ class LiveLoop:
                         signal=signal,
                         status=Order.Status.REJECTED,
                         details=repr(ro),
-                        market_timestamp=self.last_kline_dt or datetime.now(tz=pytz.UTC)
+                        market_timestamp=self.last_kline_dt or datetime.now(tz=pytz.UTC),
+                        session=self.session
                     )
                 except Exception as e:
                     last_order = Order.objects.create(
@@ -368,7 +373,8 @@ class LiveLoop:
                         signal=signal,
                         status=Order.Status.ERROR,
                         details=repr(e),
-                        market_timestamp=self.last_kline_dt or datetime.now(tz=pytz.UTC)
+                        market_timestamp=self.last_kline_dt or datetime.now(tz=pytz.UTC),
+                        session=self.session
                     )
                     logger.error(f'Failed to place SELL order for {self.session.assets} {self.symbol.base} (olid:{last_order.pk}), skipping.', exc_info=True, extra={'n_type': 'ORDER', 'loop': self})
                 self.session.save()
