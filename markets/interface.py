@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 from typing import TYPE_CHECKING, Callable, Literal, Optional
 from django.utils import timezone
@@ -243,12 +243,15 @@ class IMarket:
     def get_equity(self, save=True) -> float:
         raise NotImplemented
 
-    def cache_to_db(self):
-        if self.market:
-            self.market.usdt = self.capital
-            self.market.assets = json.dumps(self.assets)
-            self.market.assets_updated_at = timezone.now()
-            self.get_current_prices(save=False)
-            self.get_equity(save=False)
-            self.market.save()
-        return
+    def cache_to_db(self, force=False):
+        if not self.market:
+            return
+        if self.market.assets_updated_at and (timezone.now() - self.market.assets_updated_at) < timedelta(minutes=5):
+            if not force: 
+                return
+        self.market.usdt = self.capital
+        self.market.assets = json.dumps(self.assets)
+        self.market.assets_updated_at = timezone.now()
+        self.get_current_prices(save=False)
+        self.get_equity(save=False)
+        self.market.save()

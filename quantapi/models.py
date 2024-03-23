@@ -381,7 +381,6 @@ class Order(models.Model):
         if self.oid or self.status != Order.Status.NOT_PLACED:
             raise ValueError('Order must be not placed to fit')
         filters = self.signal.session.symbol.market.filters(self.signal.session.symbol)
-        print('filters:', filters, 'symbol:', self.signal.session.symbol.name)
         if filters['min_notional'] and self.funds < filters['min_notional']:
             self.status = Order.Status.REJECTED
             self.details = f'Funds {self.funds} is less than minimum notional={filters["min_notional"]}) filter enforced by {self.signal.session.symbol.market.exchange_name}'
@@ -425,14 +424,12 @@ class Order(models.Model):
     def save(self, *args, **kwargs):
         if not self.side and self.signal: 
             self.side = self.signal.side
-        print('Saving order')
         super().save(*args, **kwargs)
         if not self.pnl and not self.average_cost:
             from quantapi.analytics import OrderAnalytics
             order_analytics = OrderAnalytics(self)
             self.pnl = order_analytics.pnl
             self.average_cost = order_analytics.average_cost
-            print('PnL:', self.pnl, 'Average Cost:', self.average_cost)
             self.save()
         
 
@@ -458,7 +455,7 @@ class ComplexOrder(models.Model):
         return f'{self.status} {self.type} @ {self.session.symbol.base}'
 
     def is_ready(self, ll:'LiveLoop') -> bool:
-        if self.type == ComplexOrder.Type.TARGET_PRICE:
+        if self.type == ComplexOrder.Type.TARGET_PRICE and self.target_price:
             if self.side == Order.Side.BUY:
                 return ll.session.last_price <= self.target_price if ll.session.last_price else False
             elif self.side == Order.Side.SELL:

@@ -43,9 +43,8 @@ class Command(BaseCommand):
                         symbol.day60_volume = sum([c['volume'] * c['price'] for c in d1_candles[-60:]])
                         symbol.day60_volume_date = d1_candles[-60]['time']
                     symbols_to_update.append(symbol)
-                    print('.', end='', flush=True)
                 except Exception as e:
-                    print('x', end='', flush=True)
+                    pass
         MarketSymbol.objects.bulk_update(symbols_to_update, ['hour4_volume', 'hour4_volume_date', 'day10_volume', 'day10_volume_date', 'day30_volume', 'day30_volume_date', 'day60_volume', 'day60_volume_date'])
 
 

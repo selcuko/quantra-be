@@ -37,10 +37,11 @@ class HomeView(View):
 
 class SessionDetailView(View):
     def get(self, request, pk):
-        session = Session.objects.get(pk=pk)
-        signals = Signal.objects.filter(session=session)
-        orders = Order.objects.filter(signal__in=signals)
+        session = Session.objects.prefetch_related('orders', 'signals').get(pk=pk)
+        signals = session.signals
+        orders = session.orders
         market = session.symbol.market
+        symbol = session.symbol
         orders = orders.order_by('-created_at')
         signals = signals.order_by('-timestamp')
         return render(request, 'session-detail.html', {
@@ -48,6 +49,7 @@ class SessionDetailView(View):
             'orders': orders, 
             'signals': signals, 
             'market': market, 
+            'symbol': symbol,
             'buy_enabled': session.capital > 5,
             'sell_enabled': session.assets > 0,
         })
@@ -56,7 +58,7 @@ class SessionDetailView(View):
 class SessionListView(View):
     def get(self, request, query=None):
         if query is None:
-            query = Session.objects.all()
+            query = Session.objects.all().prefetch_related('symbol', 'symbol__market')
         query = query.order_by('-started')
         paginator = Paginator(query, 20)
         page_number = request.GET.get('page')

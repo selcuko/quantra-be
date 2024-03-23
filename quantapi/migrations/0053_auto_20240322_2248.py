@@ -17,7 +17,7 @@ def calculate_required_order_fields(apps, schema_editor):
             elif order.deal_funds:
                 order.funds = order.deal_funds
             else:
-                funds = order.size * order.price
+                funds = order.deal_size * order.price
                 order.funds = order.deal_funds = funds
         if not order.price:
             if order.signal:

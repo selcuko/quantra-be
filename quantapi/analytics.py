@@ -9,18 +9,21 @@ class SessionAnalytics:
     """
     def __init__(self, session:Session) -> None:
         self.session = session
+        # prefetch orders and signals
+        self.orders = session.orders.filter(status=Order.Status.FILLED)
+        self.signals = session.signals.all()
 
     @property
-    def orders(self):
-        return Order.objects.filter(signal__session=self.session, status=Order.Status.FILLED).count()
+    def orders_count(self):
+        return self.orders.count()
     
     @property
-    def signals(self):
-        return Signal.objects.filter(session=self.session).count()
+    def signals_count(self):
+        return self.signals.count()
 
     @property
     def open_position(self):
-        order = Order.objects.filter(signal__session=self.session, status=Order.Status.FILLED).last()
+        order = self.orders.last()
         if order and order.side == Order.Side.BUY:
             return order
         return None
@@ -113,8 +116,7 @@ class SessionAnalytics:
         Calculate the weighted percentage profit or loss for the sell order.
 
         """
-        buy_orders = Order.objects.filter(signal__session=self.session, status=Order.Status.FILLED, side=Order.Side.BUY)
-        sell_orders = Order.objects.filter(signal__session=self.session, status=Order.Status.FILLED, side=Order.Side.SELL)
+        sell_orders = self.orders.filter(side=Order.Side.SELL)
         weighted_pnl_sum =  [ order.pnl / order.deal_size for order in sell_orders if order.pnl and order.deal_size ]
         weighted_cost_sum = [ order.deal_size for order in sell_orders  if order.deal_size ]
         return sum(weighted_pnl_sum) * 100 / sum(weighted_cost_sum) if weighted_cost_sum else None
@@ -125,7 +127,7 @@ class SessionAnalytics:
         Calculate the total profit or loss for the sell order.
 
         """
-        orders = Order.objects.filter(signal__session=self.session, status=Order.Status.FILLED, side=Order.Side.SELL)
+        orders = self.orders.filter(side=Order.Side.SELL)
         total_pnl_sum = [ order.pnl for order in orders if order.pnl ]
         return sum(total_pnl_sum) if total_pnl_sum else None
 
@@ -135,7 +137,7 @@ class SessionAnalytics:
         Calculate the maximum hold time for the session.
 
         """
-        orders = Order.objects.filter(signal__session=self.session, status=Order.Status.FILLED)
+        orders = self.orders
         max_hold_time = timedelta(seconds=0)
         in_position = False
         in_time = None
@@ -179,7 +181,6 @@ class OrderAnalytics:
 
         
         avg_cost = (((self.last_average_cost or 0) * assets) + (self.order.price * self.order.deal_size)) / (assets + self.order.deal_size)
-        print(f"""{self.last_average_cost=}, {assets=}, {self.order.price=}, {self.order.deal_size=}, {avg_cost=}""")
         return avg_cost
 
     @property
@@ -239,7 +240,7 @@ class TotalSessionAnalytics:
         count = 0
         for session in self.sessions:
             order = Order.objects.filter(signal__session=session, status=Order.Status.FILLED).last()
-            if order and order.signal.side == Signal.Side.BUY:
+            if order and order.side == Order.Side.BUY:
                 count += 1
         return count
     

@@ -1,4 +1,6 @@
+from typing import Any
 from django.contrib import admin
+from django.db.models.query import QuerySet
 from django.http import HttpRequest
 
 from quantapi.models import *
@@ -24,16 +26,23 @@ class MarketSymbolAdmin(admin.ModelAdmin):
 
 class SessionAdmin(admin.ModelAdmin):
     list_display = ('__str__', 'freq', 'status', 'started', 'ended', 'session_type', 'last_heartbeat', 'candle_source', 'use_heikin_ashi')
-    search_fields = ('symbol__name', 'symbol__market__exchange_name')
-    list_filter = ('freq', 'status', 'session_type', 'use_heikin_ashi', 'candle_source')
-    readonly_fields = ('started', 'ended', 'last_heartbeat', 'symbol')
+    #search_fields = ('symbol__name', 'symbol__market__exchange_name')
+    #list_filter = ('freq', 'status', 'session_type', 'use_heikin_ashi', 'candle_source')
+    #readonly_fields = ('started', 'ended', 'last_heartbeat')
+    #raw_id_fields = ('symbol', 'strategy')
+
+    def get_queryset(self, request: HttpRequest) -> QuerySet[Any]:
+        return super().get_queryset(request).prefetch_related('symbol', 'strategy', 'symbol__market')
 
 
 class SignalAdmin(admin.ModelAdmin):
     list_display = ('__str__', 'side', 'symbol', 'price', 'timestamp')
     search_fields = ('session__symbol__name', 'session__symbol__market__exchange_name')
-    readonly_fields = ('session', 'symbol')
     list_filter = ('side',)
+    raw_id_fields = ('session',)
+
+    def get_queryset(self, request: HttpRequest) -> QuerySet[Any]:
+        return super().get_queryset(request).prefetch_related('session__symbol', 'session__symbol__market')
 
 
 class OrderAdmin(admin.ModelAdmin):
@@ -44,12 +53,6 @@ class OrderAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
         return queryset.prefetch_related('signal__session__symbol', 'signal__session__symbol__market')
-
-    def get_object(self, request, object_id, *args, **kwargs):
-        obj = super().get_object(request, object_id, **kwargs)
-        if obj:
-            print('Returning object', obj)
-        return obj
 
     def signal_display(self, obj):
         return obj.signal
@@ -114,6 +117,9 @@ class GlobalSymbolAdmin(admin.ModelAdmin):
     def get_markets(self, obj):
         return json.loads(obj.available_markets)
     
+    def get_queryset(self, request: HttpRequest) -> QuerySet[Any]:
+        return super().get_queryset(request)
+    
     # enable vol0 filter by default
 
 
@@ -122,14 +128,8 @@ class GlobalSymbolAdmin(admin.ModelAdmin):
 
 class ComplexOrderAdmin(admin.ModelAdmin):
     list_display = ('__str__', 'status', 'type', 'session', 'deal_funds')
-    search_fields = ('signal__session__symbol__name', 'session__symbol__market__exchange_name')
-    list_filter = ('status', 'type', 'side', 'session__symbol__market__exchange_name')
-    readonly_fields = ('symbol_display',)
-
-    def symbol_display(self, obj):
-        return obj.session.symbol
-
-    symbol_display.short_description = 'Symbol'
+    list_filter = ('status', 'type', 'side',)
+    raw_id_fields = ('session', 'market_order')
 
 
 admin.site.register(GlobalSymbol, GlobalSymbolAdmin)

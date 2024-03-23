@@ -8,7 +8,7 @@
 
 <div class="m-3 p-3 flex flex-col">
     <h1 class="flex items-center text-4xl font-extrabold dark:text-white">
-        {{ session.symbol.base }} @ {{ session.symbol.market.exchange_name }}
+        {{ symbol.base }} @ {{ market.exchange_name }}
         {% if session.status == 'ONGOING' %}
         <span
             class="bg-blue-100 text-blue-800 text-xl font-semibold me-2 px-2.5 py-0.5 rounded dark:bg-blue-200 dark:text-blue-800 ms-2 h-full">ONGOING</span>
@@ -86,10 +86,10 @@
 <div class="m-3">
     <div class="flow-root rounded-lg border border-gray-300 p-3 shadow-sm">
         <dl class="-my-3 divide-y divide-gray-100 text-sm">
-            {% if session.symbol.symbol %}
+            {% if symbol.symbol %}
             <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
                 <dt class="font-medium text-gray-900">Symbol details</dt>
-                <dd class="text-gray-700 sm:col-span-2"><a class="text-blue-700 hover:underline" target="_blank" href="{% url 'symbol-detail' cid=session.symbol.symbol.cid %}">{{ session.symbol.symbol.base }} ({{ session.symbol.symbol.cid }})</a></dd>
+                <dd class="text-gray-700 sm:col-span-2"><a class="text-blue-700 hover:underline" target="_blank" href="{% url 'symbol-detail' cid=symbol.symbol.cid %}">{{ symbol.symbol.base }} ({{ symbol.symbol.cid }})</a></dd>
             </div>
             {% endif %}
             <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
@@ -129,7 +129,7 @@
             </div>
             <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
                 <dt class="font-medium text-gray-900">Market</dt>
-                <dd class="text-gray-700 sm:col-span-2">{{ session.symbol.market.friendly_name }} ({{ session.symbol.market.exchange_name }})</dd>
+                <dd class="text-gray-700 sm:col-span-2">{{ market.friendly_name }} ({{ market.exchange_name }})</dd>
             </div>
             <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
                 <dt class="font-medium text-gray-900">Max hold time</dt>
@@ -137,7 +137,7 @@
             </div>
             <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
                 <dt class="font-medium text-gray-900">PNL</dt>
-                <dd class="text-gray-700 sm:col-span-2">$ {{ session.analytics.total_pnl|floatformat:2|default:'-' }} ({{ session.analytics.weighted_pnl_pct|floatformat:2|default:'-' }}%)</dd>
+                <dd class="text-gray-700 sm:col-span-2">$ {{ session.analytics.total_pnl|floatformat:2|default:'-' }}</dd>
             </div>
             <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
                 <dt class="font-medium text-gray-900">Candle source</dt>
@@ -153,7 +153,7 @@
         <form class="max-w mx-auto" {% if not buy_enabled %}disabled="disabled"{% endif %} method="POST" action="update/">
             {% csrf_token %}
             <div class="flex flex-row justify-between">
-                <h3>Buy {{ session.symbol.base }} with session capital</h3>
+                <h3>Buy {{ symbol.base }} with session capital</h3>
                 {% if not buy_enabled %}
                 <span class="bg-red-100 text-red-800 text-xs font-medium me-2 px-2.5 py-0.5 rounded dark:bg-red-900 dark:text-red-300">Disabled: Low Capital</span>
                 {% endif %}</div>
@@ -185,7 +185,7 @@
     <form class="max-w mx-auto" {% if not buy_enabled %}disabled="disabled"{% endif %} method="POST" action="update/">
         {% csrf_token %}
         <div class="flex flex-row justify-between">
-            <h3>Sell {{ session.symbol.base }} from session</h3>
+            <h3>Sell {{ symbol.base }} from session</h3>
             {% if not sell_enabled %}
             <span class="bg-red-100 text-red-800 text-xs font-medium me-2 px-2.5 py-0.5 rounded dark:bg-red-900 dark:text-red-300">Disabled: No Assets</span>
             {% endif %}</div>
@@ -196,16 +196,16 @@
             <div class="relative mb-6">
                 <label for="labels-range-input" class="sr-only">Labels range</label>
                 <input id="sell-range" type="range" value="0" min="0" step="0.00000000001" max="{{ session.assets }}" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700">
-                <span class="text-sm text-gray-500 dark:text-gray-400 absolute start-0 -bottom-6">Min (0 {{ session.symbol.base }})</span>
+                <span class="text-sm text-gray-500 dark:text-gray-400 absolute start-0 -bottom-6">Min (0 {{ symbol.base }})</span>
                 <span class="text-sm text-gray-500 dark:text-gray-400 absolute start-1/4 -translate-x-1/2 rtl:translate-x-1/2 -bottom-6">25%</span>
                 <span class="text-sm text-gray-500 dark:text-gray-400 absolute start-2/4 -translate-x-1/2 rtl:translate-x-1/2 -bottom-6">50%</span>
                 <span class="text-sm text-gray-500 dark:text-gray-400 absolute start-3/4 -translate-x-1/2 rtl:translate-x-1/2 -bottom-6">75%</span>
-                <span class="text-sm text-gray-500 dark:text-gray-400 absolute end-0 -bottom-6">Max ({{ session.assets }} {{ session.symbol.base }})</span>
+                <span class="text-sm text-gray-500 dark:text-gray-400 absolute end-0 -bottom-6">Max ({{ session.assets }} {{ symbol.base }})</span>
             </div>
         </div>
         <br>
         <div class="mb-5">
-          <label for="password" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Amount ({{ session.symbol.base }})</label>
+          <label for="password" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Amount ({{ symbol.base }})</label>
           <input type="number" min="0" max="{{ session.assets }}" value="0" name="session_sell" step="0.00000000001" id="session-sell" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" required />
         </div>
         <button type="submit" class="text-white bg-red-700 hover:bg-red-800 focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm w-full sm:w-auto px-5 py-2.5 text-center">Sell</button>
@@ -249,7 +249,7 @@ rangeInputSell.addEventListener('input', () => {
                         Amount USDT
                     </th>
                     <th scope="col" class="px-6 py-3">
-                        Amount {{ session.symbol.base }}
+                        Amount {{ symbol.base }}
                     </th>
                     <th scope="col" class="px-6 py-3">
                         PNL
@@ -272,16 +272,16 @@ rangeInputSell.addEventListener('input', () => {
                 {% for order in orders %}
                 <tr class="bg-white border-b dark:bg-gray-800 dark:border-gray-700">
                     <td class="hyphens-auto px-6 py-4 whitespace-nowrap">
-                        {{ order.symbol.name }}
+                        {{ symbol.name }}
                     </td>
                     <td class="whitespace-nowrap px-6 py-4">
-                        $ {{ order.display_price }}
+                        $ {{ order.price }}
                     </td>
                     <td class="whitespace-nowrap px-6 py-4">
                         $ {{ order.deal_funds|floatformat:2 }}
                     </td>
                     <td class="whitespace-nowrap px-6 py-4">
-                        {{ order.deal_size }} {{ order.symbol.base }}
+                        {{ order.deal_size }} {{ symbol.base }}
                     </td>
                     <td class="whitespace-nowrap px-6 py-4">
                         {{ order.pnl|floatformat:2|default:'---' }}
@@ -290,20 +290,20 @@ rangeInputSell.addEventListener('input', () => {
                         {{ order.average_cost|default:'---' }}
                     </td>
                     <td class="px-6 py-4">
-                        {% if order.signal.side == 'BUY' %}
+                        {% if order.side == 'BUY' %}
                         <span
                             class="nowrap bg-green-100 text-green-800 mr-2 px-2.5 py-0.5 rounded-full dark:bg-green-900 dark:text-green-300">
-                            {{ order.signal.side }}
+                            {{ order.side }}
                         </span>
-                        {% elif order.signal.side == 'SELL' %}
+                        {% elif order.side == 'SELL' %}
                         <span
                             class="nowrap bg-red-100 text-red-800 mr-2 px-2.5 py-0.5 rounded-full dark:bg-red-900 dark:text-red-300">
-                            {{ order.signal.side }}
+                            {{ order.side }}
                         </span>
                         {% else %}
                         <span
                             class="nowrap bg-gray-100 text-gray-800 mr-2 px-2.5 py-0.5 rounded-full dark:bg-gray-900 dark:text-gray-300">
-                            {{ order.signal.side|default:'UNKNOWN' }}
+                            {{ order.side|default:'UNKNOWN' }}
                         </span>
                         {% endif %}
 
@@ -340,7 +340,7 @@ rangeInputSell.addEventListener('input', () => {
                     <td class="px-6 py-4">
                         <span
                             class="nowrap bg-gray-100 text-gray-800 mr-2 px-2.5 py-0.5 rounded-full dark:bg-gray-900 dark:text-gray-300">
-                            {{ order.signal.timestamp }} 
+                            {{ order.market_timestamp }} 
                         </span>
                         {% if order.force %}
                             <span class="nowrap bg-blue-100 text-blue-800 mr-2 px-2.5 py-0.5 rounded-full dark:bg-blue-900 dark:text-blue-300">
@@ -385,7 +385,7 @@ rangeInputSell.addEventListener('input', () => {
                 {% for signal in signals %}
                 <tr class="bg-white border-b dark:bg-gray-800 dark:border-gray-700">
                     <td class="hyphens-auto px-6 py-4 whitespace-nowrap">
-                        {{ signal.symbol.name }}
+                        {{ symbol.name }}
                     </td>
                     <td class="whitespace-nowrap px-6 py-4">
                         $ {{ signal.price }}
@@ -411,11 +411,6 @@ rangeInputSell.addEventListener('input', () => {
                     </td>
                     <td class="px-6 py-4 hyphens-none whitespace-nowrap">
                         {{ signal.timestamp|date:"d-m-Y H:i:s" }}
-                        {% if signal.order.force %}
-                            <span class="nowrap bg-blue-100 text-blue-800 mr-2 px-2.5 py-0.5 rounded-full dark:bg-blue-900 dark:text-blue-300">
-                            FORCE
-                            </span>
-                            {% endif %}
                     </td>
                 </tr>
                 {% empty %}
