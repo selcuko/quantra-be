@@ -14,7 +14,7 @@ def float_to_precision(value: Decimal | float, precision: Decimal | float | int)
     if precision <= 0:
         precision = 1
     if precision > 1:
-        return round(float(str(value)), int(str(precision)))
+        return round(float(str(value)), int(float(precision)))
     else:
         value = Decimal(str(value))
         return float((value // precision) * precision)

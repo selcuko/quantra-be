@@ -341,6 +341,7 @@ class MEXCMarket(IMarket):
         return self.symbols[name]
 
     def _prep_order(self, order):
+        from quantapi.models import Order
         order_time = order.get('time') or order.get('transactTime') or order.get('timestamp') or 0
         return Order(
             oid=order.get('orderId'),
@@ -412,6 +413,7 @@ class MEXCMarket(IMarket):
 
     @authentication_required
     def get_order(self, symbol:'MarketSymbol|str', order:'Order|str') -> 'Order':
+        from quantapi.models import Order
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         if isinstance(order, Order):

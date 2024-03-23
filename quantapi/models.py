@@ -43,10 +43,12 @@ class Market(models.Model):
         details = json.loads(symbol.details or '{}', )
         if self.exchange_name == Market.Exchange.BINANCE:
             filters = {f['filterType']: f for f in details.get('filters', [])}
+            lot_step = filters.get('LOT_SIZE', {}).get('stepSize')
+            price_size = filters.get('PRICE_FILTER', {}).get('tickSize')
             return {
             'min_notional': Decimal(filters.get('MIN_NOTIONAL', {}).get('minNotional')) if filters.get('MIN_NOTIONAL', {}).get('applyToMarket') else None,
-            'lot_step': Decimal(filters.get('LOT_SIZE', {}).get('stepSize')),
-            'price_step': Decimal(filters.get('PRICE_FILTER', {}).get('tickSize')),
+            'lot_step': Decimal(lot_step) if lot_step else None,
+            'price_step': Decimal(price_size) if price_size else None,
             }
         elif self.exchange_name == Market.Exchange.KUCOIN:
             return {
@@ -380,10 +382,10 @@ class Order(models.Model):
     def fit(self):
         if self.oid or self.status != Order.Status.NOT_PLACED:
             raise ValueError('Order must be not placed to fit')
-        filters = self.signal.session.symbol.market.filters(self.signal.session.symbol)
+        filters = self.session.symbol.market.filters(self.session.symbol)
         if filters['min_notional'] and self.funds < filters['min_notional']:
             self.status = Order.Status.REJECTED
-            self.details = f'Funds {self.funds} is less than minimum notional={filters["min_notional"]}) filter enforced by {self.signal.session.symbol.market.exchange_name}'
+            self.details = f'Funds {self.funds} is less than minimum notional={filters["min_notional"]}) filter enforced by {self.session.symbol.market.exchange_name}'
             self.save()
             return
         if filters['lot_step'] and self.deal_size:
@@ -393,14 +395,14 @@ class Order(models.Model):
 
     def __str__(self) -> str:
         try:
-            return f'{self.status} {self.signal.side} {self.signal.session.symbol.name} {self.signal.price}'
+            return f'{self.status} {self.side} {self.session.symbol.name} {self.price}'
         except:
             return f'{self.status} {self.oid}'
 
     def refresh_from_market(self, market_interface):
         if not self.oid:
             raise ValueError('Cannot refresh order without oid')
-        order = market_interface.get_order(self.signal.session.symbol, self.oid)
+        order = market_interface.get_order(self.session.symbol, self.oid)
         self.status = order.status
         self.deal_funds = order.deal_funds
         self.price = order.price
@@ -467,10 +469,10 @@ class ComplexOrder(models.Model):
             if self.side == Order.Side.BUY:
                 order = ll.imarket.place_market_order(
                     symbol=self.session.symbol,
-                    side=Order.Side.BUY,
+                    side='buy',
                     funds=self.deal_funds
                 )
-                if not order.price:
+                if not order.price and self.target_price:
                     order.price = self.target_price
                 order.save()
                 self.market_order = order
@@ -480,10 +482,10 @@ class ComplexOrder(models.Model):
             elif self.side == Order.Side.SELL:
                 order = ll.imarket.place_market_order(
                     symbol=self.session.symbol,
-                    side=Order.Side.SELL,
-                    deal_size=self.deal_size
+                    side='sell',
+                    quantity=self.deal_size
                 )
-                if not order.price:
+                if not order.price and self.target_price:
                     order.price = self.target_price
                 order.save()
                 self.market_order = order

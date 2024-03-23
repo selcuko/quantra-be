@@ -12,6 +12,23 @@ class SymbolNotSupported(Exception):
     message = 'Symbol not supported in this market'
 
 
+class OrderPostProcessingError(Exception):
+    """Error during order post-processing"""
+    status = 500
+    message = 'Error during order post-processing. Order might be placed, but not confirmed.'
+
+
+class OrderValidationError(Exception):
+    """Error during order validation"""
+    status = 500
+    message = 'Error during order validation'
+
+
+class OrderNotFilledError(Exception):
+    """Order was not filled"""
+    status = 503
+    message = 'Order was not filled'
+
 
 class MarketAPIError(Exception):
     """Base class for exceptions in this module."""

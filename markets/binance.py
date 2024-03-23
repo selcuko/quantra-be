@@ -11,7 +11,7 @@ import requests
 from binance.client import Client
 
 from logger import logger
-from markets.errors import InsufficientBalance, KlineFetchFailed, MarketAPIError, RejectedOrder
+from markets.errors import InsufficientBalance, KlineFetchFailed, MarketAPIError, OrderNotFilledError, OrderPostProcessingError, OrderValidationError, RejectedOrder
 from markets.helper import authentication_required, float_to_precision
 from markets.interface import IMarket
 from match import MatchEngine
@@ -231,7 +231,7 @@ class BinanceMarket(IMarket):
                 base_precision=symbol['baseAssetPrecision'],
                 quote_precision=symbol['quotePrecision'],
                 spot_trading_enabled=symbol['isSpotTradingAllowed'],
-                margin_trading_enabled=symbol['isMarginTradingAllowed'],
+                margin_trading_enabled=symbol.get('isMarginTradingAllowed', False),
                 details=json.dumps(symbol))
         return exc_symbol
 
@@ -300,7 +300,8 @@ class BinanceMarket(IMarket):
 
     def get_symbols(self) -> dict[str, 'MarketSymbol']:
         from quantapi.models import MarketSymbol
-        self.symbols = { self._standardize_symbol(symbol['symbol']): self._prep_symbol(symbol) for symbol in self.client.get_exchange_info().get('symbols', []) }
+        exchange_info = self.client.get_exchange_info()
+        self.symbols = { self._standardize_symbol(symbol['symbol']): self._prep_symbol(symbol) for symbol in exchange_info.get('symbols', []) }
         self.symbols = { key: value for key, value in self.symbols.items() if value.quote == 'USDT'}
         if self.market: 
             MarketSymbol.objects.bulk_create(self.symbols.values(), ignore_conflicts=True)
@@ -335,20 +336,30 @@ class BinanceMarket(IMarket):
             elif 'insufficient' in str(e).lower():
                 raise InsufficientBalance(f'Insufficient funds to place order on {self.name}')
             raise
-        order = self._prep_order(_order_payload)
-        amount_txt = f'{funds} USDT' if funds else f'{quantity} {symbol.base}'
-        logger.info(f'Market {side.upper()} {symbol} order placed on {self.name} for {amount_txt} (oid {_order_payload["orderId"]})')
+        try:
+            order = self._prep_order(_order_payload)
+            amount_txt = f'{funds} USDT' if funds else f'{quantity} {symbol.base}'
+            logger.info(f'Market {side.upper()} {symbol} order placed on {self.name} for {amount_txt} (oid {_order_payload["orderId"]})')
+        except Exception as e:
+            err = f'Error while post processing market order on {symbol.base}@{self.name}. The order might be placed - be cautious.'
+            logger.error(err, exc_info=True)
+            raise OrderPostProcessingError(err) from e
         if not order.oid:
             raise ValueError(f'Error while placing market order on {self.name}')
         if validate:
-            MAX_TRY = 10
-            tries = 0
-            while order.status not in ['FILLED', 'CANCELED', 'EXPIRED', 'REJECTED'] and tries < MAX_TRY or tries == 0:
-                time.sleep(1)
-                tries += 1
-                order = self.get_order(symbol, order)
-            if order.status not in ['FILLED', 'CANCELED', 'EXPIRED', 'REJECTED']:
-                raise Exception(f'Order {order.oid} on {self.name} is still {order.status} after {MAX_TRY} tries')
+            try:
+                MAX_TRY = 10
+                tries = 0
+                while order.status not in ['FILLED', 'CANCELED', 'EXPIRED', 'REJECTED'] and tries < MAX_TRY or tries == 0:
+                    time.sleep(1)
+                    tries += 1
+                    order = self.get_order(symbol, order)
+                if order.status not in ['FILLED', 'CANCELED', 'EXPIRED', 'REJECTED']:
+                    raise OrderNotFilledError(f'Order {order.oid} on {self.name} is still {order.status} after {MAX_TRY} tries.')
+            except Exception as e:
+                err = f'Error while validating market order on {symbol.base}@{self.name}. The order status is {order.status}.'
+                logger.error(err, exc_info=True)
+                raise OrderValidationError(err) from e
         order.request = json.dumps({
             'side': side,
             'symbol': symbol.name,

@@ -271,13 +271,13 @@ class LiveLoop:
                 session=self.session,
                 timestamp=self.last_kline_dt,
                 side=Signal.Side.BUY,
-                price=last_kline['close'],
+                price=float(last_kline['close']),
                 raw=last_kline)
             if self.can_buy():
                 try:
                     last_order = self.imarket.place_market_order(self.symbol.name, 'buy', funds=self.session.capital)
                     last_order.signal = signal
-                    last_order.price = last_kline['close']
+                    last_order.price = float(last_kline['close'])
                     last_order.session = self.session
                     last_order.market_timestamp = last_order.market_timestamp or self.last_kline_dt or datetime.now(tz=pytz.UTC)
                     last_order.save()
@@ -298,7 +298,7 @@ class LiveLoop:
                         funds=self.session.capital,
                         deal_funds=self.session.capital,
                         deal_size=self.session.capital / last_kline['close'],
-                        price=last_kline['close'],
+                        price=float(last_kline['close']),
                         signal=signal,
                         status=Order.Status.REJECTED,
                         details=repr(ro),
@@ -310,7 +310,7 @@ class LiveLoop:
                         funds=self.session.capital,
                         deal_funds=self.session.capital,
                         deal_size=self.session.capital / last_kline['close'],
-                        price=last_kline['close'],
+                        price=float(last_kline['close']),
                         signal=signal,
                         status=Order.Status.ERROR,
                         details=repr(e),
@@ -333,7 +333,7 @@ class LiveLoop:
                 session=self.session,
                 timestamp=self.last_kline_dt,
                 side=Signal.Side.SELL,
-                price=last_kline['close'],
+                price=float(last_kline['close']),
                 raw=last_kline)
             if self.can_sell():
                 try:
@@ -360,7 +360,7 @@ class LiveLoop:
                         funds=self.session.capital,
                         deal_funds=self.session.capital,
                         deal_size=self.session.assets,
-                        price=last_kline['close'],
+                        price=float(last_kline['close']),
                         signal=signal,
                         status=Order.Status.REJECTED,
                         details=repr(ro),
@@ -372,7 +372,7 @@ class LiveLoop:
                         funds=self.session.capital,
                         deal_funds=self.session.capital,
                         deal_size=self.session.capital / last_kline['close'],
-                        price=last_kline['close'],
+                        price=float(last_kline['close']),
                         signal=signal,
                         status=Order.Status.ERROR,
                         details=repr(e),
