@@ -17,6 +17,10 @@ class OrderPostProcessingError(Exception):
     status = 500
     message = 'Error during order post-processing. Order might be placed, but not confirmed.'
 
+    def __init__(self, message=None, oid=None):
+        self.message = message or self.message
+        self.oid = oid
+
 
 class OrderValidationError(Exception):
     """Error during order validation"""
@@ -28,6 +32,10 @@ class OrderNotFilledError(Exception):
     """Order was not filled"""
     status = 503
     message = 'Order was not filled'
+
+    def __init__(self, message=None, order=None):
+        self.message = message or self.message
+        self.order = order
 
 
 class MarketAPIError(Exception):
@@ -70,3 +78,8 @@ class MarketDisabledTrading(Exception):
     status = 400
     message = 'Market does not support trading'
 
+
+class OrderPlacementError(Exception):
+    """Error placing order"""
+    status = 500
+    message = 'Error placing order'

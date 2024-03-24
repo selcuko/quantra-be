@@ -14,10 +14,13 @@ from liveloop import LiveLoop
 from logger import logger
 from markets.errors import (InsufficientBalance, MarketDisabledTrading,
                             SymbolNotInMarket)
+from order import OrderManager
 from quantapi.analytics import MarketAnalytics, TotalSessionAnalytics
 from quantapi.models import (Backtest, GlobalSymbol, Market, MarketSymbol,
-                             Order, Session, Signal)
+                             Order, Session)
 from strategy import get_strategy
+from django.contrib import messages
+
 
 
 class HomeView(View):
@@ -164,56 +167,55 @@ class SessionUpdateView(View):
             session.buy_enabled = bool(int(request.POST.get('session_buy_enabled', 0)))
         if 'session_sell_enabled' in request.POST:
             session.sell_enabled = bool(int(request.POST.get('session_sell_enabled', 0)))
+
         if 'session_buy' in request.POST and float(request.POST.get('session_buy', 0)) > 0:
             iface = session.symbol.market.get_interface()
             session.update(iface)
             amt = float(request.POST.get('session_buy'))
             corrected_amt = min(amt, session.capital)
+            msg = None
             if amt != corrected_amt:
-                logger.warning(f'Manual buy amount {amt} exceeds available capital {session.capital} USDT. Corrected to {corrected_amt} USDT.', extra={'loop': repr(session), 'n_type': 'ORDER'})
-            order = iface.place_market_order(session.symbol.name, 'buy', funds=corrected_amt)
+                msg = f'Manual buy amount {amt} exceeds available capital {session.capital} USDT. Corrected to {corrected_amt} USDT.'
+                logger.warning(msg, extra={'prefix': repr(session), 'type': 'ORDER'})
+            order_manager = OrderManager(iface, session)
+            order = order_manager.place(session.symbol, 'buy', deal_funds=corrected_amt)
             order.force = True
-            signal = Signal.objects.create(session=session, side='BUY', price=order.display_price, timestamp=datetime.now(pytz.UTC))
-            order.price = order.display_price
-            order.signal = signal
-            order.session = session
+            if msg:
+                order.add_message(msg)
             order.save()
-            ts = datetime.now()
-            while not order.status == Order.Status.FILLED and datetime.now() - ts < timedelta(seconds=10):
-                order.refresh_from_market(iface)
-            if not order.status == Order.Status.FILLED:
-                request.session['error'] = {
-                    'type': 'error',
-                    'text': f'Order {order.oid} not filled. {order.status}'
-                }
-            else:
+            if order.status == Order.Status.FILLED and order.deal_size and order.deal_funds:
                 session.capital -= order.deal_funds
                 session.assets += order.deal_size
+                messages.add_message(request, messages.SUCCESS, f'Bought {order.deal_size} {session.symbol.base} for {order.deal_funds} USDT')
+            else:
+                msg = f'Order failed to fill: {order.details}'
+                logger.error(msg, extra={'prefix': repr(session), 'type': 'ORDER'})
+                messages.add_message(request, messages.ERROR, msg)
+
         if 'session_sell' in request.POST and float(request.POST.get('session_sell', 0)) > 0:
             iface = session.symbol.market.get_interface()
             session.update(iface)
             amt = float(request.POST.get('session_sell'))
             corrected_amt = min(amt, session.assets)
+            msg = None
             if amt != corrected_amt:
-                logger.warning(f'Manual sell amount {amt} exceeds available assets {session.assets} {session.symbol.base}. Corrected to {corrected_amt} {session.symbol.base}.', extra={'loop': repr(session), 'n_type': 'ORDER'})
-            order = iface.place_market_order(session.symbol.name, 'sell', quantity=corrected_amt)
+                msg = f'Manual sell amount {amt} exceeds available assets {session.assets} {session.symbol.base}. Corrected to {corrected_amt} {session.symbol.base}.'
+                logger.warning(msg, extra={'prefix': repr(session), 'type': 'ORDER'})
+            order_manager = OrderManager(iface, session)
+            order = order_manager.place(session.symbol, 'sell', deal_size=corrected_amt)
             order.force = True
-            signal = Signal.objects.create(session=session, side='SELL', price=order.display_price, timestamp=datetime.now(pytz.UTC))
-            order.price = order.display_price
-            order.signal = signal
-            order.session = session
+            if msg:
+                order.add_message(msg)
             order.save()
-            ts = datetime.now()
-            while not order.status == Order.Status.FILLED and datetime.now() - ts < timedelta(seconds=10):
-                order.refresh_from_market(iface)
-            if not order.status == Order.Status.FILLED:
-                request.session['error'] = {
-                    'type': 'error',
-                    'text': f'Order {order.oid} not filled. {order.status}'
-                }
-            else:
+            if order.status == Order.Status.FILLED and order.deal_size and order.deal_funds:
                 session.capital += order.deal_funds
                 session.assets -= order.deal_size
+                messages.add_message(request, messages.SUCCESS, f'Sold {order.deal_size} {session.symbol.base} for {order.deal_funds} USDT')
+            else:
+                msg = f'Order failed to fill: {order.messages_raw}'
+                logger.error(msg, extra={'prefix': repr(session), 'type': 'ORDER'})
+                messages.add_message(request, messages.ERROR, msg)
+
         if 'capital_update' in request.POST:
             session.capital = float(request.POST.get('capital_update', 0))
         if 'asset_update' in request.POST:

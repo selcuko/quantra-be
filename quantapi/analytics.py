@@ -166,6 +166,8 @@ class OrderAnalytics:
         Calculate the average cost of the buy order.        
 
         """
+        if not self.order.session:
+            return
         orders = self.order.session.orders.filter(status=Order.Status.FILLED)
         assets = 0
 
@@ -185,6 +187,8 @@ class OrderAnalytics:
 
     @property
     def last_average_cost(self):
+        if not self.order.session:
+            return
         last_buy = self.order.session.orders.filter(status=Order.Status.FILLED, side=Order.Side.BUY)
         if self.order.side == Order.Side.BUY:
             last_buy = last_buy.exclude(pk=self.order.pk).last()
@@ -203,7 +207,7 @@ class OrderAnalytics:
         if self.order.side != Order.Side.SELL:
             return
         avg_cost = self.last_average_cost
-        if not avg_cost:
+        if not avg_cost or not self.order.price or not self.order.deal_size:
             return
         pnl = (self.order.price - avg_cost) * self.order.deal_size
         return pnl

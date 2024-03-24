@@ -46,21 +46,21 @@ class Market(models.Model):
             lot_step = filters.get('LOT_SIZE', {}).get('stepSize')
             price_size = filters.get('PRICE_FILTER', {}).get('tickSize')
             return {
-            'min_notional': Decimal(filters.get('MIN_NOTIONAL', {}).get('minNotional')) if filters.get('MIN_NOTIONAL', {}).get('applyToMarket') else None,
-            'lot_step': Decimal(lot_step) if lot_step else None,
-            'price_step': Decimal(price_size) if price_size else None,
+                'min_notional': Decimal(filters.get('MIN_NOTIONAL', {}).get('minNotional')) if filters.get('MIN_NOTIONAL', {}).get('applyToMarket') else None,
+                'lot_step': lot_step.rstrip('0') if lot_step else None,
+                'price_step': Decimal(price_size) if price_size else None,
             }
         elif self.exchange_name == Market.Exchange.KUCOIN:
             return {
-            'min_notional': Decimal(details.get('minFunds')),
-            'lot_step': Decimal(details.get('baseIncrement')),
-            'price_step': Decimal(details.get('priceIncrement')),
+                'min_notional': Decimal(details.get('minFunds')),
+                'lot_step': Decimal(details.get('baseIncrement')),
+                'price_step': Decimal(details.get('priceIncrement')),
             }
         elif self.exchange_name == Market.Exchange.MEXC:
             return {
-            'price_step': Decimal(details.get('quoteAmoundPrecision')),
-            'lot_step': Decimal(details.get('baseSizePrecision')),
-            'min_notional': Decimal(details.get('minQuoteAmoundMarket')),
+                'price_step': Decimal(details.get('quoteAmoundPrecision')),
+                'lot_step': Decimal(details.get('baseSizePrecision')),
+                'min_notional': Decimal(details.get('minQuoteAmoundMarket')),
             }
         else:
             return {
@@ -162,6 +162,8 @@ class MarketSymbol(models.Model):
         except:
             return f'{self.name}@NOMARKET'
 
+    def filters(self):
+        return self.market.filters(self)
 
 class Session(models.Model):
     class CandleSource(models.TextChoices):
@@ -339,12 +341,14 @@ class Order(models.Model):
         REJECTED = 'REJECTED'
         EXPIRED = 'EXPIRED'
         ERROR = 'ERROR'
+        INSUFFICIENT_BALANCE = 'INSUFFICIENT_BALANCE'
+
     oid = models.CharField(max_length=256, unique=True, null=True, blank=True)
     client_oid = models.CharField(max_length=256, unique=True, null=True, blank=True)
-    deal_size = models.FloatField(help_text='Amount of quote currency in this order (e.g. BTC)')
-    price = models.FloatField(help_text='Price represented as (price of base)/(price of quote)')
-    deal_funds = models.FloatField(help_text='Amount of base currency in this order (e.g. USDT)')
-    funds = models.FloatField(help_text='Amount of base currency of this order initially placed with')
+    deal_size = models.FloatField(help_text='Amount of quote currency in this order (e.g. BTC)', null=True, blank=True)
+    price = models.FloatField(help_text='Price represented as (price of base)/(price of quote)', null=True, blank=True)
+    deal_funds = models.FloatField(help_text='Amount of base currency in this order (e.g. USDT)', null=True, blank=True)
+    funds = models.FloatField(help_text='Amount of base currency of this order initially placed with', null=True, blank=True)
     order_type = models.CharField(max_length=30, choices=Type.choices, default=Type.MARKET)
     signal = models.OneToOneField(Signal, on_delete=models.PROTECT, related_name='order', null=True, blank=True)
     market_timestamp = models.DateTimeField(null=True, blank=True)
@@ -358,7 +362,29 @@ class Order(models.Model):
     messages_raw = models.TextField(default='')
     pnl = models.FloatField(null=True, blank=True)
     average_cost = models.FloatField(null=True, blank=True)
-    session = models.ForeignKey(Session, on_delete=models.PROTECT, related_name='orders')
+    session = models.ForeignKey(Session, on_delete=models.PROTECT, related_name='orders', null=True, blank=True)
+    symbol = models.ForeignKey(MarketSymbol, on_delete=models.PROTECT, related_name='orders')
+    market = models.ForeignKey(Market, on_delete=models.PROTECT, related_name='orders')
+
+    def save(self, *args, **kwargs):
+        if not self.side and self.signal: 
+            self.side = self.signal.side
+        if not self.price and self.deal_funds and self.deal_size:
+            self.price = self.deal_funds / self.deal_size
+        if not self.deal_funds and self.price and self.deal_size:
+            self.deal_funds = self.price * self.deal_size
+        if not self.deal_size and self.price and self.deal_funds:
+            self.deal_size = self.deal_funds / self.price
+        if not self.funds and self.deal_funds:
+            self.funds = self.deal_funds
+        super().save(*args, **kwargs)
+        if not self.pnl and not self.average_cost:
+            from quantapi.analytics import OrderAnalytics
+            order_analytics = OrderAnalytics(self)
+            self.pnl = order_analytics.pnl
+            self.average_cost = order_analytics.average_cost
+            if self.pnl or self.average_cost:
+                super().save(*args, **kwargs)
 
     @property
     def messages(self):
@@ -367,42 +393,23 @@ class Order(models.Model):
     @messages.setter
     def messages(self, value):
         self.messages_raw = '\n'.join(value)
-    
+
     def add_message(self, message):
         messages = self.messages
         messages.append(message)
         self.messages = messages
 
-    def validate(self):
-        if not self.funds and not self.deal_funds:
-            raise ValueError('Order must have funds or deal_funds')
-        if not self.price and not self.deal_size:
-            raise ValueError('Order must have price or deal_size')
-
-    def fit(self):
-        if self.oid or self.status != Order.Status.NOT_PLACED:
-            raise ValueError('Order must be not placed to fit')
-        filters = self.session.symbol.market.filters(self.session.symbol)
-        if filters['min_notional'] and self.funds < filters['min_notional']:
-            self.status = Order.Status.REJECTED
-            self.details = f'Funds {self.funds} is less than minimum notional={filters["min_notional"]}) filter enforced by {self.session.symbol.market.exchange_name}'
-            self.save()
-            return
-        if filters['lot_step'] and self.deal_size:
-            self.deal_size = float_to_precision(self.deal_size, filters['lot_step'])
-        if filters['price_step'] and self.price:
-            self.price = float_to_precision(self.price, filters['price_step'])
-
     def __str__(self) -> str:
-        try:
-            return f'{self.status} {self.side} {self.session.symbol.name} {self.price}'
-        except:
-            return f'{self.status} {self.oid}'
+        if self.side == Order.Side.BUY:
+            return f'{self.status} {self.order_type.title()} {self.side} Order: ${self.deal_funds} worth of {self.symbol.name}'
+        elif self.side == Order.Side.SELL:
+            return f'{self.status} {self.order_type.title()} {self.side} Order: {self.deal_size} {self.symbol.base}'
+        return f'{self.status} {self.order_type.title()} Order: {self.symbol.name}'
 
     def refresh_from_market(self, market_interface):
         if not self.oid:
             raise ValueError('Cannot refresh order without oid')
-        order = market_interface.get_order(self.session.symbol, self.oid)
+        order = market_interface.get_order(self.symbol, self.oid)
         self.status = order.status
         self.deal_funds = order.deal_funds
         self.price = order.price
@@ -414,26 +421,36 @@ class Order(models.Model):
         self.save()
 
     @property
-    def symbol(self):
-        return self.session.symbol
-
-    @property
     def display_price(self):
-        if self.price > 0:
+        if self.price and self.price > 0:
             return self.price
-        return self.deal_funds / self.deal_size
+        elif self.deal_funds and self.deal_size:
+            return self.deal_funds / self.deal_size
+        return None
 
-    def save(self, *args, **kwargs):
-        if not self.side and self.signal: 
-            self.side = self.signal.side
-        super().save(*args, **kwargs)
-        if not self.pnl and not self.average_cost:
-            from quantapi.analytics import OrderAnalytics
-            order_analytics = OrderAnalytics(self)
-            self.pnl = order_analytics.pnl
-            self.average_cost = order_analytics.average_cost
-            self.save()
-        
+    def to_dict(self):
+        return {
+            'id': self.pk,
+            'oid': self.oid,
+            'client_oid': self.client_oid,
+            'deal_size': self.deal_size,
+            'price': self.price,
+            'deal_funds': self.deal_funds,
+            'funds': self.funds,
+            'order_type': self.order_type,
+            'status': self.status,
+            'force': self.force,
+            'details': self.details,
+            'request': self.request,
+            'placed_at': self.placed_at,
+            'side': self.side,
+            'messages_raw': self.messages_raw,
+            'pnl': self.pnl,
+            'average_cost': self.average_cost,
+            'session': self.session.pk if self.session else None,
+            'symbol': self.symbol.name,
+            'market': self.market.exchange_name,
+        }
 
 
 class ComplexOrder(models.Model):
