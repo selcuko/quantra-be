@@ -33,7 +33,8 @@ def interval_to_minutes(interval:str) -> int:
 class OHLCVDataset(pd.DataFrame):
     def __init__(self, *args, **kwargs):
         if kwargs.pop('pass_thru', False):
-            return super().__init__(*args, **kwargs)
+            super().__init__(*args, **kwargs)
+            return
         kwargs.update({'columns': ['time', 'open', 'high', 'low', 'close', 'volume']})
         super().__init__(*args, **kwargs)
         self.set_index('time', inplace=True)

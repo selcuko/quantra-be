@@ -41,7 +41,7 @@ def symbol_metrics_update_loop():
             Command().handle()
             threading.Event().wait(60 * 60 * 4)
         except:
-            logger.error('Failed to update symbol metrics.', exc_info=True)
+            logger.warning('Failed to update symbol metrics.', exc_info=True)
 
 
 class QuantapiConfig(AppConfig):

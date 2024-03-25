@@ -347,7 +347,7 @@ class MEXCMarket(IMarket):
             oid=order.get('orderId'),
             client_oid=order.get('clientOrderId'),
             order_type=order.get('type', 'MARKET'),
-            price=order.get('price'),
+            price=float(order.get('price', 0)),
             market_timestamp=self._standardize_datetime(order_time),
             deal_funds=float(order.get('origQuoteOrderQty', 0)),
             deal_size=float(order.get('executedQty', 0)),

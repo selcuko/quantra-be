@@ -14,10 +14,13 @@ from liveloop import LiveLoop
 from logger import logger
 from markets.errors import (InsufficientBalance, MarketDisabledTrading,
                             SymbolNotInMarket)
+from order import OrderManager
 from quantapi.analytics import MarketAnalytics, TotalSessionAnalytics
 from quantapi.models import (Backtest, GlobalSymbol, Market, MarketSymbol,
-                             Order, Session, Signal)
+                             Order, Session)
 from strategy import get_strategy
+from django.contrib import messages
+
 
 
 class HomeView(View):
@@ -164,56 +167,55 @@ class SessionUpdateView(View):
             session.buy_enabled = bool(int(request.POST.get('session_buy_enabled', 0)))
         if 'session_sell_enabled' in request.POST:
             session.sell_enabled = bool(int(request.POST.get('session_sell_enabled', 0)))
+
         if 'session_buy' in request.POST and float(request.POST.get('session_buy', 0)) > 0:
             iface = session.symbol.market.get_interface()
             session.update(iface)
             amt = float(request.POST.get('session_buy'))
             corrected_amt = min(amt, session.capital)
+            msg = None
             if amt != corrected_amt:
-                logger.warning(f'Manual buy amount {amt} exceeds available capital {session.capital} USDT. Corrected to {corrected_amt} USDT.', extra={'loop': repr(session), 'n_type': 'ORDER'})
-            order = iface.place_market_order(session.symbol.name, 'buy', funds=corrected_amt)
+                msg = f'Manual buy amount {amt} exceeds available capital {session.capital} USDT. Corrected to {corrected_amt} USDT.'
+                logger.warning(msg, extra={'prefix': repr(session), 'type': 'ORDER'})
+            order_manager = OrderManager(iface, session)
+            order = order_manager.place(session.symbol, 'buy', deal_funds=corrected_amt)
             order.force = True
-            signal = Signal.objects.create(session=session, side='BUY', price=order.display_price, timestamp=datetime.now(pytz.UTC))
-            order.price = order.display_price
-            order.signal = signal
-            order.session = session
+            if msg:
+                order.add_message(msg)
             order.save()
-            ts = datetime.now()
-            while not order.status == Order.Status.FILLED and datetime.now() - ts < timedelta(seconds=10):
-                order.refresh_from_market(iface)
-            if not order.status == Order.Status.FILLED:
-                request.session['error'] = {
-                    'type': 'error',
-                    'text': f'Order {order.oid} not filled. {order.status}'
-                }
-            else:
+            if order.status == Order.Status.FILLED and order.deal_size and order.deal_funds:
                 session.capital -= order.deal_funds
                 session.assets += order.deal_size
+                messages.add_message(request, messages.SUCCESS, f'Bought {order.deal_size} {session.symbol.base} for {order.deal_funds} USDT')
+            else:
+                msg = f'Order failed to fill: {order.details}'
+                logger.error(msg, extra={'prefix': repr(session), 'type': 'ORDER'})
+                messages.add_message(request, messages.ERROR, msg)
+
         if 'session_sell' in request.POST and float(request.POST.get('session_sell', 0)) > 0:
             iface = session.symbol.market.get_interface()
             session.update(iface)
             amt = float(request.POST.get('session_sell'))
             corrected_amt = min(amt, session.assets)
+            msg = None
             if amt != corrected_amt:
-                logger.warning(f'Manual sell amount {amt} exceeds available assets {session.assets} {session.symbol.base}. Corrected to {corrected_amt} {session.symbol.base}.', extra={'loop': repr(session), 'n_type': 'ORDER'})
-            order = iface.place_market_order(session.symbol.name, 'sell', quantity=corrected_amt)
+                msg = f'Manual sell amount {amt} exceeds available assets {session.assets} {session.symbol.base}. Corrected to {corrected_amt} {session.symbol.base}.'
+                logger.warning(msg, extra={'prefix': repr(session), 'type': 'ORDER'})
+            order_manager = OrderManager(iface, session)
+            order = order_manager.place(session.symbol, 'sell', deal_size=corrected_amt)
             order.force = True
-            signal = Signal.objects.create(session=session, side='SELL', price=order.display_price, timestamp=datetime.now(pytz.UTC))
-            order.price = order.display_price
-            order.signal = signal
-            order.session = session
+            if msg:
+                order.add_message(msg)
             order.save()
-            ts = datetime.now()
-            while not order.status == Order.Status.FILLED and datetime.now() - ts < timedelta(seconds=10):
-                order.refresh_from_market(iface)
-            if not order.status == Order.Status.FILLED:
-                request.session['error'] = {
-                    'type': 'error',
-                    'text': f'Order {order.oid} not filled. {order.status}'
-                }
-            else:
+            if order.status == Order.Status.FILLED and order.deal_size and order.deal_funds:
                 session.capital += order.deal_funds
                 session.assets -= order.deal_size
+                messages.add_message(request, messages.SUCCESS, f'Sold {order.deal_size} {session.symbol.base} for {order.deal_funds} USDT')
+            else:
+                msg = f'Order failed to fill: {order.messages_raw}'
+                logger.error(msg, extra={'prefix': repr(session), 'type': 'ORDER'})
+                messages.add_message(request, messages.ERROR, msg)
+
         if 'capital_update' in request.POST:
             session.capital = float(request.POST.get('capital_update', 0))
         if 'asset_update' in request.POST:
@@ -357,20 +359,31 @@ class OrderManagementView(View):
     
     def post(self, request):
         payload = request.POST
+        if not all((
+            payload.get('market'),
+            payload.get('symbol'),
+            payload.get('side') in ['BUY', 'SELL'],
+            payload.get('amount'),
+        )):
+            messages.error(request, f'Invalid order parameters: {payload}')
+            return redirect('order-management')
         market = Market.objects.get(pk=payload['market'])
         symbol_name = payload['symbol']
         symbol_name = symbol_name.upper().replace('-', '').replace('/', '').replace('USDT', '') + '-USDT'
         symbol = MarketSymbol.objects.get(name=symbol_name, market=market)
         interface = market.get_interface()
         amount = float(payload['amount'])
-        if payload['side'] == 'SELL':
-            order = interface.place_market_order(symbol.name, 'sell', quantity=amount)
-            return HttpResponse(f'Order {order.oid} placed. {order.details}')
-        elif payload['side'] == 'BUY':
-            order = interface.place_market_order(symbol.name, 'buy', quantity=amount)
-            return HttpResponse(f'Order {order.oid} placed. {order.details}')
-        return HttpResponse('Invalid side')
-
+        order_manager = OrderManager(interface)
+        try:
+            order = None
+            if payload['side'] == 'BUY':
+                order = order_manager.place(symbol, 'buy', deal_funds=amount, silent=False)
+            elif payload['side'] == 'SELL':
+                order = order_manager.place(symbol, 'sell', deal_size=amount, silent=False)
+            messages.success(request, f'Order placed: {order!s}')
+        except Exception as e:
+            messages.error(request, f'Failed to place order: {e!r}')
+        return redirect('order-management')
 
 class PriceView(View):
     def get(self, request):
@@ -386,7 +399,7 @@ class PriceView(View):
             response['message'] = 'Invalid symbol or market'
             return JsonResponse(response)
         if not '-' in symbol:
-            symbol = symbol + '-USDT'
+            symbol += '-USDT'
 
         market = Market.objects.get(pk=market_id)
         prices = json.loads(market.prices or '{}')

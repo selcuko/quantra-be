@@ -46,9 +46,9 @@ class SignalAdmin(admin.ModelAdmin):
 
 
 class OrderAdmin(admin.ModelAdmin):
-    list_display = ('__str__', 'oid', 'status', 'order_type','deal_funds', 'force')
+    list_display = ('__str__', 'oid', 'status', 'order_type','deal_funds', 'force', 'created_at')
     list_filter = ('status', 'order_type', 'force')
-    raw_id_fields = ('signal', 'session')
+    raw_id_fields = ('signal', 'session', 'symbol', 'market')
 
     def get_queryset(self, request):
         queryset = super().get_queryset(request)

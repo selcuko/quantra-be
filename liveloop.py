@@ -1,4 +1,6 @@
 import django
+
+from order import OrderManager
 django.setup()
 import json
 import threading
@@ -10,12 +12,12 @@ import pandas as pd
 import pytz
 
 from logger import logger
-from markets.errors import InsufficientBalance, RejectedOrder
+from markets.errors import InsufficientBalance, OrderPostProcessingError, RejectedOrder
 from models import OHLCVDataset, interval_to_minutes
 from quantapi.models import ComplexOrder, Market, MarketSymbol, Order, Session, Signal
 from quantapi.models import Strategy as StrategyModel
 from strategy import Strategy, get_strategy
-
+from locks import order_lock
 
 class LiveLoop:
     def __init__(self, symbol:str, market:Market, strategy:Strategy, capital_limit:float,
@@ -40,7 +42,6 @@ class LiveLoop:
         self.last_kline_dt = None
         self.last_100_klines = None
 
-        self.order_lock = threading.Lock()
         self.loop_interval_s = interval_to_minutes(freq) * 60
 
         if not (strategy_model := StrategyModel.objects.filter(name=strategy.name).first()):
@@ -266,124 +267,79 @@ class LiveLoop:
 
 
     def buy(self, last_kline:dict):
-        with self.order_lock:
+        """Buys the asset if possible. Returns the order object if successful, None otherwise. Meant to be called from on_candle method."""
+        with order_lock:
             signal = Signal.objects.create(
                 session=self.session,
                 timestamp=self.last_kline_dt,
                 side=Signal.Side.BUY,
                 price=float(last_kline['close']),
                 raw=last_kline)
-            if self.can_buy():
-                try:
-                    last_order = self.imarket.place_market_order(self.symbol.name, 'buy', funds=self.session.capital)
-                    last_order.signal = signal
-                    last_order.price = float(last_kline['close'])
-                    last_order.session = self.session
-                    last_order.market_timestamp = last_order.market_timestamp or self.last_kline_dt or datetime.now(tz=pytz.UTC)
-                    last_order.save()
-                    if last_order.status == Order.Status.FILLED:
-                        self.session.assets += last_order.deal_size
-                        self.session.capital -= last_order.deal_funds
-                    else:
-                        logger.error(f'{signal.side} order for {last_order.deal_funds} {self.symbol.quote} not filled, status is {last_order.status} (oid={last_order.oid}))', extra={'n_type': 'ORDER', 'loop': repr(self)})
-                except InsufficientBalance:
-                    self.imarket.get_account()
-                    self.session.capital = max(self.imarket.capital, 0)
-                    # self.session.assets = max(self.imarket.assets.get(self.symbol.base, 0), 0)
-                    self.session.save()
-                    logger.warning(f'Insufficient balance, assets updated to {self.session.assets} and capital updated to {self.session.capital}', extra={'loop': repr(self)})
-                    return self.buy(last_kline)
-                except RejectedOrder as ro:
-                    last_order = Order.objects.create(
-                        funds=self.session.capital,
-                        deal_funds=self.session.capital,
-                        deal_size=self.session.capital / last_kline['close'],
-                        price=float(last_kline['close']),
-                        signal=signal,
-                        status=Order.Status.REJECTED,
-                        details=repr(ro),
-                        market_timestamp=self.last_kline_dt or datetime.now(tz=pytz.UTC),
-                        session=self.session
-                    )
-                except Exception as e:
-                    last_order = Order.objects.create(
-                        funds=self.session.capital,
-                        deal_funds=self.session.capital,
-                        deal_size=self.session.capital / last_kline['close'],
-                        price=float(last_kline['close']),
-                        signal=signal,
-                        status=Order.Status.ERROR,
-                        details=repr(e),
-                        market_timestamp=self.last_kline_dt or datetime.now(tz=pytz.UTC),
-                        session=self.session
-                    )
-                    logger.error(f'Failed to place BUY order for {self.session.capital} {self.symbol.quote} (olid:{last_order.pk}), skipping.', exc_info=True, extra={'n_type': 'ORDER', 'loop': repr(self)})
+            if not self.can_buy():
+                return
+            order_manager = OrderManager(self.imarket, self.session)
+
+            try:
+                order = order_manager.place(
+                    symbol=self.symbol,
+                    side='buy',
+                    deal_funds=self.session.capital,
+                )
+            except OrderPostProcessingError as e:
+                logger.error(f'Order post processing failed. Order might or might no be placed. {e!r}', extra={'type': 'ORDER', 'prefix': repr(self)})
+            except:
+                logger.error(f'Unhandled error while placing order.', exc_info=True, extra={'type': 'ORDER', 'loop': repr(self)})
+                return
+
+            if order.status == Order.Status.INSUFFICIENT_BALANCE:
+                self.imarket.get_account()
+                self.session.capital = max(self.imarket.capital, 0)
                 self.session.save()
-            else:
-                return False
-            return last_order
+                logger.warning(f'Insufficient balance, capital updated to {self.session.capital}', extra={'prefix': repr(self), 'type': 'ORDER'})
+                return self.buy(last_kline)
+            elif order.status == Order.Status.REJECTED:
+                logger.error(f'RejectedOrder: {order!s}', extra={'type': 'ORDER', 'prefix': repr(self)})
+        order.signal = signal
+        order.save()
+        return order
 
 
     def sell(self, last_kline:dict):
-        with self.order_lock:
-            if not last_kline:
-                last_kline = {}
-            last_order = None
+        """Sells the asset if possible. Returns the order object if successful, None otherwise. Meant to be called from on_candle method."""
+        with order_lock:
             signal = Signal.objects.create(
                 session=self.session,
                 timestamp=self.last_kline_dt,
                 side=Signal.Side.SELL,
                 price=float(last_kline['close']),
                 raw=last_kline)
-            if self.can_sell():
-                try:
-                    last_order = self.imarket.place_market_order(self.symbol.name, 'sell', quantity=self.session.assets)
-                    last_order.signal = signal
-                    last_order.price = last_kline['close']
-                    last_order.session = self.session
-                    last_order.market_timestamp = last_order.market_timestamp or self.last_kline_dt or datetime.now(tz=pytz.UTC)
-                    last_order.save()
-                    if last_order.status == Order.Status.FILLED:
-                        self.session.assets -= last_order.deal_size
-                        self.session.capital += last_order.deal_funds
-                    else:
-                        logger.error(f'{signal.side} order for {last_order.deal_size} {self.symbol.base} not filled, status is {last_order.status} (oid={last_order.oid}))', extra={'n_type': 'ORDER', 'loop': repr(self)})
-                except InsufficientBalance:
-                    self.imarket.get_account()
-                    # self.session.capital = max(self.imarket.capital, 0)
-                    self.session.assets = max(self.imarket.assets.get(self.symbol.base, 0), 0)
-                    self.session.save()
-                    logger.warning(f'Insufficient balance, assets updated to {self.session.assets} and capital updated to {self.session.capital}', extra={'loop': repr(self)})
-                    return self.sell(last_kline)
-                except RejectedOrder as ro:
-                    last_order = Order.objects.create(
-                        funds=self.session.capital,
-                        deal_funds=self.session.capital,
-                        deal_size=self.session.assets,
-                        price=float(last_kline['close']),
-                        signal=signal,
-                        status=Order.Status.REJECTED,
-                        details=repr(ro),
-                        market_timestamp=self.last_kline_dt or datetime.now(tz=pytz.UTC),
-                        session=self.session
-                    )
-                except Exception as e:
-                    last_order = Order.objects.create(
-                        funds=self.session.capital,
-                        deal_funds=self.session.capital,
-                        deal_size=self.session.capital / last_kline['close'],
-                        price=float(last_kline['close']),
-                        signal=signal,
-                        status=Order.Status.ERROR,
-                        details=repr(e),
-                        market_timestamp=self.last_kline_dt or datetime.now(tz=pytz.UTC),
-                        session=self.session
-                    )
-                    logger.error(f'Failed to place SELL order for {self.session.assets} {self.symbol.base} (olid:{last_order.pk}), skipping.', exc_info=True, extra={'n_type': 'ORDER', 'loop': repr(self)})
+            if not self.can_sell():
+                return
+            order_manager = OrderManager(self.imarket, self.session)
+
+            try:
+                order = order_manager.place(
+                    symbol=self.symbol,
+                    side='sell',
+                    deal_size=self.session.assets,
+                )
+            except OrderPostProcessingError as e:
+                logger.error(f'Order post processing failed. Order might or might no be placed. {e!r}', extra={'type': 'ORDER', 'prefix': repr(self)})
+            except:
+                logger.error(f'Unhandled error while placing order.', exc_info=True, extra={'type': 'ORDER', 'loop': repr(self)})
+                return
+
+            if order.status == Order.Status.INSUFFICIENT_BALANCE:
+                self.imarket.get_account()
+                self.session.assets = self.imarket.assets.get(self.symbol.base, 0)
                 self.session.save()
-            else:
-                return False
-            return last_order
+                logger.warning(f'Insufficient balance, assets updated to {self.session.assets}', extra={'prefix': repr(self), 'type': 'ORDER'})
+                return self.sell(last_kline)
+            elif order.status == Order.Status.REJECTED:
+                logger.error(f'RejectedOrder: {order!s}', extra={'type': 'ORDER', 'prefix': repr(self)})
+        order.signal = signal
+        order.save()
+        return order
 
 
     def run_complex_orders(self):

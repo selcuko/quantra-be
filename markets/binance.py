@@ -11,15 +11,19 @@ import requests
 from binance.client import Client
 
 from logger import logger
-from markets.errors import InsufficientBalance, KlineFetchFailed, MarketAPIError, OrderNotFilledError, OrderPostProcessingError, OrderValidationError, RejectedOrder
+from markets.errors import (InsufficientBalance, KlineFetchFailed,
+                            MarketAPIError, OrderPlacementError,
+                            OrderPostProcessingError, RejectedOrder)
 from markets.helper import authentication_required, float_to_precision
 from markets.interface import IMarket
 from match import MatchEngine
 from models import interval_to_minutes
+
 if typing.TYPE_CHECKING:
     from quantapi.models import MarketSymbol, Order, Session, Market
+
+from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
 from websockets.sync.client import connect
-from websockets.exceptions import ConnectionClosedOK, ConnectionClosed
 
 
 class BinanceMarket(IMarket):
@@ -50,7 +54,8 @@ class BinanceMarket(IMarket):
             if retries < max_init_retry:
                 retries += 1
                 time.sleep(1)
-                return self.__init__(config, market)
+                self.__init__(config, market)
+                return
             logger.fatal(f'Error while initializing {self.name}', exc_info=True)
             raise MarketAPIError(f'Cannot initialize {self.name} (tried {retries}) times).') from e
         self.symbols = self.get_symbols()
@@ -250,10 +255,8 @@ class BinanceMarket(IMarket):
             status=order['status'].upper(),
             funds=float(order.get('origQuoteOrderQty', 0)),
             details=json.dumps(order),
+            side=order['side'].upper(),
         )
-    
-    def get_earliest_valid_timestamp(self, symbol, interval):
-        return self.client._get_earliest_valid_timestamp(symbol, interval)
 
     def _get_klines(self, symbol:str, interval:str, start:datetime, end:Optional[datetime]=None, limit=1000, retry=0) -> list[list]:
         if end:
@@ -317,16 +320,6 @@ class BinanceMarket(IMarket):
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         client_oid = uuid.uuid4().hex
-        if (not funds and not quantity) or (funds and quantity):
-            raise ValueError(f'You must provide either funds or quantity to place a market order on {self.name}')
-        if funds and symbol.quote_precision:
-            funds = float_to_precision(Decimal(funds), Decimal(symbol.quote_precision))
-        if quantity and symbol.base_precision:
-            quantity = float_to_precision(Decimal(quantity), Decimal(symbol.base_precision))
-        filters = self.market.filters(symbol) if self.market else {}
-        lot_step = filters.get('lot_step')
-        if lot_step and quantity:
-            quantity = float_to_precision(Decimal(quantity), Decimal(lot_step))
         try:
             _order_payload = self.client.order_market(
                 side=side,
@@ -339,42 +332,11 @@ class BinanceMarket(IMarket):
                 raise RejectedOrder(f'Order was rejected by the exchange: {e}')
             elif 'insufficient' in str(e).lower():
                 raise InsufficientBalance(f'Insufficient funds to place order on {self.name}')
-            raise
+            raise OrderPlacementError(f'Error placing order: {e!r}')
         try:
             order = self._prep_order(_order_payload)
-            amount_txt = f'{funds} USDT' if funds else f'{quantity} {symbol.base}'
-            logger.info(f'Market {side.upper()} {symbol} order placed on {self.name} for {amount_txt} (oid {_order_payload["orderId"]})')
         except Exception as e:
-            err = f'Error while post processing market order on {symbol.base}@{self.name}. The order might be placed - be cautious.'
-            logger.error(err, exc_info=True)
-            raise OrderPostProcessingError(err) from e
-        if not order.oid:
-            raise ValueError(f'Error while placing market order on {self.name}')
-        if validate:
-            try:
-                MAX_TRY = 10
-                tries = 0
-                while order.status not in ['FILLED', 'CANCELED', 'EXPIRED', 'REJECTED'] and tries < MAX_TRY or tries == 0:
-                    time.sleep(1)
-                    tries += 1
-                    order = self.get_order(symbol, order)
-                if order.status not in ['FILLED', 'CANCELED', 'EXPIRED', 'REJECTED']:
-                    raise OrderNotFilledError(f'Order {order.oid} on {self.name} is still {order.status} after {MAX_TRY} tries.')
-            except Exception as e:
-                err = f'Error while validating market order on {symbol.base}@{self.name}. The order status is {order.status}.'
-                logger.error(err, exc_info=True)
-                raise OrderValidationError(err) from e
-        order.request = json.dumps({
-            'side': side,
-            'symbol': symbol.name,
-            'funds': funds,
-            'quantity': quantity,
-            'client_oid': client_oid,
-        })
-        if initial_quantity:
-            order.add_message(f'Order was initially requested for {initial_quantity} {symbol.base}')
-        else:
-            order.add_message(f'Order was initially requested for {funds} {symbol.quote}')
+            raise OrderPostProcessingError(e, oid=_order_payload.get('orderId'))
         return order
 
     @authentication_required
