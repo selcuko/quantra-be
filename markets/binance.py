@@ -311,7 +311,13 @@ class BinanceMarket(IMarket):
         self.symbols = { self._standardize_symbol(symbol['symbol']): self._prep_symbol(symbol) for symbol in exchange_info.get('symbols', []) }
         self.symbols = { key: value for key, value in self.symbols.items() if value.quote == 'USDT'}
         if self.market: 
-            MarketSymbol.objects.bulk_create(self.symbols.values(), ignore_conflicts=True)
+            MarketSymbol.objects.bulk_create(self.symbols.values(), update_conflicts=True, update_fields=[
+                'spot_trading_enabled', 
+                'margin_trading_enabled', 
+                'details',
+                'base_precision',
+                'quote_precision',
+            ], unique_fields=['name', 'market'])
         return self.symbols
 
     @authentication_required

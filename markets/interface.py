@@ -249,6 +249,7 @@ class IMarket:
         if self.market.assets_updated_at and (timezone.now() - self.market.assets_updated_at) < timedelta(minutes=5):
             if not force: 
                 return
+        self.get_account()
         self.market.usdt = self.capital
         self.market.assets = json.dumps(self.assets)
         self.market.assets_updated_at = timezone.now()

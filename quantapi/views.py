@@ -1,6 +1,7 @@
 import json
 import threading
 from datetime import datetime, timedelta
+import traceback
 
 import pytz
 from django.core.paginator import Paginator
@@ -131,7 +132,7 @@ class SessionInitView(View):
                 raise ValueError('Planned shutdown must be in the future')
             candle_source = form_data.get('candle_source', 'trade')
         except Exception as e:
-            return render(request, 'session-init.html', {'markets': Market.objects.filter(trading_enabled=True).order_by('exchange_name'), 'form_error': repr(e)})
+            return render(request, 'session-init.html', {'markets': Market.objects.filter(trading_enabled=True).order_by('exchange_name'), 'form_error': traceback.format_exc()})
         try:
             ll = LiveLoop(
                 symbol=symbol.name,
@@ -186,6 +187,7 @@ class SessionUpdateView(View):
             if order.status == Order.Status.FILLED and order.deal_size and order.deal_funds:
                 session.capital -= order.deal_funds
                 session.assets += order.deal_size
+                iface.cache_to_db(force=True)
                 messages.add_message(request, messages.SUCCESS, f'Bought {order.deal_size} {session.symbol.base} for {order.deal_funds} USDT')
             else:
                 msg = f'Order failed to fill: {order.details}'
@@ -210,6 +212,7 @@ class SessionUpdateView(View):
             if order.status == Order.Status.FILLED and order.deal_size and order.deal_funds:
                 session.capital += order.deal_funds
                 session.assets -= order.deal_size
+                iface.cache_to_db(force=True)
                 messages.add_message(request, messages.SUCCESS, f'Sold {order.deal_size} {session.symbol.base} for {order.deal_funds} USDT')
             else:
                 msg = f'Order failed to fill: {order.messages_raw}'
@@ -380,6 +383,7 @@ class OrderManagementView(View):
                 order = order_manager.place(symbol, 'buy', deal_funds=amount, silent=False)
             elif payload['side'] == 'SELL':
                 order = order_manager.place(symbol, 'sell', deal_size=amount, silent=False)
+            interface.cache_to_db(force=True)
             messages.success(request, f'Order placed: {order!s}')
         except Exception as e:
             messages.error(request, f'Failed to place order: {e!r}')
