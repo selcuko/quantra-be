@@ -43,7 +43,7 @@ class Command(BaseCommand):
                 data_updated=coin.get('last_updated'),
                 coingecko_response=json.dumps(coin),
                 data_source=GlobalSymbol.DataSource.COINGECKO,
-                price=coin.get('current_price')
+                price=float(coin.get('current_price'))
             )
             gs.calculate()
             if gs.cid not in global_coins or (gs.volume or 0) > (global_coins[gs.cid].volume or 0):

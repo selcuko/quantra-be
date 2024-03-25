@@ -141,6 +141,7 @@ class SessionAnalytics:
         max_hold_time = timedelta(seconds=0)
         in_position = False
         in_time = None
+        hold_time = None
         for order in orders:
             if order.side == Order.Side.BUY:
                 in_position = True
@@ -151,7 +152,7 @@ class SessionAnalytics:
                 if out_time and in_time:
                     hold_time = out_time - in_time
     
-                if not max_hold_time or hold_time > max_hold_time:
+                if not max_hold_time or (hold_time and hold_time > max_hold_time):
                     max_hold_time = hold_time
         return max_hold_time
 

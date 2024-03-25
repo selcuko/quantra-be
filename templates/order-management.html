@@ -8,7 +8,27 @@
             Management
         </span>
     </h1>
-    
+    <div>
+        {% if messages %}
+        <ul class="messages">
+            {% for message in messages %}
+                {% if message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}
+                <div class="{{ message.tags }} p-4 mb-4 text-sm text-red-800 rounded-lg bg-red-50 dark:bg-gray-800 dark:text-red-400" role="alert">
+                    <span class="font-medium">Unhandled error:</span> {{ message }}
+                </div>
+                {% elif message.level == DEFAULT_MESSAGE_LEVELS.SUCCESS %}
+                <div class="{{ message.tags }} p-4 mb-4 text-sm text-green-800 rounded-lg bg-green-50 dark:bg-green-900 dark:text-green-300" role="alert">
+                    <span class="font-medium">Success:</span> {{ message }}
+                </div>
+                {% else %}
+                <div class="{{ message.tags }} p-4 mb-4 text-sm text-gray-800 rounded-lg bg-gray-50 dark:bg-gray-800 dark:text-gray-300" role="alert">
+                    {{ message }}
+                </div>
+                {% endif %}
+            {% endfor %}
+        </ul>
+        {% endif %}
+    </div>
     <div class="grid grid-cols-2">
         <div class="col-span-2 p-4">
             <form method="POST" action="" class="">

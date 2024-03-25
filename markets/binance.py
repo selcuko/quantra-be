@@ -54,7 +54,8 @@ class BinanceMarket(IMarket):
             if retries < max_init_retry:
                 retries += 1
                 time.sleep(1)
-                return self.__init__(config, market)
+                self.__init__(config, market)
+                return
             logger.fatal(f'Error while initializing {self.name}', exc_info=True)
             raise MarketAPIError(f'Cannot initialize {self.name} (tried {retries}) times).') from e
         self.symbols = self.get_symbols()

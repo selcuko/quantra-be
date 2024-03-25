@@ -359,20 +359,31 @@ class OrderManagementView(View):
     
     def post(self, request):
         payload = request.POST
+        if not all((
+            payload.get('market'),
+            payload.get('symbol'),
+            payload.get('side') in ['BUY', 'SELL'],
+            payload.get('amount'),
+        )):
+            messages.error(request, f'Invalid order parameters: {payload}')
+            return redirect('order-management')
         market = Market.objects.get(pk=payload['market'])
         symbol_name = payload['symbol']
         symbol_name = symbol_name.upper().replace('-', '').replace('/', '').replace('USDT', '') + '-USDT'
         symbol = MarketSymbol.objects.get(name=symbol_name, market=market)
         interface = market.get_interface()
         amount = float(payload['amount'])
-        if payload['side'] == 'SELL':
-            order = interface.place_market_order(symbol.name, 'sell', quantity=amount)
-            return HttpResponse(f'Order {order.oid} placed. {order.details}')
-        elif payload['side'] == 'BUY':
-            order = interface.place_market_order(symbol.name, 'buy', quantity=amount)
-            return HttpResponse(f'Order {order.oid} placed. {order.details}')
-        return HttpResponse('Invalid side')
-
+        order_manager = OrderManager(interface)
+        try:
+            order = None
+            if payload['side'] == 'BUY':
+                order = order_manager.place(symbol, 'buy', deal_funds=amount, silent=False)
+            elif payload['side'] == 'SELL':
+                order = order_manager.place(symbol, 'sell', deal_size=amount, silent=False)
+            messages.success(request, f'Order placed: {order!s}')
+        except Exception as e:
+            messages.error(request, f'Failed to place order: {e!r}')
+        return redirect('order-management')
 
 class PriceView(View):
     def get(self, request):
@@ -388,7 +399,7 @@ class PriceView(View):
             response['message'] = 'Invalid symbol or market'
             return JsonResponse(response)
         if not '-' in symbol:
-            symbol = symbol + '-USDT'
+            symbol += '-USDT'
 
         market = Market.objects.get(pk=market_id)
         prices = json.loads(market.prices or '{}')

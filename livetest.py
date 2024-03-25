@@ -64,7 +64,7 @@ def run_livetest(symbol:str, market:IMarket, strategy:Callable, freq='15 min', e
                 session=session,
                 timestamp=ds.index[-1],
                 side=Signal.Side.BUY,
-                price=kline['close'],
+                price=float(kline['close']),
                 raw=kline)
             if not testman.bought:
                 testman.buy(kline)
@@ -80,7 +80,7 @@ def run_livetest(symbol:str, market:IMarket, strategy:Callable, freq='15 min', e
                 session=session,
                 timestamp=ds.index[-1],
                 side=Signal.Side.SELL,
-                price=kline['close'],
+                price=float(kline['close']),
                 raw=kline)
             if not testman.bought:
                 testman.sell(kline)

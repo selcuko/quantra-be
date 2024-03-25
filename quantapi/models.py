@@ -422,7 +422,7 @@ class Order(models.Model):
 
     @property
     def display_price(self):
-        if self.price and self.price > 0:
+        if self.price and float(self.price) > 0:
             return self.price
         elif self.deal_funds and self.deal_size:
             return self.deal_funds / self.deal_size
@@ -481,35 +481,8 @@ class ComplexOrder(models.Model):
                 return ll.session.last_price >= self.target_price if ll.session.last_price else False
         return False
 
-    def execute(self, ll:'LiveLoop') -> Order:
-        if self.type == ComplexOrder.Type.TARGET_PRICE:
-            if self.side == Order.Side.BUY:
-                order = ll.imarket.place_market_order(
-                    symbol=self.session.symbol,
-                    side='buy',
-                    funds=self.deal_funds
-                )
-                if not order.price and self.target_price:
-                    order.price = self.target_price
-                order.save()
-                self.market_order = order
-                self.status = ComplexOrder.Status.FILLED
-                self.save()
-                return order
-            elif self.side == Order.Side.SELL:
-                order = ll.imarket.place_market_order(
-                    symbol=self.session.symbol,
-                    side='sell',
-                    quantity=self.deal_size
-                )
-                if not order.price and self.target_price:
-                    order.price = self.target_price
-                order.save()
-                self.market_order = order
-                self.status = ComplexOrder.Status.FILLED
-                self.save()
-                return order
-        raise ValueError('Invalid complex order type: ' + self.type)
+    def execute(self, ll:'LiveLoop'):
+        pass
 
 
 class Subscription(models.Model):
