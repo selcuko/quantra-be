@@ -31,6 +31,8 @@ class OrderManager:
             'market': self.market.market.exchange_name,
             'manual': manual,
         }
+        deal_size_str = None
+        deal_funds_str = None
         if side == 'buy' and deal_funds:
             if symbol.quote_precision:
                 deal_funds = float_to_precision(deal_funds, symbol.quote_precision)
