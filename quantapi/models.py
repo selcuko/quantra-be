@@ -47,20 +47,20 @@ class Market(models.Model):
             price_size = filters.get('PRICE_FILTER', {}).get('tickSize')
             return {
                 'min_notional': Decimal(filters.get('MIN_NOTIONAL', {}).get('minNotional')) if filters.get('MIN_NOTIONAL', {}).get('applyToMarket') else None,
-                'lot_step': lot_step.rstrip('0') if lot_step else None,
+                'lot_step': Decimal(lot_step) if lot_step else None,
                 'price_step': Decimal(price_size) if price_size else None,
             }
         elif self.exchange_name == Market.Exchange.KUCOIN:
             return {
-                'min_notional': Decimal(details.get('minFunds')),
-                'lot_step': Decimal(details.get('baseIncrement')),
-                'price_step': Decimal(details.get('priceIncrement')),
+                'min_notional': Decimal(details.get('minFunds')) if details.get('minFunds') else None,
+                'lot_step': Decimal(details.get('baseIncrement')) if details.get('baseIncrement') else None,
+                'price_step': Decimal(details.get('priceIncrement')) if details.get('priceIncrement') else None,
             }
         elif self.exchange_name == Market.Exchange.MEXC:
             return {
-                'price_step': Decimal(details.get('quoteAmoundPrecision')),
-                'lot_step': Decimal(details.get('baseSizePrecision')),
-                'min_notional': Decimal(details.get('minQuoteAmoundMarket')),
+                'price_step': Decimal(details.get('quoteAmoundPrecision')) if details.get('quoteAmoundPrecision') else None,
+                'lot_step': Decimal(details.get('baseSizePrecision')) if details.get('baseSizePrecision') else None,
+                'min_notional': Decimal(details.get('minQuoteAmoundMarket')) if details.get('minQuoteAmoundMarket') else None,
             }
         else:
             return {

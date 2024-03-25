@@ -120,6 +120,7 @@ class BinanceTests(TestCase):
             'type': 'MARKET',
             'status': 'FILLED',
             'cummulativeQuoteQty': '100.0',
+            'side': 'BUY',
         }
         order = self.interface.place_market_order('BTC-USDT', 'buy', 100, validate=False)
         called_params = mock_order_market.call_args.kwargs

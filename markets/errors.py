@@ -33,7 +33,7 @@ class OrderNotFilledError(Exception):
     status = 503
     message = 'Order was not filled'
 
-    def __init__(self, message=None, order=None):
+    def __init__(self, message:str, order):
         self.message = message or self.message
         self.order = order
 
