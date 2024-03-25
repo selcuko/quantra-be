@@ -39,6 +39,7 @@ class OrderManager:
             filters = self.market.market.filters(symbol)
             if (lot_step := filters.get('lot_step')):
                 deal_funds = float_to_precision(deal_funds, lot_step)
+                deal_funds_str = f'{deal_funds:f}'
                 request['deal_funds'] = deal_funds
 
         elif side == 'sell' and deal_size:
@@ -49,11 +50,12 @@ class OrderManager:
             filters = self.market.market.filters(symbol)
             if (lot_step := filters.get('lot_step')):
                 deal_size = float_to_precision(deal_size, lot_step)
+                deal_size_str = f'{deal_size:f}'
                 request['deal_size'] = deal_size
         else:
             raise ValueError('deal_size for sell or deal_funds for buy must be provided.')
         try:
-            order = self.market.place_market_order(symbol, side, deal_funds, deal_size)
+            order = self.market.place_market_order(symbol, side, deal_funds_str, deal_size_str)
             order.symbol = symbol
             order.placed_at = timezone.now()
             order.market = self.market.market

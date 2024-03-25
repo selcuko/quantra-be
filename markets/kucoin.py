@@ -373,16 +373,12 @@ class KucoinMarket(IMarket):
         return self.symbols
 
     @authentication_required
-    def place_market_order(self, symbol:'MarketSymbol|str', side:Literal['buy', 'sell'], funds:"float|None"=None, quantity:"float|None"=None, validate=True) -> 'Order':
+    def place_market_order(self, symbol:'MarketSymbol|str', side:Literal['buy', 'sell'], funds:"str|None"=None, quantity:"str|None"=None, validate=True) -> 'Order':
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         client_oid = uuid.uuid4().hex
         if (not funds and not quantity) or (funds and quantity):
             raise ValueError(f'You must provide either funds or quantity to place a market order on {self.name}')
-        if funds and symbol.quote_precision:
-            funds = float_to_precision(Decimal(funds), Decimal(symbol.quote_precision))
-        if quantity and symbol.base_precision:
-            quantity = float_to_precision(quantity, symbol.base_precision)
         try:
             if not self.trade:
                 raise ValueError(f'Cannot place market order on {self.name} without authenticated API config')
@@ -398,15 +394,6 @@ class KucoinMarket(IMarket):
             order = self._prep_order(order)
             if not order.oid:
                 raise ValueError(f'Error while placing market order on {self.name}')
-            if validate:
-                MAX_TRY = 10
-                tries = 0
-                while order.status not in ['FILLED', 'CANCELED', 'EXPIRED', 'REJECTED', 'CLOSED'] and tries < MAX_TRY or tries == 0:
-                    time.sleep(1)
-                    tries += 1
-                    order = self.get_order(symbol, order)
-                if order.status not in ['FILLED', 'CANCELED', 'EXPIRED', 'REJECTED', 'CLOSED']:
-                    raise Exception(f'Order {order.oid} on {self.name} is still {order.status} after {MAX_TRY} tries')
             order.request = json.dumps({
                 'side': side,
                 'symbol': symbol.name,

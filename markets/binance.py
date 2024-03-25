@@ -321,7 +321,7 @@ class BinanceMarket(IMarket):
         return self.symbols
 
     @authentication_required
-    def place_market_order(self, symbol:'MarketSymbol|str', side:Literal['buy', 'sell'], funds:Optional[float]=None, quantity:Optional[float]=None, validate=True) -> 'Order':
+    def place_market_order(self, symbol:'MarketSymbol|str', side:Literal['buy', 'sell'], funds:Optional[str]=None, quantity:Optional[str]=None, validate=True) -> 'Order':
         initial_quantity = quantity
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)

@@ -211,9 +211,9 @@ class LiveLoop:
         if self.session.status != Session.Status.ONGOING:
             logger.warning(f'Received candle while session status is {self.session.status}, skipping.', extra={'loop': repr(self)})
             return
-        equity = self.session.capital + self.session.assets * (self.session.last_price or 1)
+        equity = self.session.capital + self.session.assets * (self.session.last_price or 999999999)
         if equity < 5:
-            logger.error(f'Ghost session found - no capital and no assets, pausing. [SessionID:{self.session.pk}]', extra={'loop': repr(self)})
+            logger.error(f'Ghost session found - no capital ({self.session.capital}) and no assets ({self.session.assets}) ({equity=}), pausing. [SessionID:{self.session.pk}]', extra={'loop': repr(self)})
             self.session.status = Session.Status.PAUSED
             self.session.save()
         self.imarket.cache_to_db()

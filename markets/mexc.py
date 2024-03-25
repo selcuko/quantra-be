@@ -363,16 +363,12 @@ class MEXCMarket(IMarket):
         )
 
     @authentication_required
-    def place_market_order(self, symbol: 'MarketSymbol|str', side: Literal['buy', 'sell'], funds: float | None = None, quantity: float | None = None, validate=True) -> 'Order':
+    def place_market_order(self, symbol: 'MarketSymbol|str', side: Literal['buy', 'sell'], funds: str | None = None, quantity: str | None = None, validate=True) -> 'Order':
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         client_oid = uuid.uuid4().hex
         if not (funds or quantity) or (funds and quantity):
             raise ValueError('Either funds or quantity must be provided')
-        if funds and symbol.quote_precision:
-            funds = float_to_precision(funds, symbol.quote_precision)
-        if quantity and symbol.base_precision:
-            quantity = float_to_precision(quantity, symbol.base_precision)
         try:
             uri = f'{self.url}/api/v3/order'
             order_query = self._prep_payload({ 
@@ -394,15 +390,6 @@ class MEXCMarket(IMarket):
                 elif order_data.get('msg') == 'Insufficient position' and side == 'buy':
                     raise InsufficientBalance(f'Not enough balance to place order on {self.name} (we have {self.assets.get(symbol.quote, 0)} {symbol.quote} but tried to buy with {funds} {symbol.quote}): {order_data}')
                 raise RejectedOrder(f'Error while placing order on {self.name}: {order_data}\nOrder query: {order_query}')
-            if validate:
-                MAX_TRY = 10
-                tries = 0
-                while order.status not in ['FILLED', 'CANCELED', 'EXPIRED', 'REJECTED'] and tries < MAX_TRY or tries == 0:
-                    time.sleep(1)
-                    tries += 1
-                    order = self.get_order(symbol, order)
-                if order.status not in ['FILLED', 'CANCELED', 'EXPIRED', 'REJECTED']:
-                    raise Exception(f'Order {order.oid} on {self.name} is still {order.status} after {MAX_TRY} tries')
             order.request = json.dumps({
                 'side': side,
                 'symbol': symbol.name,
