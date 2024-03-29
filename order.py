@@ -31,8 +31,8 @@ class OrderManager:
             'market': self.market.market.exchange_name,
             'manual': manual,
         }
-        deal_size_str = None
-        deal_funds_str = None
+        deal_size_str = f'{deal_size:f}' if deal_size else None
+        deal_funds_str = f'{deal_funds:f}' if deal_funds else None
         if side == 'buy' and deal_funds:
             if symbol.quote_precision:
                 deal_funds = float_to_precision(deal_funds, symbol.quote_precision)
@@ -77,6 +77,15 @@ class OrderManager:
             if not e.oid:
                 raise e
             order = self.market.get_order(symbol, e.oid)
+            order = Order.objects.get_or_create(oid=order.oid, defaults={
+                'side': Order.Side.BUY if side == 'buy' else Order.Side.SELL,
+                'deal_size': deal_size,
+                'deal_funds': deal_funds,
+                'status': order.status,
+                'market': self.market.market,
+                'symbol': symbol,
+                'price': order.price or json.loads(self.market.market.prices or '{}').get(symbol.base),
+            })[0]
         except Exception as e:
             raise OrderPlacementError(f'Error placing order: {e!r}')
 

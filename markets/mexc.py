@@ -356,9 +356,9 @@ class MEXCMarket(IMarket):
             price=float(order.get('price', 0)),
             market_timestamp=self._standardize_datetime(order_time),
             deal_funds=float(order.get('origQuoteOrderQty', 0)),
-            deal_size=float(order.get('executedQty', 0)),
+            deal_size=float(order.get('executedQty', 0)) or float(order.get('origQty', 0)),
             funds=float(order.get('origQuoteOrderQty', 0)),
-            status=order.get('status', 'NOT_FOUND'),
+            status=order.get('status', 'FILLED' if order.get('orderId') else 'REJECTED'),
             details=json.dumps(order),        
         )
 

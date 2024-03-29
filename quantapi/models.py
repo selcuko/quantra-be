@@ -58,9 +58,9 @@ class Market(models.Model):
             }
         elif self.exchange_name == Market.Exchange.MEXC:
             return {
-                'price_step': Decimal(details.get('quoteAmoundPrecision')) if details.get('quoteAmoundPrecision') else None,
+                'price_step': Decimal(details.get('quoteAmountPrecision')) if details.get('quoteAmountPrecision') else None,
                 'lot_step': Decimal(details.get('baseSizePrecision')) if details.get('baseSizePrecision') else None,
-                'min_notional': Decimal(details.get('minQuoteAmoundMarket')) if details.get('minQuoteAmoundMarket') else None,
+                'min_notional': Decimal(details.get('minQuoteAmountMarket')) if details.get('minQuoteAmountMarket') else None,
             }
         else:
             return {

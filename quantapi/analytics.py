@@ -182,8 +182,10 @@ class OrderAnalytics:
         if self.order.side != Order.Side.BUY:
             return
 
-        
-        avg_cost = (((self.last_average_cost or 0) * assets) + (self.order.price * self.order.deal_size)) / (assets + self.order.deal_size)
+        try:
+            avg_cost = (((self.last_average_cost or 0) * assets) + (self.order.price * self.order.deal_size)) / (assets + self.order.deal_size)
+        except:
+            avg_cost = self.order.price
         return avg_cost
 
     @property
