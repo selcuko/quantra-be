@@ -179,7 +179,13 @@ class SessionUpdateView(View):
                 msg = f'Manual buy amount {amt} exceeds available capital {session.capital} USDT. Corrected to {corrected_amt} USDT.'
                 logger.warning(msg, extra={'prefix': repr(session), 'type': 'ORDER'})
             order_manager = OrderManager(iface, session)
-            order = order_manager.place(session.symbol, 'buy', deal_funds=corrected_amt)
+            try:
+                order = order_manager.place(session.symbol, 'buy', deal_funds=corrected_amt)
+            except Exception as e:
+                msg = f'Failed to place buy order: {e!r}'
+                logger.error(msg, extra={'prefix': repr(session), 'type': 'ORDER'})
+                messages.add_message(request, messages.ERROR, msg)
+                return redirect('session-detail', pk=session.pk)
             order.force = True
             if msg:
                 order.add_message(msg)
@@ -204,7 +210,13 @@ class SessionUpdateView(View):
                 msg = f'Manual sell amount {amt} exceeds available assets {session.assets} {session.symbol.base}. Corrected to {corrected_amt} {session.symbol.base}.'
                 logger.warning(msg, extra={'prefix': repr(session), 'type': 'ORDER'})
             order_manager = OrderManager(iface, session)
-            order = order_manager.place(session.symbol, 'sell', deal_size=corrected_amt)
+            try:
+                order = order_manager.place(session.symbol, 'sell', deal_size=corrected_amt)
+            except Exception as e:
+                msg = f'Failed to place sell order: {e!r}'
+                logger.error(msg, extra={'prefix': repr(session), 'type': 'ORDER'})
+                messages.add_message(request, messages.ERROR, msg)
+                return redirect('session-detail', pk=session.pk)
             order.force = True
             if msg:
                 order.add_message(msg)

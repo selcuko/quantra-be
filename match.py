@@ -2,7 +2,7 @@
 
 from datetime import timedelta
 from typing import Callable
-
+from django.utils import timezone
 import pytz
 
 from models import interval_to_minutes
@@ -29,16 +29,26 @@ class MatchEngine:
         self.candle = {}
         self.interval = interval_to_minutes(interval)
         self.callback = callback
+        self.candle_started_processing = timezone.now()
+        self.last_price = None
+        self.last_price_ts = None
+
+    def close_candle(self, corrupt=False):
+        self.candle_started_processing = timezone.now()
+        self.candle['corrupt'] = self.candle.get('corrupt', False) or corrupt  # if already corrupt, keep it corrupt
+        self.callback(self.candle)
+        self.candle = {}
 
     def update_candle(self, data):
         ts = data.get('time').astimezone(pytz.UTC).replace(second=0, microsecond=0)
         vol = data['size'] * data['price']
-        price = data['price']
+        self.last_price = price = data['price']
+        self.last_price_ts = ts
         maker = data.get('maker', None)
 
         if self.candle and ts >= self.candle['end']:
-            self.callback(self.candle)
-            self.candle = {}
+            self.close_candle()
+
         if not self.candle.get('time'):
             start, end = get_start_end_dates(ts, self.interval)
             self.candle['time'] = start
@@ -54,6 +64,9 @@ class MatchEngine:
             elif maker is False:
                 self.candle['sell_vol'] = vol
                 self.candle['sell_count'] = 1
+            if timezone.now() - self.candle['time'] > timedelta(minutes=self.interval // 3 if self.interval >= 3 else 3):
+                # if we're more than 1/3 of the way through the candle, we flag it as corrupt (incomplete)
+                self.candle['corrupt'] = True
         else:
             self.candle['high'] = max(self.candle['high'], price)
             self.candle['low'] = min(self.candle['low'], price)
@@ -69,6 +82,11 @@ class MatchEngine:
             elif maker is False:
                 self.candle['sell_vol'] += vol
                 self.candle['sell_count'] += 1
+
+            candle_deltatime = timezone.now() - self.candle_started_processing
+            if candle_deltatime > timedelta(minutes=self.interval):
+                # sanity check. force candle to close if it's been open longer than interval
+                self.close_candle(corrupt=True)
 
     def on_match(self, data):
         self.update_candle(data)

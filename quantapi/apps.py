@@ -24,6 +24,7 @@ def continue_sessions():
                     session.resume()
             except:
                 session.status = Session.Status.ERROR
+                session.ended = datetime.now(pytz.utc)
                 session.save()
                 logger.error(f'Failed to resume session {session} on startup.', exc_info=True)
     except:
