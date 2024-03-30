@@ -1,5 +1,5 @@
 import django
-
+from django.core.cache import cache
 from order import OrderManager
 django.setup()
 import json
@@ -60,6 +60,7 @@ class LiveLoop:
             initial_assets=asset_limit,
             strategy_parameters=json.dumps(strategy.params)
         )
+        cache.set(f'session_{self.session.pk}', self, timeout=None)
 
         logger.info(f'LiveLoop initialized.', extra={'loop': repr(self)})
 
@@ -183,7 +184,7 @@ class LiveLoop:
 
     def __run_websocket(self):
         try:
-            self.imarket.init_websocket(self.symbol.name, self.freq, self.on_candle)
+            self.imarket.init_websocket(self.symbol.name, self.freq, self.on_candle, self)
         except Exception as e:
             logger.critical(f'Failed to connect to websocket, terminating.', exc_info=True, extra={'loop': repr(self)})
             self.session.status = Session.Status.ERROR
@@ -196,7 +197,7 @@ class LiveLoop:
 
     def __run_match_engine(self):
         try:
-            self.imarket.init_match_engine(self.symbol.name, self.freq, self.on_candle, self.session)
+            self.imarket.init_match_engine(self.symbol.name, self.freq, self.on_candle, self)
         except Exception as e:
             logger.critical(f'Failed to connect to match engine, terminating.', exc_info=True, extra={'loop': repr(self)})
             self.session.status = Session.Status.ERROR
@@ -258,12 +259,12 @@ class LiveLoop:
 
     def can_buy(self):
         """Returns whether the session can buy or not based on available capital and buy permission."""
-        return self.session.capital > 5 and self.session.buy_enabled
+        return self.session.capital >= 5 and self.session.buy_enabled
 
 
     def can_sell(self):
         """Returns whether the session can sell or not based on available assets and sell permission."""
-        return self.session.assets * (self.session.last_price or 0) > 5 and self.session.sell_enabled
+        return self.session.assets * (self.session.last_price or 0) >= 5 and self.session.sell_enabled
 
 
     def buy(self, last_kline:dict):

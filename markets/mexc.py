@@ -23,7 +23,8 @@ from websockets.sync.client import connect
 from websockets.sync.client import ClientConnection
 from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
 if typing.TYPE_CHECKING:
-    from quantapi.models import Market, Order, MarketSymbol, Session
+    from quantapi.models import Market, Order, MarketSymbol
+    from liveloop import LiveLoop
 
 
 class MEXCMarket(IMarket):
@@ -106,18 +107,14 @@ class MEXCMarket(IMarket):
             raise Exception(f'Error while subscribing to {topic}: {ack}')
         return ws
 
-    def init_match_engine(self, symbol:str, interval:str, callback:Callable, session:'Session'):
-        from quantapi.models import Session
+    def init_match_engine(self, symbol:str, interval:str, callback:Callable, liveloop:'LiveLoop'):
         ws = self.get_match_engine_ws(symbol)
         last_ping = datetime.now()
         me = MatchEngine(interval, callback)
-        last_stop_check = datetime.now()
         retries = 0
         while not self.stop_websocket_stream:
-            if (datetime.now() - last_stop_check) > timedelta(minutes=interval_to_minutes(interval)):
-                last_stop_check = datetime.now()
-                session.refresh_from_db()
-            if session.status != Session.Status.ONGOING:
+            if liveloop.should_stop():
+                self.stop_websocket_stream = True
                 break
             if (datetime.now() - last_ping).seconds > 30:
                 ws.send('{"method": "PING"}')
@@ -143,7 +140,7 @@ class MEXCMarket(IMarket):
             for deal in deals:
                 me.on_match(self.format_match(deal))
 
-    def init_websocket(self, symbol:str, interval:str, callback:Callable):
+    def init_websocket(self, symbol:str, interval:str, callback:Callable, liveloop:'LiveLoop'):
         ws_uri = 'wss://wbs.mexc.com/ws'
         ws = connect(ws_uri)
         topic = f'spot@public.kline.v3.api@{self._format_symbol(symbol)}@{self.interval_to_ws(interval)}'
@@ -157,7 +154,7 @@ class MEXCMarket(IMarket):
             raise Exception(f'Error while subscribing to {topic}: {ack}')
         last_ping = datetime.now()
         last_kline = None
-        while not self.stop_websocket_stream:
+        while not self.stop_websocket_stream and not liveloop.should_stop():
             if (datetime.now() - last_ping).seconds > 30:
                 ws.send('{"method": "PING"}')
                 last_ping = datetime.now()

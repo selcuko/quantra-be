@@ -9,6 +9,8 @@ from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.views import View
+from django.core.cache import cache
+
 
 from backtest import async_analyze
 from liveloop import LiveLoop
@@ -55,7 +57,7 @@ class SessionDetailView(View):
             'signals': signals, 
             'market': market, 
             'symbol': symbol,
-            'buy_enabled': session.capital > 5,
+            'buy_enabled': session.capital >= 5,
             'sell_enabled': session.assets > 0,
             'market_assets': market_assets,
         })
@@ -262,7 +264,11 @@ class SessionUpdateView(View):
                 'text': 'Session is not ongoing.'
             }})
         session.status = Session.Status.PAUSED
+        session.ended = datetime.now(pytz.UTC)
         session.save()
+        liveloop:LiveLoop = cache.get(f'session_{session.pk}')
+        if liveloop:
+            liveloop.stop()
         return redirect('session-detail', pk=session.pk)
 
     @staticmethod
@@ -277,6 +283,9 @@ class SessionUpdateView(View):
         session.ended = datetime.now(pytz.UTC)
         session.planned_shutdown = datetime.now(pytz.UTC)
         session.save()
+        liveloop:LiveLoop = cache.get(f'session_{session.pk}')
+        if liveloop:
+            liveloop.stop()
         return redirect('session-detail', pk=session.pk)
 
 

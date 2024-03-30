@@ -21,6 +21,8 @@ from models import interval_to_minutes
 
 if typing.TYPE_CHECKING:
     from quantapi.models import MarketSymbol, Order, Session, Market
+    from liveloop import LiveLoop
+
 
 from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
 from websockets.sync.client import connect
@@ -106,19 +108,15 @@ class BinanceMarket(IMarket):
             'maker': payload['m'],
         }
 
-    def init_match_engine(self, symbol:str, interval:str, callback:Callable, session:'Session'):
-        from quantapi.models import Session
+    def init_match_engine(self, symbol:str, interval:str, callback:Callable, liveloop:'LiveLoop'):
         ws_uri = f'wss://stream.binance.com:9443/ws/{self._format_symbol(symbol).lower()}@trade'
         ws = connect(ws_uri)
         me = MatchEngine(interval, callback)
         last_ping = datetime.now()
         retries = 0
-        last_stop_check = datetime.now()
         while not self.stop_websocket_stream:
-            if (datetime.now() - last_stop_check) > timedelta(minutes=interval_to_minutes(interval)):
-                last_stop_check = datetime.now()
-                session.refresh_from_db()
-            if session.status != Session.Status.ONGOING:
+            if liveloop.should_stop():
+                self.stop_websocket_stream = True
                 break
             if (datetime.now() - last_ping) > timedelta(seconds=30):
                 ws.pong()
@@ -143,11 +141,11 @@ class BinanceMarket(IMarket):
                 ws = connect(ws_uri)
                 continue
 
-    def init_websocket(self, symbol:str, interval:str, callback:Callable, retries=0):
+    def init_websocket(self, symbol:str, interval:str, callback:Callable, liveloop:'LiveLoop', retries=0):
         ws_uri = self.get_websocket_uri(symbol, interval)
         try:
             ws = connect(ws_uri)
-            while not self.stop_websocket_stream:
+            while not self.stop_websocket_stream and not liveloop.should_stop():
                 ws.pong()
                 try:
                     data = json.loads(ws.recv())
@@ -160,7 +158,7 @@ class BinanceMarket(IMarket):
             if retries < self.WS_MAX_RETRIES:
                 retries += 1
                 time.sleep(1)
-                return self.init_websocket(symbol, interval, callback, retries)
+                return self.init_websocket(symbol, interval, callback, liveloop, retries)
             msg = f'Cannot start websocket connection for {symbol} on {self.name} (tried {retries} times).'
             logger.error(msg, exc_info=True)
             raise MarketAPIError(msg)

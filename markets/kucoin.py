@@ -7,6 +7,7 @@ from decimal import Decimal
 from typing import Literal
 if typing.TYPE_CHECKING:
     from quantapi.models import Session, MarketSymbol, Order, Market as MarketModel
+    from liveloop import LiveLoop
     
 
 import pytz
@@ -183,19 +184,16 @@ class KucoinMarket(IMarket):
             raise ValueError(f'Error while subscribing to {symbol} on {self.name}: {ack}')
         return ws
 
-    def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable, session:'Session'):
+    def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable, liveloop:'LiveLoop'):
         from quantapi.models import Session
         ws = self.get_match_engine_socket(symbol)
         last_ping = datetime.now()
         engine = MatchEngine(interval, callback)
         retries = 0
 
-        last_stop_check = datetime.now()
         while not self.stop_websocket_stream:
-            if (datetime.now() - last_stop_check) > timedelta(minutes=interval_to_minutes(interval)):
-                last_stop_check = datetime.now()
-                session.refresh_from_db()
-            if session.status != Session.Status.ONGOING:
+            if liveloop.should_stop():
+                self.stop_websocket_stream = True
                 break
             if last_ping < datetime.now() - timedelta(seconds=30):
                 ws.send(json.dumps({'id': str(uuid.uuid4()), 'type': 'ping'}))
