@@ -269,41 +269,40 @@ class LiveLoop:
 
     def buy(self, last_kline:dict):
         """Buys the asset if possible. Returns the order object if successful, None otherwise. Meant to be called from on_candle method."""
-        with order_lock:
-            signal = Signal.objects.create(
-                session=self.session,
-                timestamp=self.last_kline_dt,
-                side=Signal.Side.BUY,
-                price=float(last_kline['close']),
-                raw=last_kline)
-            if not self.can_buy():
-                return
-            order_manager = OrderManager(self.imarket, self.session)
+        signal = Signal.objects.create(
+            session=self.session,
+            timestamp=self.last_kline_dt,
+            side=Signal.Side.BUY,
+            price=float(last_kline['close']),
+            raw=last_kline)
+        if not self.can_buy():
+            return
+        order_manager = OrderManager(self.imarket, self.session)
 
-            try:
-                order = order_manager.place(
-                    symbol=self.symbol,
-                    side='buy',
-                    deal_funds=self.session.capital,
-                )
-            except OrderPostProcessingError as e:
-                logger.error(f'Order post processing failed. Order might or might no be placed. {e!r}', extra={'type': 'ORDER', 'prefix': repr(self)})
-            except:
-                logger.error(f'Unhandled error while placing order.', exc_info=True, extra={'type': 'ORDER', 'loop': repr(self)})
-                return
+        try:
+            order = order_manager.place(
+                symbol=self.symbol,
+                side='buy',
+                deal_funds=self.session.capital,
+            )
+        except OrderPostProcessingError as e:
+            logger.error(f'Order post processing failed. Order might or might no be placed. {e!r}', extra={'type': 'ORDER', 'prefix': repr(self)})
+        except:
+            logger.error(f'Unhandled error while placing order.', exc_info=True, extra={'type': 'ORDER', 'loop': repr(self)})
+            return
 
-            if order.status == Order.Status.INSUFFICIENT_BALANCE:
-                self.imarket.get_account()
-                self.session.capital = max(self.imarket.capital, 0)
-                self.session.save()
-                logger.warning(f'Insufficient balance, capital updated to {self.session.capital}', extra={'prefix': repr(self), 'type': 'ORDER'})
-                return self.buy(last_kline)
-            elif order.status == Order.Status.REJECTED:
-                logger.error(f'RejectedOrder: {order!s}', extra={'type': 'ORDER', 'prefix': repr(self)})
-            elif order.status == Order.Status.FILLED and order.deal_size and order.deal_funds:
-                self.session.assets += order.deal_size
-                self.session.capital -= order.deal_funds
-                self.session.save()
+        if order.status == Order.Status.INSUFFICIENT_BALANCE:
+            self.imarket.get_account()
+            self.session.capital = max(self.imarket.capital, 0)
+            self.session.save()
+            logger.warning(f'Insufficient balance, capital updated to {self.session.capital}', extra={'prefix': repr(self), 'type': 'ORDER'})
+            return self.buy(last_kline)
+        elif order.status == Order.Status.REJECTED:
+            logger.error(f'RejectedOrder: {order!s}', extra={'type': 'ORDER', 'prefix': repr(self)})
+        elif order.status == Order.Status.FILLED and order.deal_size and order.deal_funds:
+            self.session.assets += order.deal_size
+            self.session.capital -= order.deal_funds
+            self.session.save()
         order.signal = signal
         order.save()
         return order
@@ -311,41 +310,40 @@ class LiveLoop:
 
     def sell(self, last_kline:dict):
         """Sells the asset if possible. Returns the order object if successful, None otherwise. Meant to be called from on_candle method."""
-        with order_lock:
-            signal = Signal.objects.create(
-                session=self.session,
-                timestamp=self.last_kline_dt,
-                side=Signal.Side.SELL,
-                price=float(last_kline['close']),
-                raw=last_kline)
-            if not self.can_sell():
-                return
-            order_manager = OrderManager(self.imarket, self.session)
+        signal = Signal.objects.create(
+            session=self.session,
+            timestamp=self.last_kline_dt,
+            side=Signal.Side.SELL,
+            price=float(last_kline['close']),
+            raw=last_kline)
+        if not self.can_sell():
+            return
+        order_manager = OrderManager(self.imarket, self.session)
 
-            try:
-                order = order_manager.place(
-                    symbol=self.symbol,
-                    side='sell',
-                    deal_size=self.session.assets,
-                )
-            except OrderPostProcessingError as e:
-                logger.error(f'Order post processing failed. Order might or might no be placed. {e!r}', extra={'type': 'ORDER', 'prefix': repr(self)})
-            except:
-                logger.error(f'Unhandled error while placing order.', exc_info=True, extra={'type': 'ORDER', 'loop': repr(self)})
-                return
+        try:
+            order = order_manager.place(
+                symbol=self.symbol,
+                side='sell',
+                deal_size=self.session.assets,
+            )
+        except OrderPostProcessingError as e:
+            logger.error(f'Order post processing failed. Order might or might no be placed. {e!r}', extra={'type': 'ORDER', 'prefix': repr(self)})
+        except:
+            logger.error(f'Unhandled error while placing order.', exc_info=True, extra={'type': 'ORDER', 'loop': repr(self)})
+            return
 
-            if order.status == Order.Status.INSUFFICIENT_BALANCE:
-                self.imarket.get_account()
-                self.session.assets = self.imarket.assets.get(self.symbol.base, 0)
-                self.session.save()
-                logger.warning(f'Insufficient balance, assets updated to {self.session.assets}', extra={'prefix': repr(self), 'type': 'ORDER'})
-                return self.sell(last_kline)
-            elif order.status == Order.Status.REJECTED:
-                logger.error(f'RejectedOrder: {order!s}', extra={'type': 'ORDER', 'prefix': repr(self)})
-            elif order.status == Order.Status.FILLED and order.deal_size and order.deal_funds:
-                self.session.assets -= order.deal_size
-                self.session.capital += order.deal_funds
-                self.session.save()
+        if order.status == Order.Status.INSUFFICIENT_BALANCE:
+            self.imarket.get_account()
+            self.session.assets = self.imarket.assets.get(self.symbol.base, 0)
+            self.session.save()
+            logger.warning(f'Insufficient balance, assets updated to {self.session.assets}', extra={'prefix': repr(self), 'type': 'ORDER'})
+            return self.sell(last_kline)
+        elif order.status == Order.Status.REJECTED:
+            logger.error(f'RejectedOrder: {order!s}', extra={'type': 'ORDER', 'prefix': repr(self)})
+        elif order.status == Order.Status.FILLED and order.deal_size and order.deal_funds:
+            self.session.assets -= order.deal_size
+            self.session.capital += order.deal_funds
+            self.session.save()
         order.signal = signal
         order.save()
         return order
