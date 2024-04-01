@@ -113,9 +113,11 @@ class LiveLoop:
             return
         precheck_ok = self.precheck()
         if not precheck_ok:
+            logger.error(f'Precheck failed, terminating.', extra={'loop': repr(self)})
             return
         snapshot_ok = self.prepare_kline_snapshot()
         if not snapshot_ok:
+            logger.error(f'Failed to prepare kline snapshot, terminating.', extra={'loop': repr(self)})
             return
         self.will_stop = False
         self.running = True
@@ -361,15 +363,22 @@ class LiveLoop:
 
     def should_stop(self):
         """Returns whether the loop should stop or not"""
+        logger.info('Checking stop...')
+        if self.will_stop:
+            return True
+        logger.info('Will not stop.')
         before_end = True
         self.session.refresh_from_db()
+        logger.info(f'Session status: {self.session.status}')
         if self.session.planned_shutdown:
             before_end = datetime.now(tz=pytz.UTC) < self.session.planned_shutdown
+        logger.info(f'Before end: {before_end}')
         return self.will_stop or not before_end or self.session.status != Session.Status.ONGOING
 
 
     def wait_next_candle(self):
         """Waits until the next candle should be available"""
+        logger.info('Waiting for next candle...')
         if not self.last_kline_dt:
             return True
         last_kline_ts = self.last_kline_dt.timestamp()
@@ -380,6 +389,7 @@ class LiveLoop:
                 time.sleep(1)
                 slept += 1
                 residue -= 1
+                logger.info(f'Waiting for next candle: {residue}s left')
         else:
             time.sleep(1)
         return True

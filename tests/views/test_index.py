@@ -29,6 +29,7 @@ class IndexViewTests(TestCase):
         )
     
     def test_get_index(self):
+        self.client.login(username='admin', password='admin', email='user@example.com')
         response = self.client.get('/')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.symbol.base)
