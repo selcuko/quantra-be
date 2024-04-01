@@ -22,9 +22,12 @@ if typing.TYPE_CHECKING:
 class Market(models.Model):
     class Exchange(models.TextChoices):
         BINANCE = 'BINANCE', 'Binance'
+        BYBIT = 'BYBIT', 'Bybit'
+        GATEIO = 'GATEIO', 'Gate.io'
+        OKX = 'OKX', 'OKX'
         KUCOIN = 'KUCOIN', 'KuCoin'
         MEXC = 'MEXC', 'MEXC'
-    exchange_name = models.CharField(max_length=30)
+    exchange_name = models.CharField(max_length=30, choices=Exchange.choices)
     friendly_name = models.CharField(max_length=30, null=True, blank=True, help_text='Descriptive name for the config-exchange pair for this market.')
     config_enc = models.TextField(null=True, blank=True, help_text='Config for this market (encrypted).')
     trading_enabled = models.BooleanField(default=False)

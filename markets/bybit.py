@@ -1,0 +1,291 @@
+from datetime import datetime, timedelta
+import hashlib
+import hmac
+import json
+import time
+import requests
+from markets.errors import InsufficientBalance, KlineFetchFailed, OrderPlacementError, OrderPostProcessingError, RejectedOrder
+from markets.interface import IMarket
+
+from django.utils import timezone
+import typing
+
+from models import interval_to_minutes
+if typing.TYPE_CHECKING:
+    from quantapi.models import Market, MarketSymbol, Order
+
+class BybitMarket(IMarket):
+    name = 'BYBIT'
+
+    def __init__(self, config: dict, market: 'Market'):
+        self.url = 'https://api.bybit.com'
+        self.api_key = config['API_KEY']
+        self.api_secret = config['API_SECRET']
+        self.recv_window = 60000
+        self.session = requests.Session()
+        self.session.headers.update({
+            'X-BAPI-API-KEY': config['API_KEY'],
+            'X-BAPI-SIGN-TYPE': '2',
+            'X-BAPI-RECV-WINDOW': str(self.recv_window),
+            'Content-Type': 'application/json'
+        })
+
+        self.market = market
+        self.spot_trading_enabled = True
+        self.capital = 0
+        self.symbols = {}
+        self.assets = {}
+        self.prices = {}
+        self.authenticated = True
+
+        self.get_account()
+        self.get_symbols()
+        self.get_current_prices()
+
+    def __str__(self) -> str:
+        return f'{self.name} ({"Mainnet" if not self.testnet else "Testnet"})'
+
+    def json(self) -> dict:
+        return {
+            'name': self.name,
+            'authenticated': self.authenticated,
+            'testnet': False,
+            'spot_trading_enabled': self.spot_trading_enabled,
+        }
+
+    def sign(self, payload:dict, method:str='GET') -> str:
+        if not payload:
+            payload = {}
+        now = self.format_timestamp(timezone.now())
+        if method == 'GET':
+            query = '&'.join([f'{k}={v}' for k, v in payload.items()])
+            query_str = str(now) + self.api_key + str(self.recv_window) + query
+        else:
+            query = json.dumps(payload)
+            query_str = str(now) + self.api_key + str(self.recv_window) + query
+        hash = hmac.new(bytes(self.api_secret, "utf-8"), query_str.encode("utf-8"), hashlib.sha256)
+        signature = hash.hexdigest()
+        self.session.headers['X-BAPI-TIMESTAMP'] = self.format_timestamp(timezone.now())
+        self.session.headers['X-BAPI-SIGN'] = signature
+        return query
+
+    def get_account(self):
+        url = f'{self.url}/v5/asset/transfer/query-account-coins-balance'
+        payload = {
+            'accountType': 'FUND'
+        }
+        query = self.sign(payload)
+        uri = f'{url}?{query}'
+        response = self.session.get(uri)
+        response.raise_for_status()
+        data = response.json()
+        if data.get('retMsg') not in ['OK', 'success']:
+            raise ValueError(data)
+        data = data['result']['balance']
+        for symbol in data:
+            self.assets[symbol['coin']] = float(symbol['walletBalance'])
+        self.capital = self.assets.get('USDT', 0)
+
+    def get_symbols(self):
+        url = f'{self.url}/v5/market/instruments-info'
+        payload = {
+            'category': 'spot'
+        }
+        query = self.sign(payload)
+        uri = f'{url}?{query}'
+        response = self.session.get(uri)
+        response.raise_for_status()
+        data = response.json()
+        if data.get('retMsg') not in ['OK', 'success']:
+            raise ValueError(data)
+        data = data['result']['list']
+        self.symbols = { self.standardize_symbol(symbol['symbol']): self.prep_symbol(symbol) for symbol in data }
+        if self.market:
+            from quantapi.models import MarketSymbol
+            MarketSymbol.objects.bulk_create(self.symbols.values(), update_conflicts=True, update_fields=[
+                'spot_trading_enabled', 
+                'margin_trading_enabled', 
+                'details',
+                'base_precision',
+                'quote_precision',
+            ], unique_fields=['name', 'market'])
+        return self.symbols
+
+    def get_current_prices(self):
+        url = f'{self.url}/v5/market/tickers'
+        payload = {
+            'category': 'spot'
+        }
+        query = self.sign(payload)
+        uri = f'{url}?{query}'
+        response = self.session.get(uri)
+        response.raise_for_status()
+        data = response.json()
+        if data.get('retMsg') not in ['OK', 'success']:
+            raise ValueError(data)
+        data = data['result']['list']
+        for symbol in data:
+            self.prices[self.standardize_symbol(symbol['symbol'])] = float(symbol['lastPrice'])
+        return self.prices
+
+    def get_klines(self, symbol:'MarketSymbol|str', interval:str, start:datetime, end:typing.Optional[datetime]=None, limit=1000, retry=0):
+        symbol = self.get_symbol_from_name(symbol) if isinstance(symbol, str) else symbol
+        url = f'{self.url}/v5/market/kline'
+        payload = {
+            'category': 'spot',
+            'symbol': self.format_symbol(symbol.name),
+            'interval': self.format_interval(interval),
+            'start': self.format_timestamp(start),
+            'limit': limit
+        }
+        if end:
+            payload['end'] = self.format_timestamp(end)
+        query = self.sign(payload)
+        uri = f'{url}?{query}'
+        response = self.session.get(uri)
+        response.raise_for_status()
+        data = response.json()
+        if data.get('retMsg') not in ['OK', 'success']:
+            raise ValueError(data)
+        data = data['result']['list']
+        return self.standardize_klines(data)
+
+    def get_last_klines(self, symbol:str, interval:str, limit=100, retry=1, silent=True) -> list[list]:
+        minutes = interval_to_minutes(interval)
+        now = timezone.now() + timedelta(minutes=1)
+        start = now - timedelta(minutes=minutes*limit+1)
+        klines = self.get_klines(symbol, interval, start, now, limit=limit*2)
+        if not klines:
+            return []
+        last_kline_dt = klines[-1][0]
+        if (now - last_kline_dt) > timedelta(minutes=minutes*2):
+            error = f'Last kline dt {last_kline_dt} does not match current time {now}, total klines: {len(klines)}, {start} -> {now}'
+            if retry > 0:
+                time.sleep(1)
+                return self.get_last_klines(symbol, interval, limit, retry-1, silent)
+            if not silent:
+                raise KlineFetchFailed(error)
+        return klines
+
+    def place_market_order(self, symbol:'MarketSymbol|str', side:typing.Literal['buy', 'sell'], funds:typing.Optional[str]=None, quantity:typing.Optional[str]=None):
+        symbol = self.get_symbol_from_name(symbol) if isinstance(symbol, str) else symbol
+        url = f'{self.url}/v5/order/create'
+        payload = {
+            'category': 'spot',
+            'symbol': 'ETHUSDT',
+            'side': side.title(),
+            'orderType': 'Market',
+        }
+        if funds:
+            payload['qty'] = funds
+        if quantity:
+            payload['qty'] = quantity
+        self.sign(payload, method='POST')
+        response = self.session.post(url, data=json.dumps(payload).rstrip('"').lstrip('"'))
+        response.raise_for_status()
+        data = response.json()
+        if data.get('retMsg') not in ['OK', 'success']:
+            if 'insufficient' in data.get('retMsg').lower():
+                raise InsufficientBalance(f'Insufficient funds to place order on {self.name}: {data.get("retMsg")}')
+            if 'too many decimals' in data.get('retMsg').lower():
+                raise RejectedOrder(f'Order was rejected by the exchange {self.name}: {data.get("retMsg")}')
+            raise OrderPlacementError(data.get('retMsg'))
+        
+        return self.get_order(data['result']['orderId'])
+
+    def get_order(self, order:'Order|str') -> 'Order':
+        if not isinstance(order, str) and not isinstance(order, int):
+            order_id = order.oid
+        else:
+            order_id = order
+        url = f'{self.url}/v5/order/history'
+        payload = {
+            'category': 'spot',
+            'orderId': order_id
+        }
+        query = self.sign(payload)
+        uri = f'{url}?{query}'
+        response = self.session.get(uri)
+        response.raise_for_status()
+        data = response.json()
+        if data.get('retMsg') not in ['OK', 'success']:
+            raise ValueError(data)
+        try:
+            order = data['result']['list'][0]
+        except IndexError:
+            raise ValueError('Order not found:' + str(order))
+        try:
+            order = self.prep_order(order)
+        except Exception as e:
+            raise OrderPostProcessingError(f'Failed to process order: {e}')
+        return order
+
+    def prep_order(self, order:dict) -> 'Order':
+        from quantapi.models import Order
+        return Order(
+            oid=order['orderId'],
+            status='FILLED' if order['orderStatus'] == 'PartiallyFilledCanceled' else order['orderStatus'].upper(),
+            order_type=order['orderType'].upper(),
+            deal_size=float(order['cumExecQty']),
+            deal_funds=float(order['cumExecValue']),
+            price=float(order['basePrice']),
+            side=order['side'].upper(),
+            market_timestamp=self.standardize_timestamp(order['createdTime']),
+            symbol=self.get_symbol_from_name(self.standardize_symbol(order['symbol'])),
+            market=self.market,
+            details=json.dumps(order, indent=2)
+        )
+
+    def prep_symbol(self, symbol:dict) -> 'MarketSymbol':
+        from quantapi.models import MarketSymbol
+        symbol = MarketSymbol(
+            market=self.market,
+            name=self.standardize_symbol(symbol['symbol']),
+            base=symbol['baseCoin'],
+            quote=symbol['quoteCoin'],
+            base_precision=float(symbol['lotSizeFilter'].get('basePrecision', 0)),
+            quote_precision=float(symbol['priceFilter'].get('quotePrecision', 0)),
+            spot_trading_enabled=symbol['status'] == 'Trading',
+            margin_trading_enabled=symbol['marginTrading'] != 'none',
+            details=json.dumps(symbol, indent=2)
+        )
+        return symbol
+
+    def format_symbol(self, name:str) -> str:
+        return name.upper().replace('-', '')
+
+    def standardize_symbol(self, symbol:str) -> str:
+        return symbol.upper().replace('USDT', '-USDT')
+
+    def format_timestamp(self, ts:datetime) -> str:
+        return str(int(ts.timestamp()) * 1000)
+
+    def standardize_timestamp(self, ts:str) -> datetime:
+        return datetime.fromtimestamp(int(ts) // 1000, tz=timezone.utc)
+
+    def format_interval(self, interval:str) -> str:
+        return {
+            '1 min': '1',
+            '5 min': '5',
+            '15 min': '15',
+            '30 min': '30',
+            '1 hour': '60',
+            '4 hour': '240',
+            '12 hour': '720',
+            '1 day': 'D',
+            '1 week': 'W',
+            '1 month': 'M',
+        }[interval]
+
+    def standardize_klines(self, data:list) -> list[list]:
+        return [[
+            self.standardize_timestamp(str(ts)),
+            float(o),
+            float(h),
+            float(l),
+            float(c),
+            float(v)
+        ] for ts, o, h, l, c, v, t in data]
+    
+    def get_symbol_from_name(self, name:str) -> 'MarketSymbol':
+        return self.symbols.get(name)
