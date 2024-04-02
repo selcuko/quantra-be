@@ -153,7 +153,7 @@ class BinanceMarket(IMarket):
             while not self.stop_websocket_stream and not liveloop.should_stop():
                 ws.pong()
                 try:
-                    data = json.loads(ws.recv())
+                    data = json.loads(ws.recv(timeout=10))
                 except TimeoutError:
                     continue
                 candle = self.format_ws_candle(data)

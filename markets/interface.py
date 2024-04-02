@@ -241,10 +241,10 @@ class IMarket:
         raise NotImplementedError
 
     def get_current_prices(self, save=True) -> dict:
-        raise NotImplemented
+        raise NotImplementedError()
 
     def get_equity(self, save=True) -> float:
-        raise NotImplemented
+        raise NotImplementedError()
 
     def cache_to_db(self, force=False):
         if not self.market:

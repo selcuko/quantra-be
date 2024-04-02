@@ -185,7 +185,6 @@ class KucoinMarket(IMarket):
         return ws
 
     def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable, liveloop:'LiveLoop'):
-        from quantapi.models import Session
         ws = self.get_match_engine_socket(symbol)
         last_ping = datetime.now()
         engine = MatchEngine(interval, callback)

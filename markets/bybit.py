@@ -4,15 +4,20 @@ import hmac
 import json
 import time
 import requests
-from markets.errors import InsufficientBalance, KlineFetchFailed, OrderPlacementError, OrderPostProcessingError, RejectedOrder
+from markets.errors import InsufficientBalance, KlineFetchFailed, MarketAPIError, OrderPlacementError, OrderPostProcessingError, RejectedOrder
 from markets.interface import IMarket
+from logger import logger
 
 from django.utils import timezone
 import typing
-
+from websockets.sync.client import ClientConnection, connect
+from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
+from match import MatchEngine
 from models import interval_to_minutes
 if typing.TYPE_CHECKING:
     from quantapi.models import Market, MarketSymbol, Order
+    from liveloop import LiveLoop
+
 
 class BybitMarket(IMarket):
     name = 'BYBIT'
@@ -37,6 +42,7 @@ class BybitMarket(IMarket):
         self.assets = {}
         self.prices = {}
         self.authenticated = True
+        self.stop_websocket_stream = False
 
         self.get_account()
         self.get_symbols()
@@ -69,7 +75,7 @@ class BybitMarket(IMarket):
         self.session.headers['X-BAPI-SIGN'] = signature
         return query
 
-    def get_account(self):
+    def get_account(self, save=True):
         url = f'{self.url}/v5/asset/transfer/query-account-coins-balance'
         payload = {
             'accountType': 'FUND'
@@ -85,8 +91,12 @@ class BybitMarket(IMarket):
         for symbol in data:
             self.assets[symbol['coin']] = float(symbol['walletBalance'])
         self.capital = self.assets.get('USDT', 0)
+        if save:
+            self.market.usdt = self.capital
+            self.market.assets = json.dumps(self.assets)
+            self.market.save()
 
-    def get_symbols(self):
+    def get_symbols(self, save=True):
         url = f'{self.url}/v5/market/instruments-info'
         payload = {
             'category': 'spot'
@@ -99,7 +109,7 @@ class BybitMarket(IMarket):
         if data.get('retMsg') not in ['OK', 'success']:
             raise ValueError(data)
         data = data['result']['list']
-        self.symbols = { self.standardize_symbol(symbol['symbol']): self.prep_symbol(symbol) for symbol in data }
+        self.symbols = { self.standardize_symbol(symbol['symbol']): self.prep_symbol(symbol) for symbol in data if symbol['symbol'].endswith('USDT') }
         if self.market:
             from quantapi.models import MarketSymbol
             MarketSymbol.objects.bulk_create(self.symbols.values(), update_conflicts=True, update_fields=[
@@ -109,9 +119,11 @@ class BybitMarket(IMarket):
                 'base_precision',
                 'quote_precision',
             ], unique_fields=['name', 'market'])
+        if save and self.market:
+            self.market.save()
         return self.symbols
 
-    def get_current_prices(self):
+    def get_current_prices(self, save=True):
         url = f'{self.url}/v5/market/tickers'
         payload = {
             'category': 'spot'
@@ -126,14 +138,19 @@ class BybitMarket(IMarket):
         data = data['result']['list']
         for symbol in data:
             self.prices[self.standardize_symbol(symbol['symbol'])] = float(symbol['lastPrice'])
+        if save and self.market:
+            self.market.prices = json.dumps(self.prices)
+            self.market.save()
         return self.prices
 
     def get_klines(self, symbol:'MarketSymbol|str', interval:str, start:datetime, end:typing.Optional[datetime]=None, limit=1000, retry=0):
-        symbol = self.get_symbol_from_name(symbol) if isinstance(symbol, str) else symbol
+        symbol_object = self.get_symbol_from_name(symbol) if isinstance(symbol, str) else symbol
+        if not symbol_object:
+            raise ValueError(f'Symbol not found: {symbol}')
         url = f'{self.url}/v5/market/kline'
         payload = {
             'category': 'spot',
-            'symbol': self.format_symbol(symbol.name),
+            'symbol': self.format_symbol(symbol_object.name),
             'interval': self.format_interval(interval),
             'start': self.format_timestamp(start),
             'limit': limit
@@ -167,12 +184,88 @@ class BybitMarket(IMarket):
                 raise KlineFetchFailed(error)
         return klines
 
-    def place_market_order(self, symbol:'MarketSymbol|str', side:typing.Literal['buy', 'sell'], funds:typing.Optional[str]=None, quantity:typing.Optional[str]=None):
-        symbol = self.get_symbol_from_name(symbol) if isinstance(symbol, str) else symbol
+    def init_websocket(self, symbol:str, interval:str, callback:typing.Callable, liveloop:'LiveLoop|None', retries:int=30):
+        ws_uri = 'wss://stream.bybit.com/v5/public/spot'
+        try:
+            ws = connect(ws_uri)
+            ws.send(json.dumps({
+                'op': 'subscribe',
+                'args': [f'kline.{self.format_interval(interval)}.{self.format_symbol(symbol)}']
+            }))
+            ack = json.loads(ws.recv())
+            last_ping = timezone.now()
+            while not self.stop_websocket_stream and not (liveloop and liveloop.should_stop()):
+                try:
+                    if (timezone.now() - last_ping) > timedelta(seconds=30):
+                        ws.send(json.dumps({'op': 'ping'}))
+                        last_ping = timezone.now()
+                    data = json.loads(ws.recv(timeout=10))
+                    if data.get('op') == 'pong':
+                        continue
+                except TimeoutError:
+                    continue
+                candle = self.format_ws_candle(data['data'][0])
+                if candle['closed']:
+                    callback(candle)
+        except Exception as e:
+            if retries < self.WS_MAX_RETRIES:
+                time.sleep(1)
+                retries += 1
+                return self.init_websocket(symbol, interval, callback, liveloop, retries+1)
+            msg = f'Failed to connect to websocket: {e}'
+            logger.error(msg, extra={'market': self.name, 'type': 'MARKET'})
+            raise MarketAPIError(msg) from e
+
+    def get_match_engine_socket(self, symbol:str) -> ClientConnection:
+        ws_uri = 'wss://stream.bybit.com/v5/public/spot'
+        base = self.format_symbol(symbol.split('-')[0])
+        ws = connect(ws_uri)
+        ws.send(json.dumps({
+            'op': 'subscribe',
+            'args': [f'publicTrade.{self.format_symbol(symbol)}']
+        }))
+        ack = json.loads(ws.recv())
+        if not ack.get('success'):
+            raise MarketAPIError(f'Failed to subscribe to websocket: {ack}')
+        return ws
+
+    def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable, liveloop:'LiveLoop|None'):
+        ws = self.get_match_engine_socket(symbol)
+        last_ping = timezone.now()
+        engine = MatchEngine(interval, callback)
+        retries = 30
+        while not self.stop_websocket_stream and not (liveloop and liveloop.should_stop()):
+            if last_ping - timezone.now() > timedelta(seconds=30):
+                ws.send(json.dumps({'op': 'ping'}))
+                last_ping = timezone.now()
+            try:
+                data = json.loads(ws.recv(timeout=10))
+                if data.get('op') == 'pong':
+                    continue
+            except TimeoutError:
+                continue
+            except (ConnectionClosed, ConnectionClosedOK):
+                ws = self.get_match_engine_socket(symbol)
+                continue
+            except:
+                if retries > self.WS_MAX_RETRIES:
+                    logger.error('Failed to connect to websocket', extra={'market': self.name, 'type': 'MARKET'})
+                    raise MarketAPIError('Failed to connect to websocket')
+                time.sleep(1)
+                ws = self.get_match_engine_socket(symbol)
+                retries += 1
+                continue
+            trade = self.format_match(data['data'][0])
+            engine.on_match(trade)
+
+    def place_market_order(self, symbol:'MarketSymbol|str', side:typing.Literal['buy', 'sell'], funds:typing.Optional[str]=None, quantity:typing.Optional[str]=None, validate=True):
+        symbol_object = self.get_symbol_from_name(symbol) if isinstance(symbol, str) else symbol
+        if not symbol_object:
+            raise ValueError(f'Symbol not found: {symbol}')
         url = f'{self.url}/v5/order/create'
         payload = {
             'category': 'spot',
-            'symbol': 'ETHUSDT',
+            'symbol': self.format_symbol(symbol_object.name),
             'side': side.title(),
             'orderType': 'Market',
         }
@@ -191,9 +284,9 @@ class BybitMarket(IMarket):
                 raise RejectedOrder(f'Order was rejected by the exchange {self.name}: {data.get("retMsg")}')
             raise OrderPlacementError(data.get('retMsg'))
         
-        return self.get_order(data['result']['orderId'])
+        return self.get_order(symbol_object, data['result']['orderId'])
 
-    def get_order(self, order:'Order|str') -> 'Order':
+    def get_order(self, symbol:'MarketSymbol|str|None', order:'Order|str|int') -> 'Order':
         if not isinstance(order, str) and not isinstance(order, int):
             order_id = order.oid
         else:
@@ -211,14 +304,25 @@ class BybitMarket(IMarket):
         if data.get('retMsg') not in ['OK', 'success']:
             raise ValueError(data)
         try:
-            order = data['result']['list'][0]
+            order_payload = data['result']['list'][0]
         except IndexError:
             raise ValueError('Order not found:' + str(order))
         try:
-            order = self.prep_order(order)
+            order = self.prep_order(order_payload)
         except Exception as e:
             raise OrderPostProcessingError(f'Failed to process order: {e}')
         return order
+    
+    def get_equity(self, save=True):
+        prices = self.get_current_prices(save=False)
+        if not prices:
+            prices = json.loads(self.market.prices or '{}')
+        equity = self.capital + sum([ self.assets.get(asset, 0) * prices.get(asset+'-USDT', 0) for asset in self.assets ])
+        if self.market and self.market.equity != equity:
+            self.market.equity = equity
+            if save:
+                self.market.save()
+        return equity
 
     def prep_order(self, order:dict) -> 'Order':
         from quantapi.models import Order
@@ -238,7 +342,7 @@ class BybitMarket(IMarket):
 
     def prep_symbol(self, symbol:dict) -> 'MarketSymbol':
         from quantapi.models import MarketSymbol
-        symbol = MarketSymbol(
+        symbol_object = MarketSymbol(
             market=self.market,
             name=self.standardize_symbol(symbol['symbol']),
             base=symbol['baseCoin'],
@@ -249,13 +353,13 @@ class BybitMarket(IMarket):
             margin_trading_enabled=symbol['marginTrading'] != 'none',
             details=json.dumps(symbol, indent=2)
         )
-        return symbol
+        return symbol_object
 
     def format_symbol(self, name:str) -> str:
         return name.upper().replace('-', '')
 
     def standardize_symbol(self, symbol:str) -> str:
-        return symbol.upper().replace('USDT', '-USDT')
+        return symbol.upper().replace('-', '').replace('USDT', '-USDT')
 
     def format_timestamp(self, ts:datetime) -> str:
         return str(int(ts.timestamp()) * 1000)
@@ -287,5 +391,30 @@ class BybitMarket(IMarket):
             float(v)
         ] for ts, o, h, l, c, v, t in data]
     
-    def get_symbol_from_name(self, name:str) -> 'MarketSymbol':
+    def get_symbol_from_name(self, name:str) -> 'MarketSymbol|None':
         return self.symbols.get(name)
+    
+    def format_ws_candle(self, data:dict):
+        return {
+            'time': self.standardize_timestamp(data['timestamp']),
+            'start': self.standardize_timestamp(data['start']),
+            'end': self.standardize_timestamp(data['end']),
+            'open': float(data['open']),
+            'high': float(data['high']),
+            'low': float(data['low']),
+            'close': float(data['close']),
+            'volume': float(data['volume']),
+            'closed': data['confirm'],
+        }
+
+    def format_match(self, data:dict):
+        return {
+            'time': self.standardize_timestamp(data['T']),
+            'price': float(data['p']),
+            'size': float(data['v']),
+            'maker': True if data['S'] == 'Buy' else False,
+        }
+
+    def has_symbol(self, symbol: str) -> bool:
+        symbol = self.standardize_symbol(symbol)
+        return symbol in self.symbols or symbol.split('-')[0] in self.symbols
