@@ -70,6 +70,10 @@
                             <label for="default-checkbox" class="ms-2 text-sm font-medium text-gray-900 dark:text-gray-300">Binance</label>
                         </div>
                         <div class="flex items-center mb-4">
+                            <input id="BYBIT" type="checkbox" value="BYBIT" class="market-selector w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500">
+                            <label for="default-checkbox" class="ms-2 text-sm font-medium text-gray-900 dark:text-gray-300">Bybit</label>
+                        </div>
+                        <div class="flex items-center mb-4">
                             <input id="KUCOIN" type="checkbox" value="KUCOIN" class="market-selector w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500">
                             <label class="ms-2 text-sm font-medium text-gray-900 dark:text-gray-300">Kucoin</label>
                         </div>
@@ -363,6 +367,7 @@
             symbols = add;
         }
         const binanceIcon = 'https://cryptologos.cc/logos/binance-coin-bnb-logo.png';
+        const bybitIcon = 'https://play-lh.googleusercontent.com/SJxOSA2a2WY2RYQKv99kKCQVVqA5tmgw2VHn_YY0gL4riv7eDDjZ46X5_6Jge-Ur8uo';
         const kucoinIcon = 'https://cryptologos.cc/logos/kucoin-shares-kcs-logo.png';
         const mexcIcon = 'https://cryptologos.cc/logos/mxc-mxc-logo.png';
         symbols.forEach(symbol => {
@@ -372,6 +377,9 @@
             let marketIcons = '';
             if (symbol.markets.includes('BINANCE')) {
                 marketIcons += `<img src="${binanceIcon}" alt="Binance" class="w-6 h-6 mr-1">`;
+            }
+            if (symbol.markets.includes('BYBIT')) {
+                marketIcons += `<img src="${bybitIcon}" alt="Bybit" class="w-6 h-6 mr-1">`;
             }
             if (symbol.markets.includes('KUCOIN')) {
                 marketIcons += `<img src="${kucoinIcon}" alt="Kucoin" class="w-6 h-6 mr-1">`;
