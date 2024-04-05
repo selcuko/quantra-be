@@ -4,6 +4,7 @@ import hmac
 import json
 import time
 import requests
+from logger import logger
 from markets.errors import InsufficientBalance, KlineFetchFailed, MarketAPIError, OrderPlacementError, OrderPostProcessingError, RejectedOrder
 from markets.interface import IMarket
 from logger import logger
@@ -78,7 +79,7 @@ class BybitMarket(IMarket):
     def get_account(self, save=True):
         url = f'{self.url}/v5/asset/transfer/query-account-coins-balance'
         payload = {
-            'accountType': 'FUND'
+            'accountType': 'UNIFIED'
         }
         query = self.sign(payload)
         uri = f'{url}?{query}'
@@ -91,12 +92,13 @@ class BybitMarket(IMarket):
         for symbol in data:
             self.assets[symbol['coin']] = float(symbol['walletBalance'])
         self.capital = self.assets.get('USDT', 0)
-        if save:
+        if self.market:
             self.market.usdt = self.capital
             self.market.assets = json.dumps(self.assets)
-            self.market.save()
+            if save:
+                self.market.save()
 
-    def get_symbols(self, save=True):
+    def get_symbols(self):
         url = f'{self.url}/v5/market/instruments-info'
         payload = {
             'category': 'spot'
@@ -118,9 +120,7 @@ class BybitMarket(IMarket):
                 'details',
                 'base_precision',
                 'quote_precision',
-            ], unique_fields=['name', 'market'])
-        if save and self.market:
-            self.market.save()
+            ], unique_fields=['name', 'market'], batch_size=50)
         return self.symbols
 
     def get_current_prices(self, save=True):
@@ -138,9 +138,10 @@ class BybitMarket(IMarket):
         data = data['result']['list']
         for symbol in data:
             self.prices[self.standardize_symbol(symbol['symbol'])] = float(symbol['lastPrice'])
-        if save and self.market:
+        if self.market:
             self.market.prices = json.dumps(self.prices)
-            self.market.save()
+            if save:
+                self.market.save()
         return self.prices
 
     def get_klines(self, symbol:'MarketSymbol|str', interval:str, start:datetime, end:typing.Optional[datetime]=None, limit=1000, retry=0):
@@ -280,13 +281,13 @@ class BybitMarket(IMarket):
         if data.get('retMsg') not in ['OK', 'success']:
             if 'insufficient' in data.get('retMsg').lower():
                 raise InsufficientBalance(f'Insufficient funds to place order on {self.name}: {data.get("retMsg")}')
-            if 'too many decimals' in data.get('retMsg').lower():
+            if 'too many decimals' in data.get('retMsg').lower() or 'exceeded' in data.get('retMsg').lower():
                 raise RejectedOrder(f'Order was rejected by the exchange {self.name}: {data.get("retMsg")}')
             raise OrderPlacementError(data.get('retMsg'))
         
         return self.get_order(symbol_object, data['result']['orderId'])
 
-    def get_order(self, symbol:'MarketSymbol|str|None', order:'Order|str|int') -> 'Order':
+    def get_order(self, symbol:'MarketSymbol|str|None', order:'Order|str|int', retries=0) -> 'Order':
         if not isinstance(order, str) and not isinstance(order, int):
             order_id = order.oid
         else:
@@ -306,7 +307,10 @@ class BybitMarket(IMarket):
         try:
             order_payload = data['result']['list'][0]
         except IndexError:
-            raise ValueError('Order not found:' + str(order))
+            if retries > 3:
+                raise ValueError('Order not found:' + str(order))
+            time.sleep(0.5)
+            return self.get_order(symbol, order, retries+1)
         try:
             order = self.prep_order(order_payload)
         except Exception as e:

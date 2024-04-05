@@ -113,14 +113,14 @@ class BinanceMarket(IMarket):
             'maker': payload['m'],
         }
 
-    def init_match_engine(self, symbol:str, interval:str, callback:Callable, liveloop:'LiveLoop'):
+    def init_match_engine(self, symbol:str, interval:str, callback:Callable, liveloop:'LiveLoop|None'):
         ws_uri = f'wss://stream.binance.com:9443/ws/{self._format_symbol(symbol).lower()}@trade'
         ws = connect(ws_uri)
         me = MatchEngine(interval, callback)
         last_ping = datetime.now()
         retries = 0
         while not self.stop_websocket_stream:
-            if liveloop.should_stop():
+            if liveloop and liveloop.should_stop():
                 self.stop_websocket_stream = True
                 break
             if (datetime.now() - last_ping) > timedelta(seconds=30):
@@ -129,7 +129,8 @@ class BinanceMarket(IMarket):
             try:
                 data = json.loads(ws.recv(timeout=10))
                 retries = 0
-                me.on_match(self.format_match(data))
+                match = self.format_match(data)
+                me.on_match(match)
             except TimeoutError:
                 continue
             except (ConnectionClosed, ConnectionClosedOK):

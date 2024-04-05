@@ -65,6 +65,15 @@ class Market(models.Model):
                 'lot_step': Decimal(details.get('baseSizePrecision')) if details.get('baseSizePrecision') else None,
                 'min_notional': Decimal(details.get('minQuoteAmountMarket')) if details.get('minQuoteAmountMarket') else None,
             }
+        elif self.exchange_name == Market.Exchange.BYBIT:
+            price_tick = details.get('priceFilter', {}).get('tickSize')
+            lot_size = details.get('lotSizeFilter', {}).get('basePrecision')
+            notional = details.get('lotSizeFilter', {}).get('minOrderQty')
+            return {
+                'min_notional': Decimal(notional) if notional else None,
+                'lot_step': Decimal(lot_size) if lot_size else None,
+                'price_step': Decimal(price_tick) if price_tick else None,
+            }
         else:
             return {
                 'min_notional': None,

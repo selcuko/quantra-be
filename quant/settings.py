@@ -26,6 +26,7 @@ SYMKEY = b'REDACTED'
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
+ENVIRONMENT = os.environ.get('ENVIRONMENT', 'dev')
 
 ALLOWED_HOSTS = ['*']
 CSRF_TRUSTED_ORIGINS = ['https://example.org', 'https://example.com']
@@ -64,6 +65,8 @@ MIDDLEWARE = [
     'quantapi.middleware.WhitelistedUserMiddleware',
     'silk.middleware.SilkyMiddleware'
 ]
+if ENVIRONMENT == 'dev':
+    MIDDLEWARE.remove('login_required.middleware.LoginRequiredMiddleware')
 
 LOGIN_REQUIRED_IGNORE_PATHS = [
     r'/accounts/*',
@@ -105,9 +108,14 @@ QUANTDEV_RDS = {
         'HOST': 'db.example.invalid',
         'PORT': '5432',
 }
+SQLITE = {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+default_db = QUANTDEV_RDS if ENVIRONMENT == 'prod' else SQLITE
 
 DATABASES = {
-    'default': QUANTDEV_RDS
+    'default': default_db
 }
 
 

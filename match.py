@@ -92,4 +92,17 @@ class MatchEngine:
         self.update_candle(data)
 
 
- 
+if __name__ == '__main__':
+    import django
+    django.setup()
+    from logger import logger
+    from quantapi.models import Market
+    def callback(candle):
+        logger.info(f'CANDLE: {candle!s}')
+    print('Fetching market...')
+    market = Market.objects.get(exchange_name='BINANCE')
+    print('Loading interface...')
+    iface = market.get_interface()
+    print('Initiating websocket connection...')
+    iface.init_match_engine('AEVO-USDT', '15 min', print, None)
+
