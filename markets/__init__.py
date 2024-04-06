@@ -3,7 +3,9 @@ from markets.interface import IMarket
 from markets.kucoin import KucoinMarket
 from markets.mexc import MEXCMarket
 from markets.bybit import BybitMarket
-import typing 
+from markets.okx import OKXMarket
+
+import typing
 if typing.TYPE_CHECKING:
     from quantapi.models import Market as DBMarket
 
@@ -13,7 +15,8 @@ def get_market(market_name, config=None, market:'DBMarket|None'=None) -> 'IMarke
         'binance': BinanceMarket,
         'kucoin': KucoinMarket,
         'mexc': MEXCMarket,
-        'bybit': BybitMarket 
+        'bybit': BybitMarket,
+        'okx': OKXMarket,
     }
     if not isinstance(config, dict):
         config = {}

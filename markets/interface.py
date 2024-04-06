@@ -61,7 +61,7 @@ class IMarket:
         candle_mapped['price'] = (candle_mapped['open'] + candle_mapped['close'] + candle_mapped['high'] + candle_mapped['low']) / 4
         return candle_mapped
 
-    def init_match_engine(self, symbol:str, interval:str, callback:Callable, liveloop:'LiveLoop'):
+    def init_match_engine(self, symbol:str, interval:str, callback:Callable, liveloop:'LiveLoop|None'):
         """Blocking (sync) function to initialize a match engine for given symbol and interval. Run in a thread!
 
         Args:
@@ -75,7 +75,7 @@ class IMarket:
         """
         raise NotImplementedError(f'{self.name} does not implement init_match_engine()')
 
-    def init_websocket(self, symbol:str, interval:str, callback:Callable, liveloop:'LiveLoop'):
+    def init_websocket(self, symbol:str, interval:str, callback:Callable, liveloop:'LiveLoop|None'):
         """Blocking (sync) function to initialize a websocket for given symbol and interval. Run in a thread!
 
         Args:
