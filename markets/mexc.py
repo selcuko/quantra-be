@@ -171,6 +171,58 @@ class MEXCMarket(IMarket):
             if not last_kline:
                 last_kline = candle['end']
 
+    def get_full_orderbook(self, symbol:'MarketSymbol|str', limit=5000):
+        if isinstance(symbol, str):
+            symbol = self._get_symbol_from_name(symbol)
+        try:
+            uri = f'{self.url}/api/v3/depth?symbol={self._format_symbol(symbol.name)}&limit={limit}'
+            response = requests.get(uri)
+            orderbook = response.json()
+        except:
+            logger.error(f'Error while fetching orderbook for {self.name}', exc_info=True)
+            raise
+        return self.format_orderbook_snapshot(orderbook)
+
+    def format_orderbook_snapshot(self, orderbook):
+        return {
+            'bids': [ { 'price': float(bid[0]), 'size': float(bid[1]), 'count': 1 } for bid in orderbook['bids'] ],
+            'asks': [ { 'price': float(ask[0]), 'size': float(ask[1]), 'count': 1 } for ask in orderbook['asks'] ],
+        }
+
+    def format_orderbook_update(self, update):
+        return {
+            'bids': [ { 'price': float(bid['p']), 'size': float(bid['v']), 'count': 1 } for bid in update.get('bids', []) ],
+            'asks': [ { 'price': float(ask['p']), 'size': float(ask['v']), 'count': 1 } for ask in update.get('asks', []) ],
+        }
+
+    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:Callable):
+        if isinstance(symbol, str):
+            symbol = self._get_symbol_from_name(symbol)
+        ws_uri = 'wss://wbs.mexc.com/ws'
+        ws = connect(ws_uri)
+        topic = f'spot@public.increase.depth.v3.api@{self._format_symbol(symbol.name)}'
+        sub = {
+            'method': 'SUBSCRIPTION',
+            'params': [topic]
+        }
+        ws.send(json.dumps(sub))
+        ack = json.loads(ws.recv())
+        if not ack.get('msg') == topic:
+            raise Exception(f'Error while subscribing to {topic}: {ack}')
+        last_ping = datetime.now()
+        while not self.stop_websocket_stream:
+            if (datetime.now() - last_ping).seconds > 30:
+                ws.send('{"method": "PING"}')
+                last_ping = datetime.now()
+            try:
+                response = json.loads(ws.recv(timeout=10))
+            except TimeoutError:
+                continue
+            if response.get('msg') == 'PONG':
+                continue
+            orderbook = self.format_orderbook_update(response['d'])
+            callback(orderbook)
+
     def has_symbol(self, symbol: str) -> bool:
         if not self.symbols:
             self.get_symbols()
