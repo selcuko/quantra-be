@@ -74,12 +74,20 @@
                             <label for="default-checkbox" class="ms-2 text-sm font-medium text-gray-900 dark:text-gray-300">Bybit</label>
                         </div>
                         <div class="flex items-center mb-4">
+                            <input id="GATEIO" type="checkbox" value="GATEIO" class="market-selector w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500">
+                            <label for="default-checkbox" class="ms-2 text-sm font-medium text-gray-900 dark:text-gray-300">Gate.io</label>
+                        </div>
+                        <div class="flex items-center mb-4">
                             <input id="KUCOIN" type="checkbox" value="KUCOIN" class="market-selector w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500">
                             <label class="ms-2 text-sm font-medium text-gray-900 dark:text-gray-300">Kucoin</label>
                         </div>
-                        <div class="flex items-center">
+                        <div class="flex items-center mb-4">
                             <input id="MEXC" type="checkbox" value="MEXC" class="market-selector w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500">
                             <label class="ms-2 text-sm font-medium text-gray-900 dark:text-gray-300">MEXC</label>
+                        </div>
+                        <div class="flex items-center mb-4">
+                            <input id="OKX" type="checkbox" value="OKX" class="market-selector w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500">
+                            <label class="ms-2 text-sm font-medium text-gray-900 dark:text-gray-300">OKX</label>
                         </div>
                     </dd>
                 </div>
@@ -370,6 +378,8 @@
         const bybitIcon = 'https://play-lh.googleusercontent.com/SJxOSA2a2WY2RYQKv99kKCQVVqA5tmgw2VHn_YY0gL4riv7eDDjZ46X5_6Jge-Ur8uo';
         const kucoinIcon = 'https://cryptologos.cc/logos/kucoin-shares-kcs-logo.png';
         const mexcIcon = 'https://cryptologos.cc/logos/mxc-mxc-logo.png';
+        const okxIcon = 'https://www.okx.com/cdn/assets/imgs/221/B1041DB14722953A.png';
+        const gateioIcon = 'https://altcoinsbox.com/wp-content/uploads/2023/01/gate.io-logo.png';
         symbols.forEach(symbol => {
             const tr = document.createElement('tr');
             let heart = symbol.is_favorite ? favHeartFilled : favHeart;
@@ -386,6 +396,12 @@
             }
             if (symbol.markets.includes('MEXC')) {
                 marketIcons += `<img src="${mexcIcon}" alt="MEXC" class="w-6 h-6 mr-1">`;
+            }
+            if (symbol.markets.includes('OKX')) {
+                marketIcons += `<img src="${okxIcon}" alt="OKX" class="w-6 h-6 mr-1">`;
+            }
+            if (symbol.markets.includes('GATEIO')) {
+                marketIcons += `<img src="${gateioIcon}" alt="Gate.io" class="w-6 h-6 mr-1">`;
             }
             tr.innerHTML = `
                 <th scope="row" class="p-3 font-medium text-gray-900 whitespace-nowrap dark:text-white flex flex-row items-center w-max">
