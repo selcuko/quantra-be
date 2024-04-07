@@ -8,6 +8,7 @@ import traceback
 from typing import Callable, Optional
 import django
 django.setup()
+from django.utils import timezone
 from markets.interface import IMarket
 from quantapi.models import Market, MarketSymbol
 
@@ -20,6 +21,9 @@ class BookKeeper:
         self.callbacks = [callback]
         self.name = f'{symbol.name}@{market.name}'
         self.thread = None
+
+    def __str__(self):
+        return f'BookKeeper ({self.name})'
 
     def start(self):
         if self.is_running():
@@ -84,6 +88,10 @@ class BookMaster:
         self.keepers = {}
         self.symbol = symbol
         self.orderbook = { 'bids': {}, 'asks': {} }
+        self.updates = {}
+    
+    def __str__(self):
+        return f'BookMaster ({self.symbol.name})'
 
     def add_keeper(self, keeper:BookKeeper):
         if keeper.symbol != self.symbol:
@@ -93,6 +101,7 @@ class BookMaster:
         self.load_snapshot(keeper.orderbook)
 
     def keeper_callback(self, keeper, update):
+        self.updates[keeper] = timezone.now()
         bids_update = update['bids']
         asks_update = update['asks']
         for bid in bids_update:
@@ -135,21 +144,32 @@ class BookMaster:
         best_asks = sorted(self.orderbook['asks'].values(), key=lambda x: x['price'])[:limit]
         return best_bids, best_asks
 
+    def health(self):
+        now = timezone.now()
+        out_of_date = []
+        died = []
+        for keeper, last_update in self.updates.items():
+            if (now - last_update).total_seconds() > 5:
+                out_of_date.append(keeper)
+        for keeper in self.keepers.values():
+            if not keeper.is_running():
+                died.append(keeper)
+        return f'Out of date: {out_of_date}\nDied: {died}'
+
 
 if __name__ == '__main__':
+    markets = ['BINANCE', 'BYBIT', 'KUCOIN', 'MEXC', 'OKX', 'GATEIO']
     okx = Market.objects.get(exchange_name='MEXC').get_interface()
     gate = Market.objects.get(exchange_name='KUCOIN').get_interface()
-    sym = MarketSymbol.objects.get(name='BTC-USDT', market=okx.market)
-
-    okx_keeper = BookKeeper(okx, sym)
-    okx_keeper.start()
-
-    gate_keeper = BookKeeper(gate, sym)
-    gate_keeper.start()
-
+    sym = MarketSymbol.objects.filter(name='BTC-USDT').first()
+    if not sym:
+        raise ValueError('Symbol not found')
     master = BookMaster(sym)
-    master.add_keeper(okx_keeper)
-    master.add_keeper(gate_keeper)
+    for m in markets:
+        market = Market.objects.get(exchange_name=m)
+        keeper = BookKeeper(market.get_interface(), sym)
+        keeper.start()
+        master.add_keeper(keeper)
 
     last_print = time.time()
     while True:
@@ -161,6 +181,7 @@ if __name__ == '__main__':
             print(f'Best Asks:')
             for ask in best_asks[:3]:
                 print(f"\t{ask['price']}  {ask['size']}:{ask['count']}")
+            print(master.health())
             last_print = time.time()
 
         time.sleep(0.1)
