@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import json
 import time
+import traceback
 import requests
 from logger import logger
 from markets.errors import InsufficientBalance, KlineFetchFailed, MarketAPIError, OrderPlacementError, OrderPostProcessingError, RejectedOrder
@@ -263,7 +264,6 @@ class GateIOMarket(IMarket):
         self.sign(payload, path=path, method='POST')
         response = self.session.post(url, data=json.dumps(payload))
         data = response.json()
-        print('RESPONSE:', data)
         if not data.get('id'):
             msg = data.get('message').lower()
             if 'not enough' in msg:
@@ -292,6 +292,77 @@ class GateIOMarket(IMarket):
             raise OrderPostProcessingError(f'Error fetching order: {data}')
         order = self.prep_order(data)
         return order
+
+    def get_full_orderbook(self, symbol:'MarketSymbol|str', limit=5000) -> dict:
+        symbol_object = self.get_symbol_from_name(symbol) if isinstance(symbol, str) else symbol
+        if not symbol_object:
+            raise ValueError(f'Symbol not found: {symbol}')
+        path = f'/api/v4/spot/order_book'
+        url = f'{self.url}{path}'
+        payload = {
+            'currency_pair': self.format_symbol(symbol_object.name),
+            'interval': 0,
+            'limit': limit
+        }
+        query = self.sign(payload, path)
+        url = f'{url}?{query}'
+        response = self.session.get(url)
+        data = response.json()
+        try:
+            pre_ob = { 'asks': data['asks'], 'bids': data['bids'] }
+            orderbook = self.format_orderbook_snapshot(pre_ob)
+        except Exception as e:
+            raise MarketAPIError(f'Failed to process orderbook: {traceback.format_exc()}')
+        return orderbook
+
+    def format_orderbook_snapshot(self, orderbook:dict) -> dict:
+        return {
+            'bids': [{ 'price': float(price), 'size': float(size), 'count': 1 } for price, size in orderbook['bids']],
+            'asks': [{ 'price': float(price), 'size': float(size), 'count': 1 } for price, size in orderbook['asks']],
+        }
+
+    def format_orderbook_update(self, orderbook:dict) -> dict:
+        return {
+            'bids': [{ 'price': float(price), 'size': float(size), 'count': 1 } for price, size in orderbook['bids']],
+            'asks': [{ 'price': float(price), 'size': float(size), 'count': 1 } for price, size in orderbook['asks']],
+        }
+
+    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:typing.Callable, liveloop:'LiveLoop|None'=None, retries:int=30):
+        if isinstance(symbol, str):
+            symbol_obj = self.get_symbol_from_name(symbol)
+        else:
+            symbol_obj = symbol
+        if not symbol_obj:
+            raise ValueError(f'Symbol not found: {symbol}')
+        ws_uri = 'wss://api.gateio.ws/ws/v4/'
+        try:
+            ws = connect(ws_uri)
+            ws.send(json.dumps({
+                'time': self.format_timestamp(timezone.now()),
+                'channel': 'spot.order_book_update',
+                'event': 'subscribe',
+                'payload': [self.format_symbol(symbol_obj.name), '100ms']
+            }))
+            ack = json.loads(ws.recv())
+            while not self.stop_websocket_stream and not (liveloop and liveloop.should_stop()):
+                try:
+                    data = json.loads(ws.recv(timeout=1))
+                except TimeoutError:
+                    continue
+                if not data.get('result'):
+                    logger.warning(f'Received a message in an unrecognized format from {self.name} websocket: {data}', extra={'market': self, 'type': 'MARKET'})
+                    continue
+                pre_ob = { 'asks': data['result']['a'], 'bids': data['result']['b']}
+                orderbook = self.format_orderbook_update(pre_ob)
+                callback(orderbook)
+        except Exception as e:
+            if retries < self.WS_MAX_RETRIES:
+                time.sleep(1)
+                retries += 1
+                return self.init_orderbook_websocket(symbol, callback, liveloop, retries+1)
+            msg = f'Failed to connect to websocket: {e}'
+            logger.error(msg, extra={'market': self.name, 'type': 'MARKET'})
+            raise MarketAPIError(f'Failed to connect to websocket: {traceback.format_exc()}')
 
     def get_equity(self, save=True):
         prices = self.get_current_prices(save=False)

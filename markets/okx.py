@@ -297,7 +297,6 @@ class OKXMarket(IMarket):
         self.sign({}, path)
         response = self.session.get(url)
         data = response.json()
-        print(data)
         try:
             order_payload = data['data'][0]
         except IndexError:
@@ -310,7 +309,73 @@ class OKXMarket(IMarket):
         except Exception as e:
             raise OrderPostProcessingError(f'Failed to process order: {e}')
         return order
-    
+
+    def get_full_orderbook(self, symbol:'MarketSymbol|str', limit=5000) -> dict:
+        symbol_object = self.get_symbol_from_name(symbol) if isinstance(symbol, str) else symbol
+        if not symbol_object:
+            raise ValueError(f'Symbol not found: {symbol}')
+        path = f'/api/v5/market/books-full?instId={self.format_symbol(symbol_object.name)}&sz={limit}'
+        url = f'{self.url}{path}'
+        self.sign({}, path)
+        response = self.session.get(url)
+        data = response.json()
+        try:
+            orderbook = self.format_orderbook_snapshot(data['data'][0])
+        except Exception as e:
+            raise MarketAPIError(f'Failed to process orderbook: {e} {data}')
+        return orderbook
+
+    def format_orderbook_snapshot(self, orderbook:dict) -> dict:
+        return {
+            'bids': [{ 'price': float(price), 'size': float(size), 'count': int(count) } for price, size, count in orderbook['bids']],
+            'asks': [{ 'price': float(price), 'size': float(size), 'count': int(count) } for price, size, count in orderbook['asks']],
+        }
+
+    def format_orderbook_update(self, orderbook:dict) -> dict:
+        return {
+            'bids': [{ 'price': float(price), 'size': float(size), 'count': int(count) } for price, size, _, count in orderbook['bids']],
+            'asks': [{ 'price': float(price), 'size': float(size), 'count': int(count) } for price, size, _, count in orderbook['asks']],
+        }
+
+    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:typing.Callable, liveloop:'LiveLoop|None'=None, retries:int=30):
+        if isinstance(symbol, str):
+            symbol_obj = self.get_symbol_from_name(symbol)
+        else:
+            symbol_obj = symbol
+        if not symbol_obj:
+            raise ValueError(f'Symbol not found: {symbol}')
+        ws_uri = 'wss://ws.okx.com:8443/ws/v5/public'
+        try:
+            ws = connect(ws_uri)
+            ws.send(json.dumps({
+                'op': 'subscribe',
+                'args': [{
+                    'channel': 'books',
+                    'instId': self.format_symbol(symbol_obj.name),
+                }]
+            }))
+            ack = json.loads(ws.recv())
+            if ack.get('op') == 'error':
+                raise MarketAPIError(f'Failed to subscribe to websocket: {ack}')
+            while not self.stop_websocket_stream and not (liveloop and liveloop.should_stop()):
+                try:
+                    data = json.loads(ws.recv(timeout=1))
+                except TimeoutError:
+                    continue
+                if not data.get('data'):
+                    logger.warning(f'Received a message in an unrecognized format from {self.name} websocket: {data}', extra={'market': self, 'type': 'MARKET'})
+                    continue
+                orderbook = self.format_orderbook_update(data['data'][0])
+                callback(orderbook)
+        except Exception as e:
+            if retries < self.WS_MAX_RETRIES:
+                time.sleep(1)
+                retries += 1
+                return self.init_orderbook_websocket(symbol, callback, liveloop, retries+1)
+            msg = f'Failed to connect to websocket: {e}'
+            logger.error(msg, extra={'market': self.name, 'type': 'MARKET'})
+            raise MarketAPIError(f'Failed to connect to websocket: {traceback.format_exc()}')
+
     def get_equity(self, save=True):
         prices = self.get_current_prices(save=False)
         if not prices:

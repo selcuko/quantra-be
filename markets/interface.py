@@ -129,6 +129,28 @@ class IMarket:
         """
         raise NotImplementedError
 
+    def get_full_orderbook(self, symbol:'MarketSymbol|str', limit:int=5000) -> dict:
+        """Get full orderbook for given symbol
+
+        Args:
+            symbol (ExchangeSymbol | str): symbol object or symbol name
+            limit (int, optional): limit number of orders. Defaults to 5000.
+
+        Returns:
+            dict: orderbook object
+        """
+        raise NotImplementedError
+
+    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:Callable, liveloop:'LiveLoop|None'=None):
+        """Initialize orderbook websocket for given symbol
+
+        Args:
+            symbol (ExchangeSymbol | str): symbol object or name
+            callback (function): gets called for every update
+            liveloop (LiveLoop, optional): used to stop websocket upon session termination/pausing. Defaults to None.
+        """
+        raise NotImplementedError
+
     def place_limit_order(self, symbol:'MarketSymbol|str', side:Literal['buy', 'sell'], price:float, quantity:float, validate=True) -> 'Order':
         """Place a limit order, fetch the order back from market
 
