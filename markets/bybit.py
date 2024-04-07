@@ -316,7 +316,63 @@ class BybitMarket(IMarket):
         except Exception as e:
             raise OrderPostProcessingError(f'Failed to process order: {e}')
         return order
-    
+
+    def get_full_orderbook(self, symbol:'MarketSymbol|str', limit=5000) -> dict:
+        symbol_object = self.get_symbol_from_name(symbol) if isinstance(symbol, str) else symbol
+        if not symbol_object:
+            raise ValueError(f'Symbol not found: {symbol}')
+        url = f'{self.url}/v5/market/orderbook'
+        payload = {
+            'category': 'spot',
+            'symbol': self.format_symbol(symbol_object.name),
+            'limit': limit
+        }
+        query = self.sign(payload)
+        uri = f'{url}?{query}'
+        response = self.session.get(uri)
+        response.raise_for_status()
+        data = response.json()
+        if data.get('retMsg') not in ['OK', 'success']:
+            raise ValueError(data)
+        return self.format_orderbook(data['result'])
+
+    def format_orderbook(self, data:dict) -> dict:
+        return {
+            'bids': [ { 'price': float(bid[0]), 'size': float(bid[1]), 'count': 1 } for bid in data['b'] ],
+            'asks': [ { 'price': float(ask[0]), 'size': float(ask[1]), 'count': 1 } for ask in data['a'] ]
+        }
+
+    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:typing.Callable, retries:int=30):
+        ws_uri = 'wss://stream.bybit.com/v5/public/spot'
+        symbol_object = self.get_symbol_from_name(symbol) if isinstance(symbol, str) else symbol
+        if not symbol_object:
+            raise ValueError(f'Symbol not found: {symbol}')
+        ws = connect(ws_uri)
+        ws.send(json.dumps({
+            'op': 'subscribe',
+            'args': [f'orderbook.200.{self.format_symbol(symbol_object.name)}']
+        }))
+        ack = json.loads(ws.recv())
+        if not ack.get('success'):
+            raise MarketAPIError(f'Failed to subscribe to websocket: {ack}')
+        while not self.stop_websocket_stream:
+            try:
+                data = json.loads(ws.recv())
+                if data.get('op') == 'pong':
+                    continue
+            except (ConnectionClosed, ConnectionClosedOK):
+                if retries < self.WS_MAX_RETRIES:
+                    time.sleep(1)
+                    return self.init_orderbook_websocket(symbol, callback, retries+1)
+                raise MarketAPIError('Failed to connect to websocket')
+            except:
+                if retries < self.WS_MAX_RETRIES:
+                    time.sleep(1)
+                    return self.init_orderbook_websocket(symbol, callback, retries+1)
+                raise MarketAPIError('Failed to connect to websocket')
+            update = self.format_orderbook(data['data'])
+            callback(update)
+
     def get_equity(self, save=True):
         prices = self.get_current_prices(save=False)
         if not prices:
