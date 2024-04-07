@@ -450,6 +450,45 @@ class BinanceMarket(IMarket):
             logger.error(f'Error while canceling all orders on {self.name}', exc_info=True)
             raise
 
+    def get_full_orderbook(self, symbol:'MarketSymbol|str', limit=5000) -> dict:
+        if isinstance(symbol, str):
+            symbol = self._get_symbol_from_name(symbol)
+        try:
+            orderbook = self.client.get_order_book(symbol=self._format_symbol(symbol.name), limit=limit)
+            return {
+                'bids': [ { 'price': float(item[0]), 'size': float(item[1]), 'count': 1 } for item in orderbook['bids'] ],
+                'asks': [ { 'price': float(item[0]), 'size': float(item[1]), 'count': 1 } for item in orderbook['asks'] ],
+            }
+        except:
+            logger.error(f'Error while fetching orderbook for {symbol} on {self.name}', exc_info=True)
+            return {}
+
+    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:Callable, liveloop:'LiveLoop|None'=None, retries=30):
+        if isinstance(symbol, str):
+            symbol = self._get_symbol_from_name(symbol)
+        ws_uri = f'wss://stream.binance.com:9443/ws/{self._format_symbol(symbol.name).lower()}@depth@100ms'
+        try:
+            ws = connect(ws_uri)
+            while not self.stop_websocket_stream and not (liveloop and liveloop.should_stop()):
+                ws.pong()
+                try:
+                    data = json.loads(ws.recv(timeout=1))
+                except TimeoutError:
+                    continue
+                orderbook = {
+                    'bids': [ { 'price': float(item[0]), 'size': float(item[1]), 'count': 1 } for item in data['b'] ],
+                    'asks': [ { 'price': float(item[0]), 'size': float(item[1]), 'count': 1 } for item in data['a'] ],
+                }
+                callback(orderbook)
+        except:
+            if retries < self.WS_MAX_RETRIES:
+                retries += 1
+                time.sleep(1)
+                return self.init_orderbook_websocket(symbol, callback, liveloop, retries)
+            msg = f'Cannot start websocket connection for orderbook for {symbol} on {self.name} (tried {retries} times).'
+            logger.error(msg, exc_info=True)
+            raise MarketAPIError(msg)
+
     @authentication_required
     def get_account(self):
         account = self.client.get_account()
