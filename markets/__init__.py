@@ -4,6 +4,7 @@ from markets.kucoin import KucoinMarket
 from markets.mexc import MEXCMarket
 from markets.bybit import BybitMarket
 from markets.okx import OKXMarket
+from markets.gateio import GateIOMarket
 
 import typing
 if typing.TYPE_CHECKING:
@@ -17,6 +18,7 @@ def get_market(market_name, config=None, market:'DBMarket|None'=None) -> 'IMarke
         'mexc': MEXCMarket,
         'bybit': BybitMarket,
         'okx': OKXMarket,
+        'gateio': GateIOMarket,
     }
     if not isinstance(config, dict):
         config = {}

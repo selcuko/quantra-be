@@ -295,9 +295,12 @@ class LiveLoop:
 
         if order.status == Order.Status.INSUFFICIENT_BALANCE:
             self.imarket.get_account()
+            old_cap = self.session.capital
             self.session.capital = max(self.imarket.capital, 0)
             self.session.save()
             logger.warning(f'Insufficient balance, capital updated to {self.session.capital}', extra={'prefix': repr(self), 'type': 'ORDER'})
+            if old_cap == self.session.capital:
+                return
             return self.buy(last_kline)
         elif order.status == Order.Status.REJECTED:
             logger.error(f'RejectedOrder: {order!s}', extra={'type': 'ORDER', 'prefix': repr(self)})
@@ -336,9 +339,12 @@ class LiveLoop:
 
         if order.status == Order.Status.INSUFFICIENT_BALANCE:
             self.imarket.get_account()
+            old_assets = self.session.assets
             self.session.assets = self.imarket.assets.get(self.symbol.base, 0)
             self.session.save()
             logger.warning(f'Insufficient balance, assets updated to {self.session.assets}', extra={'prefix': repr(self), 'type': 'ORDER'})
+            if old_assets == self.session.assets:
+                return
             return self.sell(last_kline)
         elif order.status == Order.Status.REJECTED:
             logger.error(f'RejectedOrder: {order!s}', extra={'type': 'ORDER', 'prefix': repr(self)})
