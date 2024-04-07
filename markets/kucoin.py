@@ -526,7 +526,70 @@ class KucoinMarket(IMarket):
         except:
             logger.error(f'Error while cancelling all orders on {self.name}', exc_info=True)
             raise
-    
+
+    def get_full_orderbook(self, symbol:'MarketSymbol|str') -> dict:
+        if isinstance(symbol, str):
+            symbol = self._get_symbol_from_name(symbol)
+        try:
+            orderbook = self.kmarket.get_aggregated_orderv3(symbol.name)
+            if not orderbook:
+                raise ValueError(f'Error while getting full orderbook for {symbol} on {self.name}')
+            return self.format_orderbook_snapshot(orderbook)
+        except:
+            logger.error(f'Error while getting full orderbook for {symbol} on {self.name}', exc_info=True)
+            raise
+
+    def format_orderbook_snapshot(self, orderbook):
+        return {
+            'bids': [ { 'price': float(bid[0]), 'size': float(bid[1]), 'count': 1 } for bid in orderbook['bids'] ],
+            'asks': [ { 'price': float(ask[0]), 'size': float(ask[1]), 'count': 1 } for ask in orderbook['asks'] ],
+        }
+
+    def format_orderbook_update(self, update, seq):
+        return {
+            'bids': [ { 'price': float(bid[0]), 'size': float(bid[1]), 'count': 1 } for bid in update['bids'] if int(bid[2]) > seq],
+            'asks': [ { 'price': float(ask[0]), 'size': float(ask[1]), 'count': 1 } for ask in update['asks'] if int(ask[2]) > seq],
+        }
+
+    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:typing.Callable):
+        if isinstance(symbol, str):
+            symbol = self._get_symbol_from_name(symbol)
+        token = self.get_websocket_token()
+        conn_id = uuid.uuid4().hex
+        ws_uri = f'wss://ws-api-spot.kucoin.com/?token={token}&[connectId={conn_id}]'
+        ws = connect(ws_uri)
+        welcome = ws.recv()
+        if not json.loads(welcome)['type'] == 'welcome':
+            raise ValueError(f'Error while initializing websocket for {self.name}: {welcome}')
+        sub = {
+            "id": str(uuid.uuid4()),
+            "type": "subscribe",
+            "topic": f'/market/level2:{symbol.name}',
+            "privateChannel": False,
+            "response": True 
+        }
+        ws.send(json.dumps(sub))
+        ack = json.loads(ws.recv())
+        if not ack.get('type') == 'ack':
+            raise ValueError(f'Error while subscribing to {symbol} on {self.name}: {ack}')
+        last_ping = datetime.now()
+        seq = 0
+        while not self.stop_websocket_stream:
+            if last_ping < datetime.now() - timedelta(seconds=30):
+                ws.send(json.dumps({'id': str(uuid.uuid4()), 'type': 'ping'}))
+                last_ping = datetime.now()
+            try:
+                msg = json.loads(ws.recv(timeout=10))
+            except TimeoutError:
+                continue
+            if msg.get('type') == 'pong':
+                continue
+            if not msg.get('subject') == 'trade.l2update':
+                continue
+            orderbook = self.format_orderbook_update(msg['data']['changes'], seq=seq)
+            callback(orderbook)
+            seq = msg['data']['sequenceEnd']
+
     @authentication_required
     def get_account(self):
         if not self.user:

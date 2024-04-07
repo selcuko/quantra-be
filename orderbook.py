@@ -137,8 +137,8 @@ class BookMaster:
 
 
 if __name__ == '__main__':
-    okx = Market.objects.get(exchange_name='OKX').get_interface()
-    gate = Market.objects.get(exchange_name='GATEIO').get_interface()
+    okx = Market.objects.get(exchange_name='MEXC').get_interface()
+    gate = Market.objects.get(exchange_name='KUCOIN').get_interface()
     sym = MarketSymbol.objects.get(name='BTC-USDT', market=okx.market)
 
     okx_keeper = BookKeeper(okx, sym)
@@ -154,12 +154,13 @@ if __name__ == '__main__':
     last_print = time.time()
     while True:
         if time.time() - last_print > 1:
-            best_bids, best_asks = master.get_best()
+            best_bids, best_asks = master.get_best(500)
             print(f'Best Bids:')
-            for bid in best_bids:
+            for bid in best_bids[:3]:
                 print(f"\t{bid['price']}  {bid['size']}:{bid['count']}")
             print(f'Best Asks:')
-            for ask in best_asks:
+            for ask in best_asks[:3]:
                 print(f"\t{ask['price']}  {ask['size']}:{ask['count']}")
             last_print = time.time()
+
         time.sleep(0.1)
