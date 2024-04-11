@@ -589,3 +589,23 @@ class FavoritesView(View):
             symbol.is_favorite = is_favorite
             symbol.save()
         return JsonResponse({'success': f'Symbol {symbol_cid} is now {"added to" if is_favorite else "removed from"} favorites.'})
+
+
+class OrderBookView(View):
+    @staticmethod
+    def search(request):
+        query = request.GET.get('q')
+        symbols = MarketSymbol.objects.filter(name__contains=query)
+        symbol_names = symbols.values_list('name', flat=True)
+        return JsonResponse({'symbols': list(set(symbol_names))})
+
+    def get(self, request):
+        orderbook = {
+            "asks": [{ 'price': x*2, 'amount': x} for x in range(100, 200) ],
+            "bids": [{ 'price': x*2, 'amount': x} for x in range(1, 100) ],
+        }
+        asks = [ x for x in sorted(orderbook['asks'], key=lambda x: x['price'], reverse=True) if x['amount'] > 0]
+        bids = [ x for x in sorted(orderbook['bids'], key=lambda x: x['price'], reverse=True) if x['amount'] > 0]
+        return render(request, 'orderbook-detail.html', {"bids": bids, "asks": asks, "orderbook_name": "OBNAME"})
+
+

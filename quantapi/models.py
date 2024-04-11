@@ -81,10 +81,9 @@ class Market(models.Model):
                 'price_step': None,
             }
 
-
     def __str__(self):
         return f'{self.exchange_name} ({self.friendly_name})'
-    
+
     def get_interface(self):
         from markets import get_market
         return get_market(self.exchange_name, self.config, self)

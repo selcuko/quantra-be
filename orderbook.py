@@ -14,12 +14,12 @@ from quantapi.models import Market, MarketSymbol
 
 
 class BookKeeper:
-    def __init__(self, market:IMarket, symbol:MarketSymbol, callback:Optional[Callable]=None):
-        self.market = market
+    def __init__(self, symbol:MarketSymbol, callback:Optional[Callable]=None, market:Optional[IMarket]=None):
+        self.market = market or symbol.market.get_interface()
         self.symbol = symbol
         self.orderbook = { 'bids': {}, 'asks': {} }
         self.callbacks = [callback]
-        self.name = f'{symbol.name}@{market.name}'
+        self.name = f'{symbol.name}@{self.market.name}'
         self.thread = None
 
     def __str__(self):
@@ -56,6 +56,10 @@ class BookKeeper:
         bids_update = update['bids']
         asks_update = update['asks']
         for bid in bids_update:
+            bid['delta'] = bid['size'] - self.orderbook['bids'].get(bid['price'], {}).get('size', 0)
+        for ask in asks_update:
+            ask['delta'] = ask['size'] - self.orderbook['asks'].get(ask['price'], {}).get('size', 0)
+        for bid in bids_update:
             if bid['size'] == 0:
                 self.orderbook['bids'].pop(bid['price'], None)
             else:
@@ -89,31 +93,47 @@ class BookMaster:
         self.symbol = symbol
         self.orderbook = { 'bids': {}, 'asks': {} }
         self.updates = {}
+        self.callbacks = []
     
     def __str__(self):
         return f'BookMaster ({self.symbol.name})'
 
     def add_keeper(self, keeper:BookKeeper):
-        if keeper.symbol != self.symbol:
-            raise ValueError('Cannot add a keeper with a different symbol')
+        if keeper.symbol.name != self.symbol.name:
+            raise ValueError(f'Cannot add a keeper with a different symbol. Current symbol: {self.symbol}, keeper symbol: {keeper.symbol}')
         self.keepers[keeper.market] = keeper
         keeper.add_callback(self.keeper_callback)
         self.load_snapshot(keeper.orderbook)
+    
+    def add_callback(self, callback:Callable):
+        self.callbacks.append(callback)
 
     def keeper_callback(self, keeper, update):
         self.updates[keeper] = timezone.now()
         bids_update = update['bids']
         asks_update = update['asks']
         for bid in bids_update:
-            if bid['size'] == 0:
-                self.orderbook['bids'].pop(bid['price'], None)
+            if (old_bid := self.orderbook['bids'].get(bid['price'])):
+                old_bid['size'] += bid['delta']
             else:
                 self.orderbook['bids'][bid['price']] = bid
+            if self.orderbook['bids'][bid['price']]['size'] <= 0:
+                self.orderbook['bids'].pop(bid['price'], None)
         for ask in asks_update:
-            if ask['size'] == 0:
-                self.orderbook['asks'].pop(ask['price'], None)
+            if (old_ask := self.orderbook['asks'].get(ask['price'])):
+                old_ask['size'] += ask['delta']
             else:
                 self.orderbook['asks'][ask['price']] = ask
+            if self.orderbook['asks'][ask['price']]['size'] <= 0:
+                self.orderbook['asks'].pop(ask['price'], None)
+        for callback in self.callbacks:
+            if not callable(callback):
+                continue
+            try:
+                callback(self, update)
+            except Exception as e:
+                logger.error(f'Error in callback: {e}')
+                logger.error(traceback.format_exc())
 
     def load_snapshot(self, snapshot:dict):
         # merge the snapshot with the current orderbook (self.orderbook)
@@ -158,28 +178,27 @@ class BookMaster:
 
 
 if __name__ == '__main__':
-    markets = ['BINANCE', 'BYBIT', 'KUCOIN', 'MEXC', 'OKX', 'GATEIO']
-    okx = Market.objects.get(exchange_name='MEXC').get_interface()
-    gate = Market.objects.get(exchange_name='KUCOIN').get_interface()
+    markets = ['GATEIO']
     sym = MarketSymbol.objects.filter(name='BTC-USDT').first()
     if not sym:
         raise ValueError('Symbol not found')
     master = BookMaster(sym)
     for m in markets:
         market = Market.objects.get(exchange_name=m)
-        keeper = BookKeeper(market.get_interface(), sym)
+        keeper = BookKeeper(sym, market=market.get_interface())
         keeper.start()
         master.add_keeper(keeper)
 
     last_print = time.time()
     while True:
+        lb = 5
         if time.time() - last_print > 1:
             best_bids, best_asks = master.get_best(500)
             print(f'Best Bids:')
-            for bid in best_bids[:3]:
+            for bid in best_bids[:lb]:
                 print(f"\t{bid['price']}  {bid['size']}:{bid['count']}")
             print(f'Best Asks:')
-            for ask in best_asks[:3]:
+            for ask in best_asks[:lb]:
                 print(f"\t{ask['price']}  {ask['size']}:{ask['count']}")
             print(master.health())
             last_print = time.time()
