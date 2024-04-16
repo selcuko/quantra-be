@@ -207,7 +207,11 @@ class OrderBook:
     def get_ask(self, price:float|int|Decimal) -> Bid:
         return self.asks.get(Decimal(price), Bid(price, 0))
     
+    def order(self):
+        return
+
     def json(self):
+        self.order()
         return {
             'bids': [bid.json() for bid in self.bids.values()],
             'asks': [ask.json() for ask in self.asks.values()],

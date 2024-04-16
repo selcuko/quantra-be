@@ -33,10 +33,14 @@ def start_server():
                 symbol = None
                 try:
                     symbol = (await sync_to_async(MarketSymbol.objects.get)(name=symbol_name, market__exchange_name=market_name))
-                    if not symbol:
-                        raise ValueError(f'No symbol found for {symbol_name}@{market_name}')
-                except:
-                    print('Error:', symbol_name, market_name, traceback.format_exc())
+                except MarketSymbol.DoesNotExist:
+                    logger.error(f'No such symbol {symbol_name} on {market_name}.')
+                    websocket.send(json.dumps({
+                        'channel': 'subscribe',
+                        'symbol': symbol_name,
+                        'result': 404,
+                        'message': f'No such symbol {symbol_name} on {market_name}.'
+                    }))
                     continue
 
                 keeper = await sync_to_async(BookKeeper)(symbol)
@@ -61,12 +65,14 @@ def start_server():
             else:
                 print('Unknown channel')
 
-    def keeper_callback(master, data:OrderBook):
+    def keeper_callback(master:BookMaster, data:OrderBook):
         websocket = get_ws(master)
         if not websocket:
             logger.warning(f'No websocket for {master}')
             return
-        asyncio.run_coroutine_threadsafe(websocket.send(json.dumps(data.json())), loop)
+        update = data.json()
+        snapshot = master.orderbook.json()
+        asyncio.run_coroutine_threadsafe(websocket.send(json.dumps(snapshot)), loop)
 
 
 

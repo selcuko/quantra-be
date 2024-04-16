@@ -27,16 +27,22 @@
             </tr>
         </thead>
         <tbody>
-            {% for bid in bids %}
-            <tr class="bg-white border-b">
-                <th scope="row" class="p-2 font-medium whitespace-nowrap">
-                    {{ bid.price }}
+        </tbody>
+    </table>
+</div>
+<div class="relative">
+    <table class="w-full text-sm text-left text-gray-500" id="asks-table">
+        <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+            <tr>
+                <th scope="col" class="p-2">
+                    Price
                 </th>
-                <td class="p-2">
-                    {{ bid.amount }}
-                </td>
+                <th scope="col" class="p-2">
+                    Size
+                </th>
             </tr>
-            {% endfor %}
+        </thead>
+        <tbody>
         </tbody>
     </table>
 </div>
@@ -72,8 +78,8 @@
     }
 
     function renderOrderbook() {
-        let orderbook_table = document.getElementById('bids-table');
-        orderbook_table.innerHTML = '';
+        let bids_table = document.getElementById('bids-table');
+        bids_table.innerHTML = '';
         orderbook.bids.forEach(bid =>{
             let row = document.createElement('tr');
             let price_cell = document.createElement('td');
@@ -82,7 +88,20 @@
             amount_cell.innerText = bid.size;
             row.appendChild(price_cell);
             row.appendChild(amount_cell);
-            orderbook_table.appendChild(row);
+            bids_table.appendChild(row);
+        });
+
+        let asks_table = document.getElementById('asks-table');
+        asks_table.innerHTML = '';
+        orderbook.asks.forEach(ask =>{
+            let row = document.createElement('tr');
+            let price_cell = document.createElement('td');
+            price_cell.innerText = ask.price;
+            let amount_cell = document.createElement('td');
+            amount_cell.innerText = ask.size;
+            row.appendChild(price_cell);
+            row.appendChild(amount_cell);
+            asks_table.appendChild(row);
         });
     }
 
