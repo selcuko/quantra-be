@@ -47,6 +47,7 @@ class OKXMarket(IMarket):
         self.prices = {}
         self.authenticated = True
         self.stop_websocket_stream = False
+        self.orderbook_seq = 0
 
         self.get_account()
         self.get_symbols()
@@ -333,6 +334,9 @@ class OKXMarket(IMarket):
         }
 
     def format_orderbook_update(self, orderbook:dict) -> dict:
+        if orderbook['seqId'] <= self.orderbook_seq:
+            print('skipping', orderbook['seqId'], self.orderbook_seq)
+            return { 'bids': [], 'asks': [] }
         return {
             'bids': [{ 'price': Decimal(price), 'size': Decimal(size), 'count': int(count) } for price, size, _, count in orderbook['bids']],
             'asks': [{ 'price': Decimal(price), 'size': Decimal(size), 'count': int(count) } for price, size, _, count in orderbook['asks']],
@@ -367,6 +371,7 @@ class OKXMarket(IMarket):
                     logger.warning(f'Received a message in an unrecognized format from {self.name} websocket: {data}', extra={'market': self, 'type': 'MARKET'})
                     continue
                 orderbook = self.format_orderbook_update(data['data'][0])
+                self.orderbook_seq = data['data'][0]['seqId']
                 callback(orderbook)
         except Exception as e:
             if retries < self.WS_MAX_RETRIES:

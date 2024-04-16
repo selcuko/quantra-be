@@ -200,18 +200,19 @@ class OrderBook:
     def __init__(self):
         self.bids:dict[Decimal, Bid] = {}
         self.asks:dict[Decimal, Bid] = {}
-    
+
     def get_bid(self, price:float|int|Decimal) -> Bid:
         return self.bids.get(Decimal(price), Bid(price, 0))
-    
+
     def get_ask(self, price:float|int|Decimal) -> Bid:
         return self.asks.get(Decimal(price), Bid(price, 0))
-    
-    def order(self):
-        return
+
+    def sort(self):
+        self.bids = dict(sorted(self.bids.items(), key=lambda x: x[0], reverse=True))
+        self.asks = dict(sorted(self.asks.items(), key=lambda x: x[0]))
 
     def json(self):
-        self.order()
+        self.sort()
         return {
             'bids': [bid.json() for bid in self.bids.values()],
             'asks': [ask.json() for ask in self.asks.values()],

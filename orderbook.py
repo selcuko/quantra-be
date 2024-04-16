@@ -1,18 +1,19 @@
-from datetime import datetime
-from decimal import Decimal
-import json
 import threading
 import time
-
-from regex import R
-from logger import logger
 import traceback
+from datetime import datetime
+from decimal import Decimal
 from typing import Callable, Optional
-import django
 
+import django
+from django.core.cache import cache
+
+from logger import logger
 from models import Bid, OrderBook
+
 django.setup()
 from django.utils import timezone
+
 from markets.interface import IMarket
 from quantapi.models import Market, MarketSymbol
 
@@ -115,16 +116,20 @@ class BookMaster:
         self.updates[keeper] = timezone.now()
 
         for bid in update.bids.values():
-            if bid.price in self.orderbook.bids:
-                self.orderbook.bids[bid.price] = self.merge_bids(self.orderbook.bids[bid.price], bid)
+            px = bid.price
+            total_sz = sum([ k.orderbook.bids[px].size for k in self.keepers.values() if px in k.orderbook.bids ])
+            if total_sz > 0:
+                self.orderbook.bids[px] = bid
             else:
-                self.orderbook.bids[bid.price] = bid
-        
+                self.orderbook.bids.pop(px, None)
+
         for ask in update.asks.values():
-            if ask.price in self.orderbook.asks:
-                self.orderbook.asks[ask.price] = self.merge_bids(self.orderbook.asks[ask.price], ask)
+            px = ask.price
+            total_sz = sum([ k.orderbook.asks[px].size for k in self.keepers.values() if px in k.orderbook.asks ])
+            if total_sz > 0:
+                self.orderbook.asks[px] = ask
             else:
-                self.orderbook.asks[ask.price] = ask
+                self.orderbook.asks.pop(px, None)
 
         for callback in self.callbacks:
             if not callable(callback):
@@ -174,7 +179,7 @@ class BookMaster:
 
 
 if __name__ == '__main__':
-    markets = ['OKX', 'KUCOIN']
+    markets = ['BYBIT', 'OKX']
     sym = MarketSymbol.objects.filter(name='BTC-USDT').first()
     if not sym:
         raise ValueError('Symbol not found')
@@ -192,12 +197,14 @@ if __name__ == '__main__':
             time.sleep(0.1)
             continue
         lp = time.time()
-        bids, asks = master.get_best(5)
+        keeper = list(master.keepers.values())[0]
+        m_bids, m_asks = master.get_best(5)
+        k_bids, k_asks = keeper.get_best(5)
         print(f'{datetime.now()}')
-        print(f'\nBest Bids ({len(master.orderbook.bids.keys())}):')
-        for bid in bids:
-            print(bid)
-        print(f'\nBest Asks ({len(master.orderbook.asks.keys())}):')
-        for ask in asks:
-            print(ask)
-        print('-' * 20)
+        print('\nMaster - Keeper Bids:')
+        for m_bid, k_bid in zip(m_bids, k_bids):
+            print(f'{m_bid.price}: {m_bid.size} - {k_bid.price}: {k_bid.size}')
+        print('\nMaster - Keeper Asks:')
+        for m_ask, k_ask in zip(m_asks, k_asks):
+            print(f'{m_ask.price}: {m_ask.size} - {k_ask.price}: {k_ask.size}')
+        print('\n')

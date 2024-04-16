@@ -49,6 +49,7 @@ class BybitMarket(IMarket):
         self.get_account()
         self.get_symbols()
         self.get_current_prices()
+        self.orderbook_seq = 0
 
     def __str__(self) -> str:
         return f'{self.name} ({"Mainnet" if not self.testnet else "Testnet"})'
@@ -335,9 +336,14 @@ class BybitMarket(IMarket):
         data = response.json()
         if data.get('retMsg') not in ['OK', 'success']:
             raise ValueError(data)
-        return self.format_orderbook(data['result'])
+        snapshot = self.format_orderbook(data['result'])
+        self.orderbook_seq = data['result']['seq']
+        return snapshot
 
     def format_orderbook(self, data:dict) -> dict:
+        if (data.get('seq') or 0) <= self.orderbook_seq:
+            print('Ignoring orderbook update, seq:', data['seq'], 'current:', self.orderbook_seq)
+            return { 'bids' : [], 'asks': [] }
         return {
             'bids': [ { 'price': Decimal(bid[0]), 'size': Decimal(bid[1]), 'count': 1 } for bid in data['b'] ],
             'asks': [ { 'price': Decimal(ask[0]), 'size': Decimal(ask[1]), 'count': 1 } for ask in data['a'] ]
@@ -372,6 +378,8 @@ class BybitMarket(IMarket):
                     return self.init_orderbook_websocket(symbol, callback, retries+1)
                 raise MarketAPIError('Failed to connect to websocket')
             update = self.format_orderbook(data['data'])
+            if data['data']['seq']:
+                self.orderbook_seq = data['data']['seq']
             callback(update)
 
     def get_equity(self, save=True):
