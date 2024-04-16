@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from decimal import Decimal
 import hashlib
 import hmac
 import json
@@ -338,8 +339,8 @@ class BybitMarket(IMarket):
 
     def format_orderbook(self, data:dict) -> dict:
         return {
-            'bids': [ { 'price': float(bid[0]), 'size': float(bid[1]), 'count': 1 } for bid in data['b'] ],
-            'asks': [ { 'price': float(ask[0]), 'size': float(ask[1]), 'count': 1 } for ask in data['a'] ]
+            'bids': [ { 'price': Decimal(bid[0]), 'size': Decimal(bid[1]), 'count': 1 } for bid in data['b'] ],
+            'asks': [ { 'price': Decimal(ask[0]), 'size': Decimal(ask[1]), 'count': 1 } for ask in data['a'] ]
         }
 
     def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:typing.Callable, retries:int=30):

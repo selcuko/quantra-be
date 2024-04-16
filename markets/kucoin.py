@@ -541,14 +541,14 @@ class KucoinMarket(IMarket):
 
     def format_orderbook_snapshot(self, orderbook):
         return {
-            'bids': [ { 'price': float(bid[0]), 'size': float(bid[1]), 'count': 1 } for bid in orderbook['bids'] ],
-            'asks': [ { 'price': float(ask[0]), 'size': float(ask[1]), 'count': 1 } for ask in orderbook['asks'] ],
+            'bids': [ { 'price': Decimal(bid[0]), 'size': Decimal(bid[1]), 'count': 1 } for bid in orderbook['bids'] ],
+            'asks': [ { 'price': Decimal(ask[0]), 'size': Decimal(ask[1]), 'count': 1 } for ask in orderbook['asks'] ],
         }
 
     def format_orderbook_update(self, update, seq):
         return {
-            'bids': [ { 'price': float(bid[0]), 'size': float(bid[1]), 'count': 1 } for bid in update['bids'] if int(bid[2]) > seq],
-            'asks': [ { 'price': float(ask[0]), 'size': float(ask[1]), 'count': 1 } for ask in update['asks'] if int(ask[2]) > seq],
+            'bids': [ { 'price': Decimal(bid[0]), 'size': Decimal(bid[1]), 'count': 1 } for bid in update['bids'] if int(bid[2]) > seq],
+            'asks': [ { 'price': Decimal(ask[0]), 'size': Decimal(ask[1]), 'count': 1 } for ask in update['asks'] if int(ask[2]) > seq],
         }
 
     def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:typing.Callable):

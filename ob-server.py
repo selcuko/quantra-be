@@ -4,6 +4,7 @@ import threading
 import traceback
 from websockets.server import serve, WebSocketServerProtocol
 from logger import logger
+from models import OrderBook
 from orderbook import BookKeeper, BookMaster
 from quantapi.models import MarketSymbol
 from asgiref.sync import sync_to_async
@@ -60,12 +61,12 @@ def start_server():
             else:
                 print('Unknown channel')
 
-    def keeper_callback(master, data):
+    def keeper_callback(master, data:OrderBook):
         websocket = get_ws(master)
         if not websocket:
             logger.warning(f'No websocket for {master}')
             return
-        asyncio.run_coroutine_threadsafe(websocket.send(json.dumps(data)), loop)
+        asyncio.run_coroutine_threadsafe(websocket.send(json.dumps(data.json())), loop)
 
 
 

@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from decimal import Decimal
 import hashlib
 import hmac
 import json
@@ -317,14 +318,14 @@ class GateIOMarket(IMarket):
 
     def format_orderbook_snapshot(self, orderbook:dict) -> dict:
         return {
-            'bids': [{ 'price': float(price), 'size': float(size), 'count': 1 } for price, size in orderbook['bids']],
-            'asks': [{ 'price': float(price), 'size': float(size), 'count': 1 } for price, size in orderbook['asks']],
+            'bids': [{ 'price': Decimal(price), 'size': Decimal(size), 'count': 1 } for price, size in orderbook['bids']],
+            'asks': [{ 'price': Decimal(price), 'size': Decimal(size), 'count': 1 } for price, size in orderbook['asks']],
         }
 
     def format_orderbook_update(self, orderbook:dict) -> dict:
         return {
-            'bids': [{ 'price': float(price), 'size': float(size), 'count': 1 } for price, size in orderbook['bids']],
-            'asks': [{ 'price': float(price), 'size': float(size), 'count': 1 } for price, size in orderbook['asks']],
+            'bids': [{ 'price': Decimal(price), 'size': Decimal(size), 'count': 1 } for price, size in orderbook['bids']],
+            'asks': [{ 'price': Decimal(price), 'size': Decimal(size), 'count': 1 } for price, size in orderbook['asks']],
         }
 
     def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:typing.Callable, liveloop:'LiveLoop|None'=None, retries:int=30):

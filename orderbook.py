@@ -1,3 +1,5 @@
+from datetime import datetime
+from decimal import Decimal
 import json
 import threading
 import time
@@ -7,6 +9,8 @@ from logger import logger
 import traceback
 from typing import Callable, Optional
 import django
+
+from models import Bid, OrderBook
 django.setup()
 from django.utils import timezone
 from markets.interface import IMarket
@@ -17,7 +21,7 @@ class BookKeeper:
     def __init__(self, symbol:MarketSymbol, callback:Optional[Callable]=None, market:Optional[IMarket]=None):
         self.market = market or symbol.market.get_interface()
         self.symbol = symbol
-        self.orderbook = { 'bids': {}, 'asks': {} }
+        self.orderbook = OrderBook()
         self.callbacks = [callback]
         self.name = f'{symbol.name}@{self.market.name}'
         self.thread = None
@@ -36,51 +40,50 @@ class BookKeeper:
     def is_running(self):
         return self.thread and self.thread.is_alive()
 
+    def format(self, data:dict):
+        """convert size and price to decimal"""
+        ob = OrderBook()
+        ob.bids = { Decimal(bid['price']): Bid(bid['price'], bid['size']) for bid in data['bids'] }
+        ob.asks = { Decimal(ask['price']): Bid(ask['price'], ask['size']) for ask in data['asks'] }
+        return ob
+
     def on_snapshot(self, snapshot:dict):
+        ob = self.format(snapshot)
         bids = {}
         asks = {}
-        for bid in snapshot['bids']:
-            bids[bid['price']] = bid
-        for ask in snapshot['asks']:
-            asks[ask['price']] = ask
-        self.orderbook['bids'] = bids
-        self.orderbook['asks'] = asks
+        for bid in ob.bids.values():
+            bids[bid.price] = bid
+        for ask in ob.asks.values():
+            asks[ask.price] = ask
+        self.orderbook.bids = bids
+        self.orderbook.asks = asks
 
     def on_update(self, update:dict):
-        assert isinstance(self.orderbook, dict)
-        assert isinstance(self.orderbook['bids'], dict)
-        assert isinstance(self.orderbook['asks'], dict)
-        assert isinstance(update, dict)
-        assert 'bids' in update
-        assert 'asks' in update
-        bids_update = update['bids']
-        asks_update = update['asks']
-        for bid in bids_update:
-            bid['delta'] = bid['size'] - self.orderbook['bids'].get(bid['price'], {}).get('size', 0)
-        for ask in asks_update:
-            ask['delta'] = ask['size'] - self.orderbook['asks'].get(ask['price'], {}).get('size', 0)
-        for bid in bids_update:
-            if bid['size'] == 0:
-                self.orderbook['bids'].pop(bid['price'], None)
+        ob = self.format(update)
+        for bid in ob.bids.values():
+            bid.delta = bid.size - self.orderbook.get_bid(bid.price).size
+            if bid.size <= 0:
+                self.orderbook.bids.pop(bid.price, None)
             else:
-                self.orderbook['bids'][bid['price']] = bid
-        for ask in asks_update:
-            if ask['size'] == 0:
-                self.orderbook['asks'].pop(ask['price'], None)
+                self.orderbook.bids[bid.price] = bid
+        for ask in ob.asks.values():
+            ask.delta = ask.size - self.orderbook.get_ask(ask.price).size
+            if ask.size <= 0:
+                self.orderbook.asks.pop(ask.price, None)
             else:
-                self.orderbook['asks'][ask['price']] = ask
+                self.orderbook.asks[ask.price] = ask
         for callback in self.callbacks:
             if not callable(callback):
                 continue
             try:
-                callback(self, update)
+                callback(self, ob)
             except Exception as e:
                 logger.error(f'Error in callback: {e}')
                 logger.error(traceback.format_exc())
 
     def get_best(self, limit=5):
-        best_bids = sorted(self.orderbook['bids'].values(), key=lambda x: x['price'], reverse=True)[:limit]
-        best_asks = sorted(self.orderbook['asks'].values(), key=lambda x: x['price'])[:limit]
+        best_bids = sorted(self.orderbook.bids.values(), key=lambda x: x.price, reverse=True)[:limit]
+        best_asks = sorted(self.orderbook.asks.values(), key=lambda x: x.price)[:limit]
         return best_bids, best_asks
 
     def add_callback(self, callback:Callable):
@@ -91,7 +94,7 @@ class BookMaster:
     def __init__(self, symbol:MarketSymbol):
         self.keepers = {}
         self.symbol = symbol
-        self.orderbook = { 'bids': {}, 'asks': {} }
+        self.orderbook = OrderBook()
         self.updates = {}
         self.callbacks = []
     
@@ -108,24 +111,21 @@ class BookMaster:
     def add_callback(self, callback:Callable):
         self.callbacks.append(callback)
 
-    def keeper_callback(self, keeper, update):
+    def keeper_callback(self, keeper:BookKeeper, update:OrderBook):
         self.updates[keeper] = timezone.now()
-        bids_update = update['bids']
-        asks_update = update['asks']
-        for bid in bids_update:
-            if (old_bid := self.orderbook['bids'].get(bid['price'])):
-                old_bid['size'] += bid['delta']
+
+        for bid in update.bids.values():
+            if bid.price in self.orderbook.bids:
+                self.orderbook.bids[bid.price] = self.merge_bids(self.orderbook.bids[bid.price], bid)
             else:
-                self.orderbook['bids'][bid['price']] = bid
-            if self.orderbook['bids'][bid['price']]['size'] <= 0:
-                self.orderbook['bids'].pop(bid['price'], None)
-        for ask in asks_update:
-            if (old_ask := self.orderbook['asks'].get(ask['price'])):
-                old_ask['size'] += ask['delta']
+                self.orderbook.bids[bid.price] = bid
+        
+        for ask in update.asks.values():
+            if ask.price in self.orderbook.asks:
+                self.orderbook.asks[ask.price] = self.merge_bids(self.orderbook.asks[ask.price], ask)
             else:
-                self.orderbook['asks'][ask['price']] = ask
-            if self.orderbook['asks'][ask['price']]['size'] <= 0:
-                self.orderbook['asks'].pop(ask['price'], None)
+                self.orderbook.asks[ask.price] = ask
+
         for callback in self.callbacks:
             if not callable(callback):
                 continue
@@ -135,33 +135,29 @@ class BookMaster:
                 logger.error(f'Error in callback: {e}')
                 logger.error(traceback.format_exc())
 
-    def load_snapshot(self, snapshot:dict):
+    def load_snapshot(self, snapshot:OrderBook):
         # merge the snapshot with the current orderbook (self.orderbook)
-        ss_bids = snapshot['bids']
-        ss_asks = snapshot['asks']
+        ss_bids = snapshot.bids
+        ss_asks = snapshot.asks
         for bid in ss_bids.values():
-            if bid['price'] in self.orderbook['bids']:
-                self.orderbook['bids'][bid['price']] = self.merge_bids(self.orderbook['bids'][bid['price']], bid)
+            if bid.price in self.orderbook.bids:
+                self.orderbook.bids[bid.price] = self.merge_bids(self.orderbook.bids[bid.price], bid)
             else:
-                self.orderbook['bids'][bid['price']] = bid
+                self.orderbook.bids[bid.price] = bid
         for ask in ss_asks.values():
-            if ask['price'] in self.orderbook['asks']:
-                self.orderbook['asks'][ask['price']] = self.merge_bids(self.orderbook['asks'][ask['price']], ask)
+            if ask.price in self.orderbook.asks:
+                self.orderbook.asks[ask.price] = self.merge_bids(self.orderbook.asks[ask.price], ask)
             else:
-                self.orderbook['asks'][ask['price']] = ask
+                self.orderbook.asks[ask.price] = ask
 
-    def merge_bids(self, bid1, bid2):
-        if bid1['price'] != bid2['price']:
+    def merge_bids(self, bid1:Bid, bid2:Bid):
+        if bid1.price != bid2.price:
             raise ValueError('Cannot merge bids with different prices')
-        return {
-            'price': bid1['price'],
-            'size': bid1['size'] + bid2['size'],
-            'count': bid1['count'] + bid2['count']
-        }
+        return Bid(bid1.price, bid1.size + bid2.size)
 
     def get_best(self, limit=5):
-        best_bids = sorted(self.orderbook['bids'].values(), key=lambda x: x['price'], reverse=True)[:limit]
-        best_asks = sorted(self.orderbook['asks'].values(), key=lambda x: x['price'])[:limit]
+        best_bids = sorted(self.orderbook.bids.values(), key=lambda x: x.price, reverse=True)[:limit]
+        best_asks = sorted(self.orderbook.asks.values(), key=lambda x: x.price)[:limit]
         return best_bids, best_asks
 
     def health(self):
@@ -178,7 +174,7 @@ class BookMaster:
 
 
 if __name__ == '__main__':
-    markets = ['GATEIO']
+    markets = ['OKX', 'KUCOIN']
     sym = MarketSymbol.objects.filter(name='BTC-USDT').first()
     if not sym:
         raise ValueError('Symbol not found')
@@ -189,18 +185,19 @@ if __name__ == '__main__':
         keeper.start()
         master.add_keeper(keeper)
 
+    lp = time.time()
     last_print = time.time()
     while True:
-        lb = 5
-        if time.time() - last_print > 1:
-            best_bids, best_asks = master.get_best(500)
-            print(f'Best Bids:')
-            for bid in best_bids[:lb]:
-                print(f"\t{bid['price']}  {bid['size']}:{bid['count']}")
-            print(f'Best Asks:')
-            for ask in best_asks[:lb]:
-                print(f"\t{ask['price']}  {ask['size']}:{ask['count']}")
-            print(master.health())
-            last_print = time.time()
-
-        time.sleep(0.1)
+        if time.time() - lp < 1:
+            time.sleep(0.1)
+            continue
+        lp = time.time()
+        bids, asks = master.get_best(5)
+        print(f'{datetime.now()}')
+        print(f'\nBest Bids ({len(master.orderbook.bids.keys())}):')
+        for bid in bids:
+            print(bid)
+        print(f'\nBest Asks ({len(master.orderbook.asks.keys())}):')
+        for ask in asks:
+            print(ask)
+        print('-' * 20)

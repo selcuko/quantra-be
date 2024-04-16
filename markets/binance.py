@@ -456,8 +456,8 @@ class BinanceMarket(IMarket):
         try:
             orderbook = self.client.get_order_book(symbol=self._format_symbol(symbol.name), limit=limit)
             return {
-                'bids': [ { 'price': float(item[0]), 'size': float(item[1]), 'count': 1 } for item in orderbook['bids'] ],
-                'asks': [ { 'price': float(item[0]), 'size': float(item[1]), 'count': 1 } for item in orderbook['asks'] ],
+                'bids': [ { 'price': Decimal(item[0]), 'size': Decimal(item[1]), 'count': 1 } for item in orderbook['bids'] ],
+                'asks': [ { 'price': Decimal(item[0]), 'size': Decimal(item[1]), 'count': 1 } for item in orderbook['asks'] ],
             }
         except:
             logger.error(f'Error while fetching orderbook for {symbol} on {self.name}', exc_info=True)
@@ -476,8 +476,8 @@ class BinanceMarket(IMarket):
                 except TimeoutError:
                     continue
                 orderbook = {
-                    'bids': [ { 'price': float(item[0]), 'size': float(item[1]), 'count': 1 } for item in data['b'] ],
-                    'asks': [ { 'price': float(item[0]), 'size': float(item[1]), 'count': 1 } for item in data['a'] ],
+                    'bids': [ { 'price': Decimal(item[0]), 'size': Decimal(item[1]), 'count': 1 } for item in data['b'] ],
+                    'asks': [ { 'price': Decimal(item[0]), 'size': Decimal(item[1]), 'count': 1 } for item in data['a'] ],
                 }
                 callback(orderbook)
         except:

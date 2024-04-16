@@ -1,3 +1,4 @@
+from decimal import Decimal
 import hashlib
 import hmac
 import json
@@ -185,14 +186,14 @@ class MEXCMarket(IMarket):
 
     def format_orderbook_snapshot(self, orderbook):
         return {
-            'bids': [ { 'price': float(bid[0]), 'size': float(bid[1]), 'count': 1 } for bid in orderbook['bids'] ],
-            'asks': [ { 'price': float(ask[0]), 'size': float(ask[1]), 'count': 1 } for ask in orderbook['asks'] ],
+            'bids': [ { 'price': Decimal(bid[0]), 'size': Decimal(bid[1]), 'count': 1 } for bid in orderbook['bids'] ],
+            'asks': [ { 'price': Decimal(ask[0]), 'size': Decimal(ask[1]), 'count': 1 } for ask in orderbook['asks'] ],
         }
 
     def format_orderbook_update(self, update):
         return {
-            'bids': [ { 'price': float(bid['p']), 'size': float(bid['v']), 'count': 1 } for bid in update.get('bids', []) ],
-            'asks': [ { 'price': float(ask['p']), 'size': float(ask['v']), 'count': 1 } for ask in update.get('asks', []) ],
+            'bids': [ { 'price': Decimal(bid['p']), 'size': Decimal(bid['v']), 'count': 1 } for bid in update.get('bids', []) ],
+            'asks': [ { 'price': Decimal(ask['p']), 'size': Decimal(ask['v']), 'count': 1 } for ask in update.get('asks', []) ],
         }
 
     def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:Callable):

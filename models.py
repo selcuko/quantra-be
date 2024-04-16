@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 import os
 from typing import Literal
 
@@ -172,3 +173,42 @@ class SymbolMetrics:
         self.min_conv = (self.ath['price'] - self.price) / (self.ath['price'] - self.atl['price']) if self.ath['price'] != self.atl['price'] else None
 
         self.updated = datetime.fromisoformat(market_data['last_updated'])
+
+
+
+class Bid:
+    def __init__(self, price:float|int|Decimal, size:float|int|Decimal, delta:int|float|Decimal=0, count=1) -> None:
+        self.price = Decimal(price)
+        self.size = Decimal(size)
+        self.delta = delta
+        self.count = count
+        self.value = self.price * self.size
+    
+    def __str__(self):
+        return f'{self.price}\t${self.value:.2f} (^{self.delta:.2f})'
+    
+    def json(self):
+        return {
+            'price': str(self.price),
+            'size': str(self.size),
+            'delta': str(self.delta),
+            'count': self.count,
+            'value': str(self.value),
+        }
+
+class OrderBook:
+    def __init__(self):
+        self.bids:dict[Decimal, Bid] = {}
+        self.asks:dict[Decimal, Bid] = {}
+    
+    def get_bid(self, price:float|int|Decimal) -> Bid:
+        return self.bids.get(Decimal(price), Bid(price, 0))
+    
+    def get_ask(self, price:float|int|Decimal) -> Bid:
+        return self.asks.get(Decimal(price), Bid(price, 0))
+    
+    def json(self):
+        return {
+            'bids': [bid.json() for bid in self.bids.values()],
+            'asks': [ask.json() for ask in self.asks.values()],
+        }
