@@ -606,6 +606,6 @@ class OrderBookView(View):
         }
         asks = [ x for x in sorted(orderbook['asks'], key=lambda x: x['price'], reverse=True) if x['amount'] > 0]
         bids = [ x for x in sorted(orderbook['bids'], key=lambda x: x['price'], reverse=True) if x['amount'] > 0]
-        return render(request, 'orderbook-detail.html', {"orderbook_name": "OBNAME"})
+        return render(request, 'orderbook-detail.html', {"orderbook_name": "OBNAME", "asks": asks, "bids": bids})
 
 

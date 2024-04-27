@@ -90,6 +90,11 @@ class BookKeeper:
     def add_callback(self, callback:Callable):
         self.callbacks.append(callback)
 
+    def stop(self):
+        if self.thread and self.thread.is_alive():
+            self.market.stop_websocket_stream = True
+            self.thread.join()
+        return
 
 class BookMaster:
     def __init__(self, symbol:MarketSymbol):
@@ -176,6 +181,10 @@ class BookMaster:
             if not keeper.is_running():
                 died.append(keeper)
         return f'Out of date: {out_of_date}\nDied: {died}'
+
+    def stop(self):
+        for keeper in self.keepers.values():
+            keeper.stop()
 
 
 if __name__ == '__main__':

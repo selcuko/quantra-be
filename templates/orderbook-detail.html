@@ -13,39 +13,39 @@
 </div>
 
 
-<section class="p-4 flex grid grid-cols-2"> 
-<div class="relative">
-    <table class="w-full text-sm text-left text-gray-500" id="bids-table">
-        <thead class="text-xs text-gray-700 uppercase bg-gray-50">
-            <tr>
-                <th scope="col" class="p-2">
-                    Price
-                </th>
-                <th scope="col" class="p-2">
-                    Size
-                </th>
-            </tr>
-        </thead>
-        <tbody>
-        </tbody>
-    </table>
-</div>
-<div class="relative">
-    <table class="w-full text-sm text-left text-gray-500" id="asks-table">
-        <thead class="text-xs text-gray-700 uppercase bg-gray-50">
-            <tr>
-                <th scope="col" class="p-2">
-                    Price
-                </th>
-                <th scope="col" class="p-2">
-                    Size
-                </th>
-            </tr>
-        </thead>
-        <tbody>
-        </tbody>
-    </table>
-</div>
+<section class="p-4 flex grid grid-cols-2">
+    <div class="relative">
+        <table class="w-full text-sm text-left" id="bids-table">
+            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                <tr>
+                    <th scope="col" class="p-2">
+                        Price
+                    </th>
+                    <th scope="col" class="p-2">
+                        Size
+                    </th>
+                </tr>
+            </thead>
+            <tbody>
+            </tbody>
+        </table>
+    </div>
+    <div class="relative">
+        <table class="w-full text-sm text-left" id="asks-table">
+            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                <tr>
+                    <th scope="col" class="p-2">
+                        Price
+                    </th>
+                    <th scope="col" class="p-2">
+                        Size
+                    </th>
+                </tr>
+            </thead>
+            <tbody>
+            </tbody>
+        </table>
+    </div>
 </section>
 
 <script>
@@ -57,14 +57,14 @@
     ws_url = 'ws://localhost:8765'
     ws = new WebSocket(ws_url);
     // check if ws conn successful
-    ws.onopen = function() {
+    ws.onopen = function () {
         ws.send(JSON.stringify({
             'channel': 'subscribe',
             'symbol': symbol_name,
             'market': market_name
         }));
     };
-    ws.onmessage = function(event) {
+    ws.onmessage = function (event) {
         console.log(event.data);
         let data = JSON.parse(event.data);
         updateOrderbook(data);
@@ -78,29 +78,46 @@
     }
 
     function renderOrderbook() {
+        renderBars();
+    }
+
+    function renderBars() {
+        let max_bid = Math.max(...orderbook.bids.map(bid => bid.size));
+        let max_ask = Math.max(...orderbook.asks.map(ask => ask.size));
+        let max_size = Math.max(max_bid, max_ask);
         let bids_table = document.getElementById('bids-table');
+        let asks_table = document.getElementById('asks-table');
         bids_table.innerHTML = '';
-        orderbook.bids.forEach(bid =>{
+        asks_table.innerHTML = '';
+        orderbook.bids.forEach(bid => {
             let row = document.createElement('tr');
             let price_cell = document.createElement('td');
             price_cell.innerText = bid.price;
             let amount_cell = document.createElement('td');
             amount_cell.innerText = bid.size;
+            let bar = document.createElement('div');
+            bar.style.width = `${bid.size / max_size * 100}%`;
+            bar.style.backgroundColor = 'green';
+            bar.style.height = '100%';
+            bar.appendChild(amount_cell);
             row.appendChild(price_cell);
-            row.appendChild(amount_cell);
+            row.appendChild(bar);
             bids_table.appendChild(row);
         });
 
-        let asks_table = document.getElementById('asks-table');
-        asks_table.innerHTML = '';
-        orderbook.asks.forEach(ask =>{
+        orderbook.asks.forEach(ask => {
             let row = document.createElement('tr');
             let price_cell = document.createElement('td');
             price_cell.innerText = ask.price;
             let amount_cell = document.createElement('td');
             amount_cell.innerText = ask.size;
+            let bar = document.createElement('div');
+            bar.style.width = `${ask.size / max_size * 100}%`;
+            bar.style.backgroundColor = 'red';
+            bar.style.height = '100%';
+            bar.appendChild(amount_cell);
             row.appendChild(price_cell);
-            row.appendChild(amount_cell);
+            row.appendChild(bar);
             asks_table.appendChild(row);
         });
     }

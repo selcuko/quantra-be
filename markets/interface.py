@@ -20,6 +20,7 @@ class IMarket:
     assets: dict[str, float]
     commission: dict[str, float]
     market: 'DBMarket'
+    stop_websocket_stream:bool = False
 
     def __init__(self, config:dict, market:'DBMarket'):
         """Initialize a market instance with config if provided."""
