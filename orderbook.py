@@ -98,7 +98,7 @@ class BookKeeper:
 
 class BookMaster:
     def __init__(self, symbol:MarketSymbol):
-        self.keepers = {}
+        self.keepers:dict[IMarket, BookKeeper] = {}
         self.symbol = symbol
         self.orderbook = OrderBook()
         self.updates = {}
@@ -209,11 +209,13 @@ if __name__ == '__main__':
         keeper = list(master.keepers.values())[0]
         m_bids, m_asks = master.get_best(5)
         k_bids, k_asks = keeper.get_best(5)
+        o_bids, o_asks = master.orderbook.get_best(5)
         print(f'{datetime.now()}')
         print('\nMaster - Keeper Bids:')
-        for m_bid, k_bid in zip(m_bids, k_bids):
-            print(f'{m_bid.price}: {m_bid.size} - {k_bid.price}: {k_bid.size}')
+        for m_bid, k_bid, o_bid in zip(m_bids, k_bids, o_bids):
+            pass#print(f'{m_bid.price}: {m_bid.size} - {k_bid.price}: {k_bid.size} - {o_bid.price}: {o_bid.size}')
         print('\nMaster - Keeper Asks:')
-        for m_ask, k_ask in zip(m_asks, k_asks):
-            print(f'{m_ask.price}: {m_ask.size} - {k_ask.price}: {k_ask.size}')
+        for m_ask, k_ask, o_ask in zip(m_asks, k_asks, o_asks):
+            pass#print(f'{m_ask.price}: {m_ask.size} - {k_ask.price}: {k_ask.size} - {o_ask.price}: {o_ask.size}')
         print('\n')
+        print(master.orderbook.group(-2).format())

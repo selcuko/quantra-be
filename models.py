@@ -1,5 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
+import math
 import os
 from typing import Literal
 
@@ -211,9 +212,62 @@ class OrderBook:
         self.bids = dict(sorted(self.bids.items(), key=lambda x: x[0], reverse=True))
         self.asks = dict(sorted(self.asks.items(), key=lambda x: x[0]))
 
+    def group(self, precision:int):
+        def _round(number: Decimal, precision=precision):
+            if precision >= 0:
+                precision -= 1
+                return math.floor(number / 10**precision) * 10**precision
+            else:
+                return round(number, -precision)
+        new_ob = OrderBook()
+        old_ob = self.copy()
+        for bid in old_ob.bids.values():
+            price = _round(bid.price)
+            new_bid = new_ob.bids.get(price, Bid(price, 0))
+            new_bid.size += bid.size
+            new_bid.count += 1
+            new_bid.value += bid.value
+            new_ob.bids[price] = new_bid
+        for ask in old_ob.asks.values():
+            price = _round(ask.price)
+            new_ask = new_ob.asks.get(price, Bid(price, 0))
+            new_ask.size += ask.size
+            new_ask.count += 1
+            new_ask.value += ask.value
+            new_ob.asks[price] = new_ask
+        return new_ob
+
+    def copy(self):
+        new_ob = OrderBook()
+        new_ob.bids = self.bids.copy()
+        new_ob.asks = self.asks.copy()
+        return new_ob
+
+    def get_best(self, limit=5):
+        self.sort()
+        best_bids = sorted(self.bids.values(), key=lambda x: x.price, reverse=True)[:limit]
+        best_asks = sorted(self.asks.values(), key=lambda x: x.price)[:limit]
+        return best_bids, best_asks
+
     def json(self):
         self.sort()
         return {
             'bids': [bid.json() for bid in self.bids.values()],
             'asks': [ask.json() for ask in self.asks.values()],
         }
+
+    def format(self, limit=5):
+        '''Format the orderbook to a string'''
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        bids = '\n'.join([str(bid) for bid in list(self.bids.values())[:limit]])
+        asks = '\n'.join([str(ask) for ask in list(self.asks.values())[:limit]])
+        return f'''
+-------------------------
+{now}
+Best {limit} Bids:
+{bids}
+
+Best {limit} Asks:
+{asks}
+
+-------------------------'''

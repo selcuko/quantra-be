@@ -10,6 +10,9 @@
         </span>
         Orderbook
     </h1>
+    <div id="status-container">
+        
+    </div>
 </div>
 
 
@@ -55,6 +58,7 @@
     symbol_name = url_params.get('symbol');
     market_name = url_params.get('market');
     ws_url = 'ws://localhost:8765'
+    let status_container = document.getElementById('status-container');
     ws = new WebSocket(ws_url);
     // check if ws conn successful
     ws.onopen = function () {
@@ -63,6 +67,9 @@
             'symbol': symbol_name,
             'market': market_name
         }));
+    };
+    ws.onerror = function (error) {
+        status_container.innerText = 'Error connecting to websocket server.';
     };
     ws.onmessage = function (event) {
         console.log(event.data);
@@ -73,8 +80,13 @@
     let orderbook = {};
 
     function updateOrderbook(data) {
-        orderbook = data;
+    if (data.channel == 'update') {
+        orderbook = data['snapshot'];
         renderOrderbook();
+    } else if (data.channel == 'subscribe') {
+        let status = document.getElementById(`status-${data.market}`);
+        status.innerText = data.message;
+    }
     }
 
     function renderOrderbook() {
@@ -121,6 +133,15 @@
             asks_table.appendChild(row);
         });
     }
+
+    markets = market_name.split(',');
+    
+    markets.forEach(market => {
+        let status = document.createElement('div');
+        status.id = `status-${market}`;
+        status.innerText = `Connecting to ${market}`;
+        status_container.appendChild(status);
+    });
 
 </script>
 

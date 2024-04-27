@@ -44,37 +44,45 @@ def start_server():
             channel = message.get('channel')
             if channel == 'subscribe':
                 symbol_name = message.get('symbol')
-                market_name = message.get('market')
-                symbol = None
-                try:
-                    symbol = (await sync_to_async(MarketSymbol.objects.get)(name=symbol_name, market__exchange_name=market_name))
-                except MarketSymbol.DoesNotExist:
-                    logger.error(
-                        f'No such symbol {symbol_name} on {market_name}.')
+                market_name = message.get('market').split(',')
+                symbols = []
+                symbols = await sync_to_async(MarketSymbol.objects.filter)(name=symbol_name, market__exchange_name__in=market_name)
+                symbols = await sync_to_async(list)(symbols)
+                if len(symbols) == 0:
                     await websocket.send(json.dumps({
                         'channel': 'subscribe',
                         'symbol': symbol_name,
                         'result': 404,
-                        'message': f'No such symbol {symbol_name} on {market_name}.'
+                        'message': f'No such symbol {symbol_name} in {market_name}.'
                     }))
                     continue
-
-                keeper = await sync_to_async(BookKeeper)(symbol)
-                keeper.start()
+                keepers = []
+                for symbol in symbols:
+                    keeper = await sync_to_async(BookKeeper)(symbol)
+                    keeper.start()
+                    keepers.append(keeper)
+                    await websocket.send(json.dumps({
+                        'channel': 'subscribe',
+                        'symbol': symbol_name,
+                        'market': market_name,
+                        'result': 200,
+                        'message': f'Subscribed to {symbol_name}.'
+                    }))
                 master = subs.get(websocket)
                 if not master:
-                    master = await sync_to_async(BookMaster)(symbol)
+                    master = await sync_to_async(BookMaster)(symbols[0])
                     master.add_callback(keeper_callback)
                     subs[websocket] = master
                     pings[websocket] = datetime.now()
-                master.add_keeper(keeper)
+                for keeper in keepers:
+                    master.add_keeper(keeper)
                 await websocket.send(json.dumps({
                     'channel': 'subscribe',
                     'symbol': symbol_name,
                     'result': 200,
-                    'message': f'Subscribed to {symbol.name} orderbook.'
+                    'message': f'Subscribed to orderbooks of {symbols}.'
                 }))
-                print(f'Subscribed to {symbol.name}@{market_name} orderbook.')
+                print(f'Subscribed to {symbols[0].name}@{market_name} orderbook.')
 
             elif channel == 'unsubscribe':
                 symbol = message.get('symbol')
@@ -90,8 +98,13 @@ def start_server():
             return
         update = data.json()
         snapshot = master.orderbook.json()
+        payload = {
+            'channel': 'update',
+            'update': update,
+            'snapshot': snapshot
+        }
         asyncio.run_coroutine_threadsafe(
-            websocket.send(json.dumps(snapshot)), loop)
+            websocket.send(json.dumps(payload)), loop)
 
     asyncio.set_event_loop(loop)
     #kill_afk_task = asyncio.get_event_loop().create_task(kill_afk())

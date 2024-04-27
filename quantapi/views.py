@@ -591,6 +591,11 @@ class FavoritesView(View):
         return JsonResponse({'success': f'Symbol {symbol_cid} is now {"added to" if is_favorite else "removed from"} favorites.'})
 
 
+class OrderBookInitView(View):
+    def get(self, request):
+        return render(request, 'orderbook.html')
+
+
 class OrderBookView(View):
     @staticmethod
     def search(request):
@@ -600,6 +605,8 @@ class OrderBookView(View):
         return JsonResponse({'symbols': list(set(symbol_names))})
 
     def get(self, request):
+        if not request.GET.get('symbol'):
+            return render(request, 'orderbook.html')
         orderbook = {
             "asks": [{ 'price': x*2, 'amount': x} for x in range(100, 200) ],
             "bids": [{ 'price': x*2, 'amount': x} for x in range(1, 100) ],
