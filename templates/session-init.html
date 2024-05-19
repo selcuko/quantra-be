@@ -10,6 +10,15 @@
   </h1>
   <form method="POST" action="">
     {% csrf_token %}
+    <label for="strategy">Strategy</label>
+    <select id="strategy" name="strategy"
+      class="mb-6 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
+      required>
+      <option value="" disabled selected>Select a strategy</option>
+      {% for strategy in strategies %}
+      <option value="{{ strategy.name }}"> {{ strategy.name }} {{ strategy.version }} ({{ strategy.technical_name }}) </option>
+      {% endfor %}
+    </select>
     <label for="market">Market</label>
     <select id="market" name="market"
       class="mb-6 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
@@ -142,21 +151,6 @@
         <option value="volume">volume</option>
         <option value="volume_ma">volume MA</option>
       </select>
-    </div>
-    <div>
-      <label for="stoch_length">Stoch length</label>
-      <input type="number" value="3" name="stoch_length" id=""
-        class="mb-6 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500">
-    </div>
-    <div>
-      <label for="volume_ma">Volume MA (only used when source=volume MA)</label>
-      <input type="number" value="20" name="volume_ma" id=""
-        class="mb-6 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500">
-    </div>
-    <div>
-      <label for="shutdown">Shutdown time</label>
-      <input type="date" placeholder="Optional shutdown date" name="shutdown" id=""
-        class="mb-6 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500">
     </div>
     {% if form_error %}
     <p class="m-2 text-sm text-red-600 dark:text-red-500"><span class="font-medium">Oops! </span>{{ form_error }}</p>

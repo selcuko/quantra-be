@@ -20,7 +20,7 @@ from markets.errors import (InsufficientBalance, MarketDisabledTrading,
 from order import OrderManager
 from quantapi.analytics import MarketAnalytics, TotalSessionAnalytics
 from quantapi.models import (Backtest, GlobalSymbol, Market, MarketSymbol,
-                             Order, Session)
+                             Order, Session, Strategy)
 from strategy import get_strategy
 from django.contrib import messages
 
@@ -110,7 +110,8 @@ class SessionListView(View):
 class SessionInitView(View):
     def get(self, request):
         markets = Market.objects.filter(trading_enabled=True).order_by('exchange_name')
-        return render(request, 'session-init.html', {'markets': markets})
+        strategies = Strategy.objects.all().order_by('-version')
+        return render(request, 'session-init.html', {'markets': markets, 'strategies': strategies})
 
     def post(self, request, *args, **kwargs):
         form_data = request.POST
@@ -129,25 +130,20 @@ class SessionInitView(View):
                 raise InsufficientBalance(f'Capital limit {capital_limit} is more than market capital {imarket.capital}')
             if (asset_limit := float(form_data['assets'])) > imarket.assets.get(symbol.base, 0) and session_type in [Session.Type.LIVE_SANDBOX, Session.Type.LIVE_MAINNET]:
                 raise InsufficientBalance(f'Asset limit {asset_limit} is more than market assets {imarket.assets}')
-            planned_shutdown = form_data.get('planned_shutdown', None)
-            if planned_shutdown and not planned_shutdown > datetime.now(pytz.UTC):
-                raise ValueError('Planned shutdown must be in the future')
             candle_source = form_data.get('candle_source', 'trade')
+            strategy_name = form_data.get('strategy', 'v1')
         except Exception as e:
             return render(request, 'session-init.html', {'markets': Market.objects.filter(trading_enabled=True).order_by('exchange_name'), 'form_error': traceback.format_exc()})
         try:
             ll = LiveLoop(
                 symbol=symbol.name,
                 market=market,
-                strategy=get_strategy('v1')({
+                strategy=get_strategy(strategy_name)({
                     'source': form_data.get('source', 'close'),
-                    'stochrsi': {'length': int(form_data.get('stoch_length', 3))},
-                    'volume': {'ma': int(form_data.get('volume_ma', 20))},
                 }),
                 capital_limit=capital_limit,
                 asset_limit=asset_limit,
                 freq=form_data['freq'],
-                end=planned_shutdown,
                 session_type=session_type,
                 use_heikin_ashi=form_data.get('candle_type', 'standard') == 'heikin_ashi',
             )

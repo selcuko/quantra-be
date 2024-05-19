@@ -1,7 +1,7 @@
 import django
+django.setup()
 from django.core.cache import cache
 from order import OrderManager
-django.setup()
 import json
 import threading
 import time
@@ -12,12 +12,11 @@ import pandas as pd
 import pytz
 
 from logger import logger
-from markets.errors import InsufficientBalance, OrderPostProcessingError, RejectedOrder
+from markets.errors import OrderPostProcessingError
 from models import OHLCVDataset, interval_to_minutes
 from quantapi.models import ComplexOrder, Market, MarketSymbol, Order, Session, Signal
 from quantapi.models import Strategy as StrategyModel
 from strategy import Strategy, get_strategy
-from locks import order_lock
 
 class LiveLoop:
     def __init__(self, symbol:str, market:Market, strategy:Strategy, capital_limit:float,
@@ -416,7 +415,7 @@ if __name__ == '__main__':
     ll = LiveLoop(
         'BNB-USDT', 
         market,
-        get_strategy('v1')(
+        get_strategy('bb')(
             # place optional strategy parameters here
         ),
         capital_limit=10,

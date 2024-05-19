@@ -2,27 +2,18 @@ import pandas as pd
 import pandas_ta  # required to use pandas_ta indicators
 
 from models import OHLCVDataset
-from strategy.interface import Strategy
-
-
-def merge_dicts(d1, d2):
-    # deep merge two dicts into a new one
-    d = d1.copy()
-    for k, v in d2.items():
-        if k in d and isinstance(d[k], dict):
-            d[k] = merge_dicts(d[k], v)
-        else:
-            d[k] = v
-    return d
+from strategy.interface import Strategy, merge_dicts
 
 
 class StrategyV1(Strategy):
     def __init__(self, params={}):
         self.params = merge_dicts(self.default_params(), params)
-        self.name = 'StrategyV1.Lisa.PandasTA'
+        self.name = 'Lisa'
+        self.technical_name = 'Trend Following Strategy'
+        self.version = '1.0'
         self.ds = OHLCVDataset(pd.DataFrame())
         self.freq = ''
-    
+
     def __call__(self, ds:OHLCVDataset):
         return self.calculate(ds)
 
@@ -48,17 +39,6 @@ class StrategyV1(Strategy):
             },
             'source': 'close',
         }
-
-    def get_source(self, src = 'close'):
-        if src == 'volume_ma':
-            self.ds['volume_ma'] = self.ds['volume'].rolling(window=self.params['volume']['ma']).mean()
-        elif src == 'ohlc4':
-            self.ds['ohlc4'] = (self.ds['high'] + self.ds['low'] + self.ds['open'] + self.ds['close']) / 4
-        elif src == 'hlc3':
-            self.ds['hlc3'] = (self.ds['high'] + self.ds['low'] + self.ds['close']) / 3
-        elif src == 'hl2':
-            self.ds['hl2'] = (self.ds['high'] + self.ds['low']) / 2
-        return src
 
     def calculate(self, ds:OHLCVDataset):
         self.ds = ds
@@ -105,16 +85,9 @@ class StrategyV1(Strategy):
 
         self.ds['t3_buy']  = (self.ds['t3'] > self.ds['t3'].shift()) & (self.ds['t3'] >= 0)
         self.ds['t3_sell'] = (self.ds['t3'] < self.ds['t3'].shift()) & (self.ds['t3'] >= 0)
-    
+
     def signals(self):
         if self.ds.empty:
             return
         self.ds['buy']  = self.ds['macd_buy'] & self.ds['stochrsi_buy'] & self.ds['t3_buy']
         self.ds['sell'] = self.ds['macd_sell'] & self.ds['stochrsi_sell'] & self.ds['t3_sell']
-    
-    def json(self):
-        return {
-            'name': self.name,
-            'params': self.params
-        }
-

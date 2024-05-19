@@ -308,7 +308,10 @@ class Session(models.Model):
 
 
 class Strategy(models.Model):
-    name = models.CharField(max_length=30, unique=True)
+    name = models.CharField(max_length=30)
+    technical_name = models.CharField(max_length=30, null=True, blank=True)
+    code = models.CharField(max_length=5, default='null')
+    version = models.CharField(max_length=30, default='1.0')
     description = models.CharField(max_length=256, null=True, blank=True)
     sessions: models.QuerySet[Session]
 
@@ -316,7 +319,7 @@ class Strategy(models.Model):
         verbose_name_plural = 'Strategies'
 
     def __str__(self):
-        return self.name
+        return f'{self.name} {self.version}'
 
 class Signal(models.Model):
     class Side(models.TextChoices):
