@@ -250,10 +250,11 @@ class OrderBook:
         return best_bids, best_asks
 
     def json(self):
-        self.sort()
+        ob = self.copy()
+        ob.sort()
         return {
-            'bids': [bid.json() for bid in self.bids.values()],
-            'asks': [ask.json() for ask in self.asks.values()],
+            'bids': [bid.json() for bid in ob.bids.values()],
+            'asks': [ask.json() for ask in ob.asks.values()],
         }
 
     def format(self, limit=5):

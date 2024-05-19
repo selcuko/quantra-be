@@ -3,12 +3,10 @@ from datetime import datetime, timedelta
 import json
 import threading
 import time
-import traceback
 from websockets.server import serve, WebSocketServerProtocol
 from logger import logger
 from models import OrderBook
 from orderbook import BookKeeper, BookMaster
-from quantapi.models import MarketSymbol
 from asgiref.sync import sync_to_async
 
 
@@ -16,9 +14,10 @@ from asgiref.sync import sync_to_async
 # and has a callback function that each time gets called, sends the subscribed
 # clients the argument it took (a dictionary)
 
-def start_server():
+def start_orderbook_server():
     subs: dict[WebSocketServerProtocol, BookMaster] = {}
     pings: dict[WebSocketServerProtocol, datetime] = {}
+    print('Starting orderbook server...')
 
     def get_ws(master):
         for ws, m in subs.items():
@@ -39,6 +38,8 @@ def start_server():
             time.sleep(1)
 
     async def server(websocket: WebSocketServerProtocol, path):
+        from quantapi.models import MarketSymbol
+
         async for message in websocket:
             message = json.loads(message)
             channel = message.get('channel')
@@ -47,14 +48,19 @@ def start_server():
                 market_name = message.get('market').split(',')
                 symbols = []
                 symbols = await sync_to_async(MarketSymbol.objects.filter)(name=symbol_name, market__exchange_name__in=market_name)
+                symbols = await sync_to_async(symbols.prefetch_related)('market')
                 symbols = await sync_to_async(list)(symbols)
+                if len(symbols) != len(market_name):
+                    not_found = [m for m in market_name if m not in [s.market.exchange_name for s in symbols]]
+                    for nf in not_found:
+                        await websocket.send(json.dumps({
+                            'channel': 'subscribe',
+                            'symbol': symbol_name,
+                            'market': nf,
+                            'result': 404,
+                            'message': f'No such symbol {symbol_name} in {nf}.'
+                        }))
                 if len(symbols) == 0:
-                    await websocket.send(json.dumps({
-                        'channel': 'subscribe',
-                        'symbol': symbol_name,
-                        'result': 404,
-                        'message': f'No such symbol {symbol_name} in {market_name}.'
-                    }))
                     continue
                 keepers = []
                 for symbol in symbols:
@@ -64,7 +70,7 @@ def start_server():
                     await websocket.send(json.dumps({
                         'channel': 'subscribe',
                         'symbol': symbol_name,
-                        'market': market_name,
+                        'market': symbol.market.exchange_name,
                         'result': 200,
                         'message': f'Subscribed to {symbol_name}.'
                     }))
@@ -77,7 +83,7 @@ def start_server():
                 for keeper in keepers:
                     master.add_keeper(keeper)
                 await websocket.send(json.dumps({
-                    'channel': 'subscribe',
+                    'channel': 'subscribed',
                     'symbol': symbol_name,
                     'result': 200,
                     'message': f'Subscribed to orderbooks of {symbols}.'
@@ -105,7 +111,7 @@ def start_server():
         }
         asyncio.run_coroutine_threadsafe(
             websocket.send(json.dumps(payload)), loop)
-
+    loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     #kill_afk_task = asyncio.get_event_loop().create_task(kill_afk())
     #server_task = asyncio.get_event_loop().create_task(start_server())
@@ -114,12 +120,11 @@ def start_server():
     asyncio.get_event_loop().run_until_complete(start_server)
     asyncio.get_event_loop().run_forever()
 
+if __name__ == '__main__':
 
-loop = asyncio.new_event_loop()
+    # Create a new thread to run the websocket server
+    websocket_thread = threading.Thread(target=start_orderbook_server)
+    websocket_thread.start()
 
-# Create a new thread to run the websocket server
-websocket_thread = threading.Thread(target=start_server)
-websocket_thread.start()
-
-# Ensure the main thread doesn't exit (e.g., if this code is in a script)
-websocket_thread.join()
+    # Ensure the main thread doesn't exit (e.g., if this code is in a script)
+    websocket_thread.join()

@@ -11,15 +11,17 @@ from django.core.cache import cache
 from logger import logger
 from models import Bid, OrderBook
 
-django.setup()
 from django.utils import timezone
+import typing
+if typing.TYPE_CHECKING:
+    from markets.interface import IMarket
+    from quantapi.models import Market, MarketSymbol
 
-from markets.interface import IMarket
-from quantapi.models import Market, MarketSymbol
+
 
 
 class BookKeeper:
-    def __init__(self, symbol:MarketSymbol, callback:Optional[Callable]=None, market:Optional[IMarket]=None):
+    def __init__(self, symbol:'MarketSymbol', callback:Optional[Callable]=None, market:Optional['IMarket']=None):
         self.market = market or symbol.market.get_interface()
         self.symbol = symbol
         self.orderbook = OrderBook()
@@ -97,7 +99,7 @@ class BookKeeper:
         return
 
 class BookMaster:
-    def __init__(self, symbol:MarketSymbol):
+    def __init__(self, symbol:'MarketSymbol'):
         self.keepers:dict[IMarket, BookKeeper] = {}
         self.symbol = symbol
         self.orderbook = OrderBook()
@@ -188,6 +190,8 @@ class BookMaster:
 
 
 if __name__ == '__main__':
+    from markets.interface import IMarket
+    from quantapi.models import Market, MarketSymbol
     markets = ['BYBIT', 'OKX']
     sym = MarketSymbol.objects.filter(name='BTC-USDT').first()
     if not sym:

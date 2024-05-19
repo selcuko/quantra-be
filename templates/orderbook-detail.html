@@ -57,7 +57,8 @@
     url_params = new URLSearchParams(window.location.search);
     symbol_name = url_params.get('symbol');
     market_name = url_params.get('market');
-    ws_url = 'ws://localhost:8765'
+    current_domain = window.location.hostname;
+    ws_url = `ws://${current_domain}:8765`;
     let status_container = document.getElementById('status-container');
     ws = new WebSocket(ws_url);
     // check if ws conn successful
@@ -71,8 +72,14 @@
     ws.onerror = function (error) {
         status_container.innerText = 'Error connecting to websocket server.';
     };
+    ws.onclose = function (event) {
+        if (event.wasClean) {
+            status_container.innerText = 'Connection closed by remote.';
+        } else {
+            status_container.innerText = 'Connection died.';
+        }
+    };
     ws.onmessage = function (event) {
-        console.log(event.data);
         let data = JSON.parse(event.data);
         updateOrderbook(data);
     };
