@@ -208,7 +208,7 @@ class MEXCMarket(IMarket):
         }
         ws.send(json.dumps(sub))
         ack = json.loads(ws.recv())
-        if not ack.get('msg') == topic:
+        if not ack.get('msg') == topic and not ack.get('c') == topic:
             raise Exception(f'Error while subscribing to {topic}: {ack}')
         last_ping = datetime.now()
         while not self.stop_websocket_stream:
@@ -219,6 +219,8 @@ class MEXCMarket(IMarket):
                 response = json.loads(ws.recv(timeout=10))
             except TimeoutError:
                 continue
+            except ConnectionClosed:
+                return self.init_orderbook_websocket(symbol, callback)
             if response.get('msg') == 'PONG':
                 continue
             orderbook = self.format_orderbook_update(response['d'])

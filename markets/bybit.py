@@ -218,6 +218,7 @@ class BybitMarket(IMarket):
             msg = f'Failed to connect to websocket: {e}'
             logger.error(msg, extra={'market': self.name, 'type': 'MARKET'})
             raise MarketAPIError(msg) from e
+        ws.close()
 
     def get_match_engine_socket(self, symbol:str) -> ClientConnection:
         ws_uri = 'wss://stream.bybit.com/v5/public/spot'
@@ -260,6 +261,7 @@ class BybitMarket(IMarket):
                 continue
             trade = self.format_match(data['data'][0])
             engine.on_match(trade)
+        ws.close()
 
     def place_market_order(self, symbol:'MarketSymbol|str', side:typing.Literal['buy', 'sell'], funds:typing.Optional[str]=None, quantity:typing.Optional[str]=None, validate=True):
         symbol_object = self.get_symbol_from_name(symbol) if isinstance(symbol, str) else symbol
@@ -381,6 +383,8 @@ class BybitMarket(IMarket):
             if data['data']['seq']:
                 self.orderbook_seq = data['data']['seq']
             callback(update)
+        ws.close()
+        print('Stopping websocket stream')
 
     def get_equity(self, save=True):
         prices = self.get_current_prices(save=False)

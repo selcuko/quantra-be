@@ -58,5 +58,4 @@ class QuantapiConfig(AppConfig):
         if 'runserver' in sys.argv or 'quant.wsgi' in sys.argv:
             threading.Thread(target=continue_sessions, daemon=True).start()
             threading.Thread(target=symbol_metrics_update_loop, daemon=True).start()
-            threading.Thread(target=start_orderbook_server).start()
 

@@ -1,12 +1,11 @@
+from re import A
 import threading
 import time
 import traceback
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Callable, Optional
 
-import django
-from django.core.cache import cache
 
 from logger import logger
 from models import Bid, OrderBook
@@ -19,38 +18,39 @@ if typing.TYPE_CHECKING:
 
 
 
-
 class BookKeeper:
     def __init__(self, symbol:'MarketSymbol', callback:Optional[Callable]=None, market:Optional['IMarket']=None):
         self.market = market or symbol.market.get_interface()
         self.symbol = symbol
         self.orderbook = OrderBook()
-        self.callbacks = [callback]
-        self.name = f'{symbol.name}@{self.market.name}'
+        self.callbacks = [callback] if callback else []
+        self.name = f'BookKeeper of {symbol.name}@{self.market.name}'
         self.thread = None
 
     def __str__(self):
-        return f'BookKeeper ({self.name})'
+        return self.name
 
     def start(self):
+        """Start the BookKeeper in the background, in another thread."""
         if self.is_running():
-            raise RuntimeError('BookKeeper is already running.')
+            raise RuntimeError('This BookKeeper is already running.')
         snapshot = self.market.get_full_orderbook(self.symbol)
         self.on_snapshot(snapshot)
-        self.thread = threading.Thread(target=self.market.init_orderbook_websocket, args=(self.symbol, self.on_update))
+        self.thread = threading.Thread(target=self.market.init_orderbook_websocket, args=(self.symbol, self.on_update), daemon=True)
         self.thread.start()
 
     def is_running(self):
         return self.thread and self.thread.is_alive()
 
     def format(self, data:dict):
-        """convert size and price to decimal"""
+        """Converts size and price to decimal"""
         ob = OrderBook()
         ob.bids = { Decimal(bid['price']): Bid(bid['price'], bid['size']) for bid in data['bids'] }
         ob.asks = { Decimal(ask['price']): Bid(ask['price'], ask['size']) for ask in data['asks'] }
         return ob
 
     def on_snapshot(self, snapshot:dict):
+        """Called when a snapshot is received. Populates the orderbook with the snapshot."""
         ob = self.format(snapshot)
         bids = {}
         asks = {}
@@ -62,14 +62,15 @@ class BookKeeper:
         self.orderbook.asks = asks
 
     def on_update(self, update:dict):
-        ob = self.format(update)
-        for bid in ob.bids.values():
+        """Called when an update is received. Updates the orderbook with the update."""
+        ob_update = self.format(update)
+        for bid in ob_update.bids.values():
             bid.delta = bid.size - self.orderbook.get_bid(bid.price).size
             if bid.size <= 0:
                 self.orderbook.bids.pop(bid.price, None)
             else:
                 self.orderbook.bids[bid.price] = bid
-        for ask in ob.asks.values():
+        for ask in ob_update.asks.values():
             ask.delta = ask.size - self.orderbook.get_ask(ask.price).size
             if ask.size <= 0:
                 self.orderbook.asks.pop(ask.price, None)
@@ -79,24 +80,20 @@ class BookKeeper:
             if not callable(callback):
                 continue
             try:
-                callback(self, ob)
+                callback(self, ob_update)
             except Exception as e:
                 logger.error(f'Error in callback: {e}')
                 logger.error(traceback.format_exc())
 
-    def get_best(self, limit=5):
-        best_bids = sorted(self.orderbook.bids.values(), key=lambda x: x.price, reverse=True)[:limit]
-        best_asks = sorted(self.orderbook.asks.values(), key=lambda x: x.price)[:limit]
-        return best_bids, best_asks
-
     def add_callback(self, callback:Callable):
+        """Add a callback to be called when an update is received."""
         self.callbacks.append(callback)
 
     def stop(self):
         if self.thread and self.thread.is_alive():
             self.market.stop_websocket_stream = True
             self.thread.join()
-        return
+
 
 class BookMaster:
     def __init__(self, symbol:'MarketSymbol'):
@@ -105,13 +102,14 @@ class BookMaster:
         self.orderbook = OrderBook()
         self.updates = {}
         self.callbacks = []
+        self.name = f'BookMaster of {symbol.name}'
     
     def __str__(self):
-        return f'BookMaster ({self.symbol.name})'
+        return self.name
 
     def add_keeper(self, keeper:BookKeeper):
         if keeper.symbol.name != self.symbol.name:
-            raise ValueError(f'Cannot add a keeper with a different symbol. Current symbol: {self.symbol}, keeper symbol: {keeper.symbol}')
+            raise ValueError(f'Cannot add a BookKeeper with a different symbol. Current symbol is {self.symbol.name}, what you were trying to add is: {keeper.symbol.name}')
         self.keepers[keeper.market] = keeper
         keeper.add_callback(self.keeper_callback)
         self.load_snapshot(keeper.orderbook)
@@ -120,13 +118,14 @@ class BookMaster:
         self.callbacks.append(callback)
 
     def keeper_callback(self, keeper:BookKeeper, update:OrderBook):
+        """Called when any BookKeeper receives an update. Updates the BookMaster's orderbook with the update."""
         self.updates[keeper] = timezone.now()
 
         for bid in update.bids.values():
             px = bid.price
             total_sz = sum([ k.orderbook.bids[px].size for k in self.keepers.values() if px in k.orderbook.bids ])
             if total_sz > 0:
-                self.orderbook.bids[px] = bid
+                self.orderbook.bids[px] = Bid(px, total_sz)
             else:
                 self.orderbook.bids.pop(px, None)
 
@@ -134,7 +133,7 @@ class BookMaster:
             px = ask.price
             total_sz = sum([ k.orderbook.asks[px].size for k in self.keepers.values() if px in k.orderbook.asks ])
             if total_sz > 0:
-                self.orderbook.asks[px] = ask
+                self.orderbook.asks[px] = Bid(px, total_sz)
             else:
                 self.orderbook.asks.pop(px, None)
 
@@ -148,13 +147,15 @@ class BookMaster:
                 logger.error(traceback.format_exc())
 
     def load_snapshot(self, snapshot:OrderBook):
-        # merge the snapshot with the current orderbook (self.orderbook)
+        # Merge the snapshot with the current orderbook (self.orderbook)
         ss_bids = snapshot.bids
         ss_asks = snapshot.asks
         for bid in ss_bids.values():
             if bid.price in self.orderbook.bids:
+                print('IN')
                 self.orderbook.bids[bid.price] = self.merge_bids(self.orderbook.bids[bid.price], bid)
             else:
+                print('OUT')
                 self.orderbook.bids[bid.price] = bid
         for ask in ss_asks.values():
             if ask.price in self.orderbook.asks:
@@ -190,36 +191,33 @@ class BookMaster:
 
 
 if __name__ == '__main__':
+    # note to self: for program not exiting on it's own problem, ensure that the websocket thread is terminated OK (it's not daemon)
+    import django
+    django.setup()
     from markets.interface import IMarket
     from quantapi.models import Market, MarketSymbol
-    markets = ['BYBIT', 'OKX']
-    sym = MarketSymbol.objects.filter(name='BTC-USDT').first()
-    if not sym:
-        raise ValueError('Symbol not found')
-    master = BookMaster(sym)
-    for m in markets:
-        market = Market.objects.get(exchange_name=m)
-        keeper = BookKeeper(sym, market=market.get_interface())
-        keeper.start()
-        master.add_keeper(keeper)
+    
+    bybit = Market.objects.get(exchange_name='BYBIT')
+    btc_bybit = MarketSymbol.objects.get(name='BTC-USDT', market=bybit)
 
-    lp = time.time()
-    last_print = time.time()
+    okx = Market.objects.get(exchange_name='MEXC')
+    btc_okx = MarketSymbol.objects.get(name='BTC-USDT', market=okx)
+
+    bybit_keeper = BookKeeper(btc_bybit)
+    okx_keeper = BookKeeper(btc_okx)
+
+    master = BookMaster(btc_bybit)
+    master.add_keeper(bybit_keeper)
+    master.add_keeper(okx_keeper)
+
+    bybit_keeper.start()
+    okx_keeper.start()
+    
     while True:
-        if time.time() - lp < 1:
-            time.sleep(0.1)
-            continue
-        lp = time.time()
-        keeper = list(master.keepers.values())[0]
-        m_bids, m_asks = master.get_best(5)
-        k_bids, k_asks = keeper.get_best(5)
-        o_bids, o_asks = master.orderbook.get_best(5)
-        print(f'{datetime.now()}')
-        print('\nMaster - Keeper Bids:')
-        for m_bid, k_bid, o_bid in zip(m_bids, k_bids, o_bids):
-            pass#print(f'{m_bid.price}: {m_bid.size} - {k_bid.price}: {k_bid.size} - {o_bid.price}: {o_bid.size}')
-        print('\nMaster - Keeper Asks:')
-        for m_ask, k_ask, o_ask in zip(m_asks, k_asks, o_asks):
-            pass#print(f'{m_ask.price}: {m_ask.size} - {k_ask.price}: {k_ask.size} - {o_ask.price}: {o_ask.size}')
-        print('\n')
-        print(master.orderbook.group(-2).format())
+        try:
+            print(master.orderbook.format())
+            print(master.orderbook.overview())
+            print(master.health())
+            time.sleep(1)
+        except KeyboardInterrupt:
+            break

@@ -260,6 +260,7 @@ class OrderBook:
     def format(self, limit=5):
         '''Format the orderbook to a string'''
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        self.sort()
         bids = '\n'.join([str(bid) for bid in list(self.bids.values())[:limit]])
         asks = '\n'.join([str(ask) for ask in list(self.asks.values())[:limit]])
         return f'''
@@ -272,3 +273,12 @@ Best {limit} Asks:
 {asks}
 
 -------------------------'''
+
+    def overview(self):
+        '''Return a brief overview of the orderbook'''
+        return {
+            'bids': sum([bid.value for bid in self.bids.values()]),
+            'asks': sum([ask.value for ask in self.asks.values()]),
+            'bid_count': len(self.bids),
+            'ask_count': len(self.asks),
+        }
