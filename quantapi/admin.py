@@ -26,13 +26,13 @@ class MarketSymbolAdmin(admin.ModelAdmin):
 
 class SessionAdmin(admin.ModelAdmin):
     list_display = ('__str__', 'freq', 'status', 'started', 'ended', 'session_type', 'last_heartbeat', 'candle_source', 'use_heikin_ashi')
-    #search_fields = ('symbol__name', 'symbol__market__exchange_name')
-    #list_filter = ('freq', 'status', 'session_type', 'use_heikin_ashi', 'candle_source')
-    #readonly_fields = ('started', 'ended', 'last_heartbeat')
-    #raw_id_fields = ('symbol', 'strategy')
+    search_fields = ('symbol__name', 'symbol__market__exchange_name')
+    list_filter = ('freq', 'status', 'session_type', 'use_heikin_ashi', 'candle_source')
+    readonly_fields = ('started', 'ended', 'last_heartbeat')
+    raw_id_fields = ('symbol', 'strategy')
 
     def get_queryset(self, request: HttpRequest) -> QuerySet[Any]:
-        return super().get_queryset(request).prefetch_related('symbol', 'strategy', 'symbol__market')
+        return Session.objects.prefetch_related('symbol', 'strategy', 'symbol__market')
 
 
 class SignalAdmin(admin.ModelAdmin):

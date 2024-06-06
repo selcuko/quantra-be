@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import traceback
 
 from logtail import LogtailHandler
 
@@ -77,17 +78,27 @@ class NotificationHandler(logging.Handler):
         from quantapi.models import Notification
         if record.levelno <= logging.WARNING:
             return
-        message = record.getMessage()
+        # get the exception passed in with exc_info=True
+        exc = record.__dict__.get('exc_info')
+        if exc and len(exc) > 0 and exc[0]:
+            exc_type, exc_value, exc_traceback = exc
+            message = f"{exc_type.__name__}: {exc_value}\n{''.join(traceback.format_tb(exc_traceback))}"
+        else:
+            message = record.getMessage()
         if 'loop' in record.__dict__:
             loop = record.__dict__.get('loop')
             message = f"[{loop!s}] {message}"
         n_type = Notification.Type.LOG
         if 'n_type' in record.__dict__:
             n_type = record.__dict__.get('n_type')
+        subject = record.__dict__.get('subject')
+        details = record.__dict__.get('details')
         n = Notification.objects.create(
             message=message,
             severity=record.levelname,
-            notification_type=n_type
+            notification_type=n_type,
+            subject=subject,
+            details=details
         )
         n.send()
 

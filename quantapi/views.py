@@ -5,8 +5,8 @@ import traceback
 
 import pytz
 from django.core.paginator import Paginator
-from django.db.models import Q
-from django.http import HttpResponse, JsonResponse
+from django.db.models import Q, Count
+from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.views import View
 from django.core.cache import cache
@@ -19,8 +19,8 @@ from markets.errors import (InsufficientBalance, MarketDisabledTrading,
                             SymbolNotInMarket)
 from order import OrderManager
 from quantapi.analytics import MarketAnalytics, TotalSessionAnalytics
-from quantapi.models import (Backtest, GlobalSymbol, Market, MarketSymbol,
-                             Order, Session, Strategy)
+from quantapi.models import (Backtest, GlobalSymbol, Market, MarketSymbol, Notification,
+                             Order, Session)
 from strategy import get_strategy
 from django.contrib import messages
 
@@ -33,11 +33,15 @@ class HomeView(View):
 
         ma = MarketAnalytics()
         sa = TotalSessionAnalytics(sessions)
-
+        notifications = Notification.objects.annotate(acknowledged=Count('acknowledged_by'))
+        critical = notifications.filter(severity=Notification.Severity.CRITICIAL, acknowledged=0)
+        warning = notifications.filter(severity=Notification.Severity.ERROR, acknowledged=0)
         return render(request, 'index.html', {
             'sessions': sessions, 
             'orders': recent_orders,
             'analytics': { 'market': ma , 'session': sa },
+            'critical_messages': critical,
+            'important_messages': warning,
         })
 
 
@@ -612,3 +616,28 @@ class OrderBookView(View):
         return render(request, 'orderbook-detail.html', {"orderbook_name": "OBNAME", "asks": asks, "bids": bids})
 
 
+class NotificationsView(View):
+    def get(self, request):
+        notifications = Notification.objects.filter(acknowledged_by__isnull=True).order_by('severity', '-timestamp')
+        total_count = Notification.objects.all().count()
+        criticals = notifications.filter(severity=Notification.Severity.CRITICIAL)
+        important = notifications.filter(severity=Notification.Severity.ERROR)
+        limited = notifications[:50]
+        return render (request, 'notification-list.html', {
+            'notifications': limited, 
+            'total_count': total_count,
+            'critical': criticals,
+            'important': important,
+        })
+
+
+class NotificationDetailView(View):
+    def get(self, request, pk):
+        notification = Notification.objects.get(pk=pk)
+        return render(request, 'notification-detail.html', {'notification': notification})
+
+    @staticmethod
+    def acknowledge(request, pk):
+        notification = Notification.objects.get(pk=pk)
+        notification.acknowledged_by.add(request.user)
+        return redirect('notification-list')

@@ -2,7 +2,7 @@ from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path
 from django.conf.urls.static import static
-from quantapi.views import BacktestInitView, BacktestResultView, CoinScanView, FavoritesView, HomeView, MarketDetailView, MarketListView, OrderBookView, OrderManagementView, PriceView, RunningThreadsView, \
+from quantapi.views import BacktestInitView, BacktestResultView, CoinScanView, FavoritesView, HomeView, MarketDetailView, MarketListView, NotificationDetailView, NotificationsView, OrderBookView, OrderManagementView, PriceView, RunningThreadsView, \
     SessionInitView, SessionListView, SessionUpdateView,SessionDetailView, SymbolView, WatchdogView
 
 urlpatterns = [
@@ -31,6 +31,9 @@ urlpatterns = [
     path('favorites/', FavoritesView.as_view(), name='symbol-favorites'),
     path('favorites/modify/', FavoritesView.favorite, name='symbol-favorite-modify'),
     path('orderbook/', OrderBookView.as_view(), name='orderbook'),
+    path('notifications/', NotificationsView.as_view(), name='notification-list'),
+    path('notifications/<int:pk>/', NotificationDetailView.as_view(), name='notification-detail'),
+    path('notifications/<int:pk>/acknowledge/', NotificationDetailView.acknowledge, name='notification-acknowledge'),
 ]
 urlpatterns += [path('silk/', include('silk.urls', namespace='silk'))]
 if settings.DEBUG:

@@ -551,10 +551,11 @@ class Notification(models.Model):
     details = models.TextField(null=True, blank=True)
     timestamp = models.DateTimeField(auto_now_add=True)
     sent_to = models.ManyToManyField(Endpoint, related_name='notifications', blank=True)
+    acknowledged_by = models.ManyToManyField(User, related_name='acknowledged_notifications', blank=True)
 
     def __str__(self) -> str:
         return f'{self.severity} {self.notification_type} {self.state} {self.subject or ""}'
-    
+
     def send(self):
         from telegram import send_message
         if not self.pk:
@@ -579,6 +580,11 @@ class Notification(models.Model):
         else:
             self.state = Notification.State.SENT
         self.save()
+    
+    def save(self, *args, **kwargs):
+        if not self.subject:
+            self.subject = f'{self.severity} {self.notification_type} Message (No Subject)'
+        super().save(*args, **kwargs)
 
 
 class Backtest(models.Model):
