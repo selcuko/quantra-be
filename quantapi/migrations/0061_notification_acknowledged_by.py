@@ -20,7 +20,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
-        ('quantapi', '0059_alter_market_exchange_name'),
+        ('quantapi', '0060_strategy_technical_name_strategy_version_and_more'),
     ]
 
     operations = [
