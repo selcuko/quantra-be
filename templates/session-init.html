@@ -25,8 +25,7 @@
       required>
       <option value="" disabled selected>Select a market</option>
       {% for market in markets %}
-      <option value="{{ market.id }}">[{{market.exchange_name}}] {{ market.friendly_name }} 
-        {% if market.mainnet_enabled %}(MAINNET){% else %}(TESTNET){% endif %}</option>
+      <option value="{{ market.id }}">[{{market.exchange}}] {{ market.owner }}</option>
       {% endfor %}
     </select>
     <div id="market-available-capital" class="mb-6 text-gray-900 text-sm dark:text-white">---</div>
@@ -46,15 +45,6 @@
         <option value="15 min" selected>15 minute</option>
         <option value="1 hour">1 hour</option>
         <option value="4 hour">4 hours</option>
-      </select>
-    </div>
-    <div>
-      <label for="type">Session type</label>
-      <select name="type" id="type"
-        class="mb-6 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500">
-        <option value="" disabled selected>Select session type</option>
-        <option value="live.sandbox">Testnet</option>
-        <option value="live.mainnet" selected>Mainnet</option>
       </select>
     </div>
     <div class="mb-5">

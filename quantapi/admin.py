@@ -13,10 +13,23 @@ class BacktestAdmin(admin.ModelAdmin):
 
 
 class MarketAdmin(admin.ModelAdmin):
-    list_display = ('exchange_name', 'friendly_name', 'testnet_enabled', 'trading_enabled', 'mainnet_enabled')
-    search_fields = ('exchange_name', 'friendly_name')
-    list_filter = ('exchange_name', 'testnet_enabled', 'trading_enabled', 'mainnet_enabled')
+    list_display = ('exchange_name', 'prices_updated')
+    search_fields = ('exchange_name', )
+    list_filter = ('exchange_name', )
 
+
+class MarketCredentialsAdmin(admin.ModelAdmin):
+    list_display = ('market', 'owner', 'created_at', 'expires_at', 'internal', 'active')
+    search_fields = ('market__exchange_name', 'owner')
+    list_filter = ('market__exchange_name', 'internal', 'active')
+
+class MarketAccountAdmin(admin.ModelAdmin):
+    list_display = ('market', 'owner', 'equity', 'capital', 'last_cache')
+    search_fields = ('market__exchange_name', 'owner')
+    list_filter = ('market__exchange_name', )
+
+    def get_queryset(self, request: HttpRequest) -> QuerySet[Any]:
+        return MarketAccount.objects.prefetch_related('market')
 
 class MarketSymbolAdmin(admin.ModelAdmin):
     list_display = ('name', 'market', 'base', 'quote', 'spot_trading_enabled', 'margin_trading_enabled')
@@ -134,6 +147,8 @@ class ComplexOrderAdmin(admin.ModelAdmin):
 
 admin.site.register(GlobalSymbol, GlobalSymbolAdmin)
 admin.site.register(Market, MarketAdmin)
+admin.site.register(MarketAccount, MarketAccountAdmin)
+admin.site.register(MarketCredentials, MarketCredentialsAdmin)
 admin.site.register(MarketSymbol, MarketSymbolAdmin)
 admin.site.register(Session, SessionAdmin)
 admin.site.register(Signal, SignalAdmin)

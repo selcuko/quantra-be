@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Callable, Literal, Optional
 from django.utils import timezone
 
 if TYPE_CHECKING:
-    from quantapi.models import Order, MarketSymbol, Market as DBMarket, Session
+    from quantapi.models import Order, MarketSymbol, MarketAccount
     from liveloop import LiveLoop
 
 
@@ -19,10 +19,10 @@ class IMarket:
     capital: float
     assets: dict[str, float]
     commission: dict[str, float]
-    market: 'DBMarket'
+    market: 'MarketAccount'
     stop_websocket_stream:bool = False
 
-    def __init__(self, config:dict, market:'DBMarket'):
+    def __init__(self, config:dict, market:'MarketAccount'):
         """Initialize a market instance with config if provided."""
         self.config = config
         self.market = market
@@ -272,13 +272,16 @@ class IMarket:
     def cache_to_db(self, force=False):
         if not self.market:
             return
-        if self.market.assets_updated_at and (timezone.now() - self.market.assets_updated_at) < timedelta(minutes=5):
+        if self.market.last_cache and (timezone.now() - self.market.last_cache) < timedelta(minutes=5):
             if not force: 
                 return
         self.get_account()
-        self.market.usdt = self.capital
+        self.market.capital = self.capital
         self.market.assets = json.dumps(self.assets)
-        self.market.assets_updated_at = timezone.now()
-        self.get_current_prices(save=False)
+        self.market.last_cache = timezone.now()
+        prices = self.get_current_prices(save=False)
         self.get_equity(save=False)
         self.market.save()
+        self.market.market.prices = json.dumps(prices)
+        self.market.market.prices_updated = timezone.now()
+        self.market.market.save()

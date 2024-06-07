@@ -19,8 +19,8 @@ from markets.errors import (InsufficientBalance, MarketDisabledTrading,
                             SymbolNotInMarket)
 from order import OrderManager
 from quantapi.analytics import MarketAnalytics, TotalSessionAnalytics
-from quantapi.models import (Backtest, GlobalSymbol, Market, MarketSymbol, Notification,
-                             Order, Session)
+from quantapi.models import (Backtest, GlobalSymbol, Market, MarketAccount, MarketSymbol, Notification,
+                             Order, Session, Strategy)
 from strategy import get_strategy
 from django.contrib import messages
 
@@ -28,18 +28,18 @@ from django.contrib import messages
 
 class HomeView(View):
     def get(self, request):
-        sessions = Session.objects.filter(status=Session.Status.ONGOING, symbol__market__mainnet_enabled=True).order_by('-started').prefetch_related('symbol', 'symbol__market')
+        sessions = Session.objects.filter(status=Session.Status.ONGOING).order_by('-started').prefetch_related('symbol', 'symbol__market')
         recent_orders = Order.objects.filter(signal__session__in=sessions, status=Order.Status.FILLED).order_by('-created_at').prefetch_related('session', 'session__symbol')[:8]
 
-        ma = MarketAnalytics()
-        sa = TotalSessionAnalytics(sessions)
+        #ma = MarketAnalytics()
+        #sa = TotalSessionAnalytics(sessions)
         notifications = Notification.objects.annotate(acknowledged=Count('acknowledged_by'))
         critical = notifications.filter(severity=Notification.Severity.CRITICIAL, acknowledged=0)
         warning = notifications.filter(severity=Notification.Severity.ERROR, acknowledged=0)
         return render(request, 'index.html', {
             'sessions': sessions, 
             'orders': recent_orders,
-            'analytics': { 'market': ma , 'session': sa },
+            'analytics': { 'market': None , 'session': None },
             'critical_messages': critical,
             'important_messages': warning,
         })
@@ -50,7 +50,7 @@ class SessionDetailView(View):
         session = Session.objects.prefetch_related('orders', 'signals').get(pk=pk)
         signals = session.signals
         orders = session.orders
-        market = session.symbol.market
+        market = session.account
         symbol = session.symbol
         orders = orders.order_by('-created_at')
         signals = signals.order_by('-timestamp')
@@ -75,7 +75,7 @@ class SessionListView(View):
         paginator = Paginator(query, 20)
         page_number = request.GET.get('page')
         page = paginator.get_page(page_number)
-        markets = Market.objects.filter(trading_enabled=True).order_by('exchange_name')
+        markets = MarketAccount.objects.filter(credentials__active=True).order_by('market__exchange_name')
         return render(request, 'session-list.html', {
             'sessions': page, 
             'markets': markets,
@@ -113,42 +113,41 @@ class SessionListView(View):
 
 class SessionInitView(View):
     def get(self, request):
-        markets = Market.objects.filter(trading_enabled=True).order_by('exchange_name')
+        markets = MarketAccount.get_available_accounts()
         strategies = Strategy.objects.all().order_by('-version')
         return render(request, 'session-init.html', {'markets': markets, 'strategies': strategies})
 
     def post(self, request, *args, **kwargs):
         form_data = request.POST
         try:
-            market = Market.objects.get(pk=form_data['market'])
-            imarket = market.get_interface()
+            account = MarketAccount.objects.get(pk=form_data['market'])
+            imarket = account.get_interface()
             symbol_name = form_data['symbol'].upper().replace('-', '').replace('/', '').replace('USDT', '') + '-USDT'
             if not imarket.has_symbol(symbol_name):
-                raise SymbolNotInMarket(f'Symbol {symbol_name} not found in market {market.exchange_name}')
-            symbol = MarketSymbol.objects.get(name=symbol_name, market=market)
+                raise SymbolNotInMarket(f'Symbol {symbol_name} not found in market {account.market.exchange_name}')
+            symbol = MarketSymbol.objects.get(name=symbol_name, market=account.market)
             if not symbol.spot_trading_enabled:
-                raise MarketDisabledTrading(f'{market.exchange_name} does not allow {symbol.name} in SPOT trading')
-            if not market.is_valid_session_type((session_type := form_data['type'])):
-                raise MarketDisabledTrading(f'Market {market.exchange_name} does not support session type {session_type}')
-            if (capital_limit := float(form_data['capital'])) > imarket.capital and session_type in [Session.Type.LIVE_SANDBOX, Session.Type.LIVE_MAINNET]:
+                raise MarketDisabledTrading(f'{account.market.exchange_name} does not allow {symbol.name} in SPOT trading')
+            if (capital_limit := float(form_data['capital'])) > imarket.capital:
                 raise InsufficientBalance(f'Capital limit {capital_limit} is more than market capital {imarket.capital}')
-            if (asset_limit := float(form_data['assets'])) > imarket.assets.get(symbol.base, 0) and session_type in [Session.Type.LIVE_SANDBOX, Session.Type.LIVE_MAINNET]:
+            if (asset_limit := float(form_data['assets'])) > imarket.assets.get(symbol.base, 0):
                 raise InsufficientBalance(f'Asset limit {asset_limit} is more than market assets {imarket.assets}')
             candle_source = form_data.get('candle_source', 'trade')
             strategy_name = form_data.get('strategy', 'v1')
         except Exception as e:
-            return render(request, 'session-init.html', {'markets': Market.objects.filter(trading_enabled=True).order_by('exchange_name'), 'form_error': traceback.format_exc()})
+            strategies = Strategy.objects.all().order_by('-version')
+            return render(request, 'session-init.html', {'markets': MarketAccount.get_available_accounts(), 'strategies': strategies, 'form_error': traceback.format_exc()})
         try:
             ll = LiveLoop(
                 symbol=symbol.name,
-                market=market,
+                account=account,
                 strategy=get_strategy(strategy_name)({
                     'source': form_data.get('source', 'close'),
                 }),
                 capital_limit=capital_limit,
                 asset_limit=asset_limit,
                 freq=form_data['freq'],
-                session_type=session_type,
+                session_type=Session.Type.LIVE_MAINNET,
                 use_heikin_ashi=form_data.get('candle_type', 'standard') == 'heikin_ashi',
             )
             if candle_source == 'trade':
@@ -172,7 +171,7 @@ class SessionUpdateView(View):
             session.sell_enabled = bool(int(request.POST.get('session_sell_enabled', 0)))
 
         if 'session_buy' in request.POST and float(request.POST.get('session_buy', 0)) > 0:
-            iface = session.symbol.market.get_interface()
+            iface = session.account.get_interface()
             session.update(iface)
             amt = float(request.POST.get('session_buy'))
             corrected_amt = min(amt, session.capital)
@@ -203,7 +202,7 @@ class SessionUpdateView(View):
                 messages.add_message(request, messages.ERROR, msg)
 
         if 'session_sell' in request.POST and float(request.POST.get('session_sell', 0)) > 0:
-            iface = session.symbol.market.get_interface()
+            iface = session.account.get_interface()
             session.update(iface)
             amt = float(request.POST.get('session_sell'))
             corrected_amt = min(amt, session.assets)
@@ -291,29 +290,29 @@ class SessionUpdateView(View):
 
 class MarketListView(View):
     def get(self, request):
-        markets = Market.objects.filter(trading_enabled=True).order_by('exchange_name')
+        markets = MarketAccount.objects.filter(credentials__active=True).select_related('market', 'credentials')
         return render(request, 'market-list.html', { 'markets': markets })
 
 
 class MarketDetailView(View):
     def get(self, request, pk):
-        market = Market.objects.get(pk=pk)
+        market = MarketAccount.objects.get(pk=pk)
         interface = market.get_interface()
         interface.cache_to_db(force=True)
-        symbols = MarketSymbol.objects.filter(market=market)
+        symbols = MarketSymbol.objects.filter(market=market.market)
         assets = json.loads(market.assets or '{}')
         available_assets = {symbol: assets[symbol] for symbol in assets if assets[symbol] > 0}
         return render(request, 'market-detail.html', {'market': market, 'symbols': symbols, 'interface': interface, 'available_assets': available_assets})
 
     @staticmethod
     def raw(request, pk):
-        market = Market.objects.get(pk=pk)
+        market = MarketAccount.objects.get(pk=pk)
         return JsonResponse({
             'assets': json.loads(market.assets) if market.assets else {},
-            'prices': json.loads(market.prices) if market.prices else {},
-            'capital': market.usdt,
+            'prices': json.loads(market.market.prices) if market.market.prices else {},
+            'capital': market.capital,
             'equity': market.equity,
-            'updated': market.assets_updated_at,
+            'updated': market.last_cache,
             'available_capital': market.available_capital,
         })
 
@@ -326,7 +325,7 @@ class RunningThreadsView(View):
 
 class BacktestInitView(View):
     def get(self, request):
-        markets = set(Market.objects.filter(trading_enabled=True).order_by('exchange_name').values_list('exchange_name', flat=True))
+        markets = set(Market.objects.all().order_by('exchange_name').values_list('exchange_name', flat=True))
         return render(request, 'backtest-init.html', {'markets': markets})
 
     def post(self, request):
@@ -379,7 +378,7 @@ class WatchdogView(View):
 
 class OrderManagementView(View):
     def get(self, request):
-        markets = Market.objects.filter(trading_enabled=True).order_by('exchange_name').order_by('exchange_name')
+        markets = Market.objects.all().order_by('exchange_name')
         return render(request, 'order-management.html', context={ 'markets': markets })
     
     def post(self, request):
@@ -392,7 +391,7 @@ class OrderManagementView(View):
         )):
             messages.error(request, f'Invalid order parameters: {payload}')
             return redirect('order-management')
-        market = Market.objects.get(pk=payload['market'])
+        market = MarketAccount.objects.get(pk=payload['market'])
         symbol_name = payload['symbol']
         symbol_name = symbol_name.upper().replace('-', '').replace('/', '').replace('USDT', '') + '-USDT'
         symbol = MarketSymbol.objects.get(name=symbol_name, market=market)
@@ -427,13 +426,14 @@ class PriceView(View):
         if not '-' in symbol:
             symbol += '-USDT'
 
-        market = Market.objects.get(pk=market_id)
+        account = MarketAccount.objects.get(pk=market_id)
+        market = account.market
         prices = json.loads(market.prices or '{}')
         if not symbol in prices:
             response['message'] = f'No price found for {symbol}'
             return JsonResponse(response)
         response['price'] = prices[symbol]
-        response['updated'] = market.assets_updated_at
+        response['updated'] = market.prices_updated
         return JsonResponse(response)
 
 

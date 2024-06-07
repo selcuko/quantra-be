@@ -176,7 +176,6 @@ class SymbolMetrics:
         self.updated = datetime.fromisoformat(market_data['last_updated'])
 
 
-
 class Bid:
     def __init__(self, price:float|int|Decimal, size:float|int|Decimal, delta:int|float|Decimal=0, count=1) -> None:
         self.price = Decimal(price)
@@ -196,6 +195,7 @@ class Bid:
             'count': self.count,
             'value': str(self.value),
         }
+
 
 class OrderBook:
     def __init__(self):

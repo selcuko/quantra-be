@@ -1,6 +1,7 @@
 from datetime import datetime
 import json
 import os
+from tabnanny import verbose
 import threading
 import typing
 from django.conf import settings
@@ -27,20 +28,11 @@ class Market(models.Model):
         OKX = 'OKX', 'OKX'
         KUCOIN = 'KUCOIN', 'KuCoin'
         MEXC = 'MEXC', 'MEXC'
-    exchange_name = models.CharField(max_length=30, choices=Exchange.choices)
-    friendly_name = models.CharField(max_length=30, null=True, blank=True, help_text='Descriptive name for the config-exchange pair for this market.')
-    config_enc = models.TextField(null=True, blank=True, help_text='Config for this market (encrypted).')
-    trading_enabled = models.BooleanField(default=False)
-    testnet_enabled = models.BooleanField(default=False)
-    mainnet_enabled = models.BooleanField(default=False)
+    exchange_name = models.CharField(max_length=30, choices=Exchange.choices, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
     symbols: models.QuerySet['MarketSymbol']
-    key_expiry_date = models.DateTimeField(null=True, blank=True, help_text='Date when the API key for this market will expire.')
-    usdt = models.FloatField(null=True, blank=True, help_text='USDT balance in this market')
-    assets = models.TextField(null=True, blank=True, help_text='Assets in this market')
-    equity = models.FloatField(null=True, blank=True, help_text='Equity in this market')
     prices = models.TextField(null=True, blank=True, help_text='Prices of symbols in this market')
-    assets_updated_at = models.DateTimeField(null=True, blank=True, help_text='Last time assets were updated')
+    prices_updated = models.DateTimeField(null=True, blank=True, help_text='Last time prices were updated')
 
     def filters(self, symbol):
         details = json.loads(symbol.details or '{}', )
@@ -82,47 +74,94 @@ class Market(models.Model):
             }
 
     def __str__(self):
-        return f'{self.exchange_name} ({self.friendly_name})'
+        return self.exchange_name
 
+
+class MarketCredentials(models.Model):
+    market     = models.ForeignKey(Market, on_delete=models.PROTECT, related_name='credentials')
+    encrypted  = models.TextField(help_text='Encrypted credentials. This field is encrypted automatically if it contains valid JSON data.')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    expires_at = models.DateTimeField()
+    owner      = models.CharField(max_length=30)
+    internal   = models.BooleanField(default=False, help_text='Owned by a team member')
+    active     = models.BooleanField(default=True, help_text='Account can be used for trading')
+
+    class Meta:
+        verbose_name_plural = 'Market credentials'
+
+    def __str__(self) -> str:
+        return f'{self.market} {self.owner}'
+
+    def save(self, *args, **kwargs):
+        if self.encrypted:
+            try:
+                data = json.loads(self.encrypted)
+                fernet = Fernet(settings.SYMKEY)
+                self.encrypted = fernet.encrypt(data.dumps().encode()).decode()
+            except:
+                pass
+        create_market_account = not bool(self.pk)
+        super().save(*args, **kwargs)
+        if create_market_account:
+            MarketAccount.objects.create(market=self.market, credentials=self)
+
+    @property
+    def decrypted(self) -> dict[str, str]:
+        try:
+            fernet = Fernet(settings.SYMKEY)
+            return json.loads(fernet.decrypt(self.encrypted.encode()).decode())
+        except:
+            logger.error(f'Could not decrypt credentials for {self.market.exchange_name}', exc_info=True)
+            return {}
+
+
+class MarketAccount(models.Model):
+    market      = models.ForeignKey(Market, on_delete=models.PROTECT, related_name='accounts')
+    credentials = models.ForeignKey(MarketCredentials, on_delete=models.PROTECT, related_name='accounts')
+    equity     = models.FloatField(null=True, blank=True, help_text='Total USDT equity in this account')
+    capital    = models.FloatField(null=True, blank=True, help_text='Total USDT capital in this account')
+    assets     = models.TextField(null=True, blank=True, help_text='Assets in this account')
+    last_cache = models.DateTimeField(null=True, blank=True, help_text='Last time equity/assets were updated')
+
+    def __str__(self):
+        return f'{self.market.exchange_name} {self.credentials.owner} (${self.equity or 0})'
+
+    def save(self, *args, **kwargs):
+        if self.market != self.credentials.market:
+            raise ValueError('Market and credentials should be for the same market.')
+        super().save(*args, **kwargs)
+    
     def get_interface(self):
         from markets import get_market
-        return get_market(self.exchange_name, self.config, self)
-
-    def is_valid_session_type(self, session_type):
-        match session_type:
-            case Session.Type.BACKTEST | Session.Type.LIVE_BASIC:
-                return True
-            case Session.Type.LIVE_SANDBOX:
-                return self.testnet_enabled and self.trading_enabled
-            case Session.Type.LIVE_MAINNET:
-                return self.mainnet_enabled and self.trading_enabled
-            case _:
-                return False
+        return get_market(self.market.exchange_name, self.credentials.decrypted, self)
 
     @property
     def available_capital(self):
-        capital_in_sessions = Session.objects.filter(symbol__market=self, status=Session.Status.ONGOING).aggregate(models.Sum('capital'))['capital__sum'] or 0
-        return max(self.usdt - capital_in_sessions, 0) if self.usdt else 0
+        assets = json.loads(self.assets or '{}')
+        return self.equity - assets.get('USDT', 0)
 
     @property
-    def config(self):
-        """Decrypt config_enc and return dict"""
-        if not self.config_enc:
-            return {}
-        key = os.environ.get('SYMKEY', settings.SYMKEY)
-        if not key:
-            raise ValueError('No SYMKEY set')
-        f = Fernet(key)
-        return json.loads(f.decrypt(self.config_enc.encode()).decode())
+    def owner(self):
+        return self.credentials.owner
     
-    @config.setter
-    def config(self, value):
-        """Encrypt config and set config_enc"""
-        key = os.environ.get('SYMKEY', settings.SYMKEY)
-        if not key:
-            raise ValueError('No SYMKEY set')
-        f = Fernet(key)
-        self.config_enc = f.encrypt(json.dumps(value).encode()).decode()
+    @property
+    def active(self):
+        return self.credentials.active
+    
+    @property
+    def internal(self):
+        return self.credentials.internal
+    
+    @property
+    def exchange(self):
+        return self.market.exchange_name
+    
+    @classmethod
+    def get_available_accounts(cls, only_internal=False):
+        if only_internal:
+            return cls.objects.filter(credentials__internal=True, credentials__active=True)
+        return cls.objects.filter(credentials__active=True)
 
 class MarketSymbol(models.Model):
     class Meta:
@@ -176,6 +215,7 @@ class MarketSymbol(models.Model):
     def filters(self):
         return self.market.filters(self)
 
+
 class Session(models.Model):
     class CandleSource(models.TextChoices):
         TRADE = 'TRADE', 'Trade'
@@ -209,6 +249,7 @@ class Session(models.Model):
 
     session_type = models.CharField(max_length=30, choices=Type.choices)
     freq = models.CharField(max_length=30)
+    account = models.ForeignKey(MarketAccount, on_delete=models.PROTECT, related_name='sessions', null=True)
     started = models.DateTimeField(auto_now_add=True)
     ended = models.DateTimeField(null=True, blank=True)
     symbol = models.ForeignKey(MarketSymbol, on_delete=models.PROTECT, related_name='sessions')
@@ -235,6 +276,11 @@ class Session(models.Model):
     sell_enabled = models.BooleanField(default=True)
     initiated_at = models.DateTimeField(auto_now_add=True)
     orders: models.QuerySet['Order']
+
+    def save(self, *args, **kwargs):
+        if not self.account:
+            raise ValueError('Session must have at least an account before saving.')
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f'{self.strategy} - {self.symbol} - {self.status}'
@@ -263,7 +309,7 @@ class Session(models.Model):
         strategy = get_strategy(self.strategy.name)
         ll = LiveLoop(
             symbol=self.symbol.name,
-            market=self.symbol.market,
+            account=self.account,
             strategy=strategy(params=json.loads(self.strategy_parameters or '{}')),
             capital_limit=self.capital,
             asset_limit=self.assets,
@@ -295,7 +341,7 @@ class Session(models.Model):
         return orders.exists()
 
     def update(self, interface, save=True):
-        interface = interface or self.symbol.market.get_interface()
+        interface = interface or self.account.get_interface()
         new_capital = min(self.capital, interface.capital)
         new_assets  = min(self.assets, interface.assets.get(self.symbol.base, 0))
         if new_capital != self.capital:
@@ -320,6 +366,7 @@ class Strategy(models.Model):
 
     def __str__(self):
         return f'{self.name} {self.version}'
+
 
 class Signal(models.Model):
     class Side(models.TextChoices):
@@ -673,7 +720,7 @@ class GlobalSymbol(models.Model):
     @markets.setter
     def markets(self, value):
         self.available_markets = json.dumps(value)
-    
+
     def add_market(self, market, save=True):
         markets = self.markets
         if market not in markets:
@@ -681,10 +728,10 @@ class GlobalSymbol(models.Model):
             self.markets = markets
             if save:
                 self.save()
-    
+
     def mainnet_symbols(self):
-        return MarketSymbol.objects.filter(symbol=self, market__mainnet_enabled=True)
-    
+        return MarketSymbol.objects.all()
+
     @property
     def tags_display(self):
         self.tags = self.tags or '[]'

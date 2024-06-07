@@ -16,7 +16,7 @@ import requests
 
 from logger import logger
 from markets import IMarket
-from markets.errors import InsufficientBalance, RejectedOrder
+from markets.errors import InsufficientBalance, KlineFetchFailed, RejectedOrder
 from markets.helper import authentication_required, float_to_precision
 from match import MatchEngine
 from models import interval_to_minutes
@@ -347,7 +347,7 @@ class MEXCMarket(IMarket):
     def _prep_symbol(self, symbol):
         from quantapi.models import MarketSymbol
         return MarketSymbol(
-            market=self.market,
+            market=self.market.market,
             name=self._standardize_symbol(symbol['symbol']),
             base=symbol['baseAsset'],
             quote=symbol['quoteAsset'],
@@ -387,10 +387,10 @@ class MEXCMarket(IMarket):
         if not klines:
             return []
         last_kline_dt = klines[-1][0]
-        if (now - last_kline_dt) > timedelta(minutes=minutes):
+        if (now - last_kline_dt) > timedelta(minutes=minutes*2):
             error = f'Last kline dt {last_kline_dt} does not match current time {now}, total klines: {len(klines)}, {start} -> {now}'
             logger.warning(error)
-            raise Exception(error)
+            raise KlineFetchFailed(error)
         return klines
     
     def _get_symbol_from_name(self, name):

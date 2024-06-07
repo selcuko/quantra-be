@@ -1,6 +1,6 @@
 from audioop import avg
 from datetime import timedelta
-from quantapi.models import Order, Session, Market, Signal
+from quantapi.models import MarketAccount, Order, Session, Market, Signal
 
 
 class SessionAnalytics:
@@ -232,8 +232,7 @@ class OrderAnalytics:
 
 class TotalSessionAnalytics:
     def __init__(self, sessions=None) -> None:
-        self.sessions = sessions or Session.objects.filter(status=Session.Status.ONGOING)
-        self.sessions = self.sessions.exclude(symbol__market__mainnet_enabled=False)
+        self.sessions = sessions or Session.objects.filter(status=Session.Status.ONGOING, account__active=True)
         self.market_analytics = MarketAnalytics()
     
     def capital(self):
@@ -269,10 +268,10 @@ class TotalSessionAnalytics:
 
 class MarketAnalytics:
     def __init__(self):
-        self.markets = Market.objects.filter(mainnet_enabled=True)
+        self.accounts = MarketAccount.get_available_accounts()
 
     def capital(self):
-        return sum([market.usdt for market in self.markets if market.usdt])
+        return sum([market.capital for market in self.accounts if market.capital])
     
     def equity(self):
-        return sum([market.equity for market in self.markets if market.equity])
+        return sum([market.equity for market in self.accounts if market.equity])

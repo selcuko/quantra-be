@@ -12,7 +12,9 @@ from quantapi.models import GlobalSymbol, Market, MarketSymbol
 
 class Command(BaseCommand):
     help = 'Test command'
-
+    """
+    This script is used to update the volume metrics for all symbols in the database.
+    """
     def handle(self, *args, **options):
         markets = Market.objects.filter(mainnet_enabled=True)
         interfaces = {

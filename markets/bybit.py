@@ -416,7 +416,7 @@ class BybitMarket(IMarket):
     def prep_symbol(self, symbol:dict) -> 'MarketSymbol':
         from quantapi.models import MarketSymbol
         symbol_object = MarketSymbol(
-            market=self.market,
+            market=self.market.market,
             name=self.standardize_symbol(symbol['symbol']),
             base=symbol['baseCoin'],
             quote=symbol['quoteCoin'],

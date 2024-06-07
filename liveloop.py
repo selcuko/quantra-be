@@ -14,17 +14,18 @@ import pytz
 from logger import logger
 from markets.errors import OrderPostProcessingError
 from models import OHLCVDataset, interval_to_minutes
-from quantapi.models import ComplexOrder, Market, MarketSymbol, Order, Session, Signal
+from quantapi.models import Market, MarketAccount, MarketSymbol, Order, Session, Signal, ComplexOrder
 from quantapi.models import Strategy as StrategyModel
 from strategy import Strategy, get_strategy
 
 class LiveLoop:
-    def __init__(self, symbol:str, market:Market, strategy:Strategy, capital_limit:float,
+    def __init__(self, symbol:str, account:MarketAccount, strategy:Strategy, capital_limit:float,
                  asset_limit:float, freq:str='15 min', end:Optional[datetime]=None,
                  session_type:Optional[str]=None, session:Session|None=None, use_heikin_ashi=False) -> None:
 
-        self.market = market
-        self.imarket = market.get_interface()
+        self.account = account
+        self.market = self.account.market
+        self.imarket = self.account.get_interface()
         self.strategy = strategy
         self.strategy.freq = freq
         self.freq = freq
@@ -32,7 +33,7 @@ class LiveLoop:
         self.capital_limit = capital_limit
         self.asset_limit = asset_limit
         self.use_heikin_ashi = use_heikin_ashi
-        self.symbol = MarketSymbol.objects.get(name=symbol, market=market)
+        self.symbol = MarketSymbol.objects.get(name=symbol, market=self.market)
 
         self.thread = None
         self.running = False
@@ -57,7 +58,8 @@ class LiveLoop:
             assets=asset_limit,
             initial_capital=capital_limit,
             initial_assets=asset_limit,
-            strategy_parameters=json.dumps(strategy.params)
+            strategy_parameters=json.dumps(strategy.params),
+            account=self.account,
         )
         cache.set(f'session_{self.session.pk}', self, timeout=None)
 
@@ -144,12 +146,31 @@ class LiveLoop:
         self.session.planned_shutdown = datetime.now(tz=pytz.UTC)
         logger.info(f'LiveLoop planned to shutdown after the next candle.', extra={'loop': repr(self)})
 
+    def run_ticker_until_next_candle(self):
+        """Runs the ticker until the next candle should be available"""
+        if not self.last_kline_dt:
+            return
+        last_kline_ts = self.last_kline_dt.timestamp()
+        now_ts = time.time()
+        residue = last_kline_ts + self.loop_interval_s - now_ts
+        if residue > 0:
+            slept = 0
+            while residue > 0 and not self.will_stop:
+                time.sleep(1)
+                slept += 1
+                residue -= 1
+                print(f'\rSleeping for {residue}s ({slept}s)', end='', flush=True)
+        else:
+            print('neg res', residue)
+            time.sleep(1)
+        return True
 
     def __run_polling(self):
         MAX_FAILED_KLINE_REQUESTS = 10
         last_klines = []
         failed_kline_requests = 0
-        while not self.should_stop() and self.wait_next_candle() and not self.should_stop():
+        while True:
+            self.run_ticker_until_next_candle()
             for i in range(3):
                 try:
                     last_klines = self.imarket.get_last_klines(self.symbol.name, self.freq)
@@ -172,7 +193,7 @@ class LiveLoop:
             last_klines = OHLCVDataset(last_klines)
             last_kline = {**last_klines.iloc[-1].to_dict(), 'time': last_klines.index[-1].to_pydatetime()}
             processed_ok = self.on_candle(last_kline)
-            if not processed_ok:
+            if processed_ok is False:
                 logger.error(f'Failed to process candle, skipping.', extra={'loop': repr(self)})
                 continue
         self.running = False
@@ -225,6 +246,7 @@ class LiveLoop:
             logger.error(f'Invalid candle received: {candle}', extra={'loop': repr(self)})
             return False
         if self.session.last_kline_timestamp and self.last_kline_dt <= self.session.last_kline_timestamp:
+            logger.warning(f'Old kline received, skipping (received={self.last_kline_dt}, processed={self.session.last_kline_timestamp}).', extra={'loop': repr(self)})
             return
         if self.last_100_klines is None:
             logger.error(f'Recent klines are not available, skipping candle.', extra={'loop': repr(self)})
@@ -389,7 +411,9 @@ class LiveLoop:
                 time.sleep(1)
                 slept += 1
                 residue -= 1
+                print(f'\rSleeping for {residue}s ({slept}s)', end='', flush=True)
         else:
+            print('neg res', residue)
             time.sleep(1)
         return True
 
@@ -411,7 +435,9 @@ class LiveLoop:
 
 if __name__ == '__main__':
     """Example usage of LiveLoop class."""
-    market = Market.objects.get(exchange_name='BINANCE', mainnet_enabled=True)
+    market = MarketAccount.objects.get(market__exchange_name='MEXC')
+    if not market:
+        raise Exception('No market account found.')
     ll = LiveLoop(
         'BNB-USDT', 
         market,
