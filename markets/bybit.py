@@ -17,14 +17,14 @@ from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
 from match import MatchEngine
 from models import interval_to_minutes
 if typing.TYPE_CHECKING:
-    from quantapi.models import Market, MarketSymbol, Order
+    from quantapi.models import Market, MarketSymbol, Order, MarketAccount
     from liveloop import LiveLoop
 
 
 class BybitMarket(IMarket):
     name = 'BYBIT'
 
-    def __init__(self, config: dict, market: 'Market'):
+    def __init__(self, config: dict, market: 'MarketAccount'):
         self.url = 'https://api.bybit.com'
         self.api_key = config['API_KEY']
         self.api_secret = config['API_SECRET']
@@ -37,7 +37,8 @@ class BybitMarket(IMarket):
             'Content-Type': 'application/json'
         })
 
-        self.market = market
+        self.account = market
+        self.market = self.account.market
         self.spot_trading_enabled = True
         self.capital = 0
         self.symbols = {}
@@ -94,11 +95,11 @@ class BybitMarket(IMarket):
         for symbol in data:
             self.assets[symbol['coin']] = float(symbol['walletBalance'])
         self.capital = self.assets.get('USDT', 0)
-        if self.market:
-            self.market.usdt = self.capital
-            self.market.assets = json.dumps(self.assets)
+        if self.account:
+            self.account.capital = self.capital
+            self.account.assets = json.dumps(self.assets)
             if save:
-                self.market.save()
+                self.account.save()
 
     def get_symbols(self):
         url = f'{self.url}/v5/market/instruments-info'
@@ -239,6 +240,7 @@ class BybitMarket(IMarket):
         engine = MatchEngine(interval, callback)
         retries = 30
         while not self.stop_websocket_stream and not (liveloop and liveloop.should_stop()):
+            print('LL will stop', liveloop.should_stop())
             if last_ping - timezone.now() > timedelta(seconds=30):
                 ws.send(json.dumps({'op': 'ping'}))
                 last_ping = timezone.now()
@@ -391,10 +393,10 @@ class BybitMarket(IMarket):
         if not prices:
             prices = json.loads(self.market.prices or '{}')
         equity = self.capital + sum([ self.assets.get(asset, 0) * prices.get(asset+'-USDT', 0) for asset in self.assets ])
-        if self.market and self.market.equity != equity:
-            self.market.equity = equity
+        if self.account and self.account.equity != equity:
+            self.account.equity = equity
             if save:
-                self.market.save()
+                self.account.save()
         return equity
 
     def prep_order(self, order:dict) -> 'Order':
@@ -416,7 +418,7 @@ class BybitMarket(IMarket):
     def prep_symbol(self, symbol:dict) -> 'MarketSymbol':
         from quantapi.models import MarketSymbol
         symbol_object = MarketSymbol(
-            market=self.market.market,
+            market=self.market,
             name=self.standardize_symbol(symbol['symbol']),
             base=symbol['baseCoin'],
             quote=symbol['quoteCoin'],

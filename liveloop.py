@@ -14,13 +14,13 @@ import pytz
 from logger import logger
 from markets.errors import OrderPostProcessingError
 from models import OHLCVDataset, interval_to_minutes
-from quantapi.models import Market, MarketAccount, MarketSymbol, Order, Session, Signal, ComplexOrder
+from quantapi.models import Market, MarketAccount, MarketSymbol, Order, Session, SessionGroup, Signal, ComplexOrder
 from quantapi.models import Strategy as StrategyModel
 from strategy import Strategy, get_strategy
 
 class LiveLoop:
     def __init__(self, symbol:str, account:MarketAccount, strategy:Strategy, capital_limit:float,
-                 asset_limit:float, freq:str='15 min', end:Optional[datetime]=None,
+                 asset_limit:float, freq:str='15 min', end:Optional[datetime]=None, group:Optional[SessionGroup]=None,
                  session_type:Optional[str]=None, session:Session|None=None, use_heikin_ashi=False) -> None:
 
         self.account = account
@@ -28,6 +28,7 @@ class LiveLoop:
         self.imarket = self.account.get_interface()
         self.strategy = strategy
         self.strategy.freq = freq
+        self.group = group
         self.freq = freq
         self.end = end
         self.capital_limit = capital_limit

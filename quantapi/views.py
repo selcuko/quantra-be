@@ -15,12 +15,13 @@ from django.core.cache import cache
 from backtest import async_analyze
 from liveloop import LiveLoop
 from logger import logger
+from loopgroup import LoopGroup
 from markets.errors import (InsufficientBalance, MarketDisabledTrading,
                             SymbolNotInMarket)
 from order import OrderManager
 from quantapi.analytics import MarketAnalytics, TotalSessionAnalytics
 from quantapi.models import (Backtest, GlobalSymbol, Market, MarketAccount, MarketSymbol, Notification,
-                             Order, Session, Strategy)
+                             Order, Session, SessionGroup, Signal, Strategy)
 from strategy import get_strategy
 from django.contrib import messages
 
@@ -28,9 +29,9 @@ from django.contrib import messages
 
 class HomeView(View):
     def get(self, request):
-        sessions = Session.objects.filter(status=Session.Status.ONGOING).order_by('-started').prefetch_related('symbol', 'symbol__market')
+        sessions = Session.objects.filter(status=Session.Status.ONGOING, group__isnull=True).order_by('-started').prefetch_related('symbol', 'symbol__market')
         recent_orders = Order.objects.filter(signal__session__in=sessions, status=Order.Status.FILLED).order_by('-created_at').prefetch_related('session', 'session__symbol')[:8]
-
+        groups = SessionGroup.objects.filter(status__in=[SessionGroup.Status.ONGOING, SessionGroup.Status.PLANNED]).prefetch_related('sessions').order_by('-created_at')
         #ma = MarketAnalytics()
         #sa = TotalSessionAnalytics(sessions)
         notifications = Notification.objects.annotate(acknowledged=Count('acknowledged_by'))
@@ -42,6 +43,7 @@ class HomeView(View):
             'analytics': { 'market': None , 'session': None },
             'critical_messages': critical,
             'important_messages': warning,
+            'groups': groups,
         })
 
 
@@ -286,6 +288,119 @@ class SessionUpdateView(View):
         if liveloop:
             liveloop.stop()
         return redirect('session-detail', pk=session.pk)
+
+
+class SessionGroupInitView(View):
+    def get(self, request):
+        markets = MarketAccount.get_available_accounts()
+        strategies = Strategy.objects.all().order_by('-version')
+        return render(request, 'sessiongroup-init.html', {'markets': markets, 'strategies': strategies})
+    
+    def post(self, request):
+        account_ids = request.POST.getlist('market')
+        accounts = MarketAccount.objects.filter(pk__in=account_ids)
+        first_account = accounts.first()
+        if not first_account:
+            return redirect('sessiongroup-init')
+        market = first_account.market
+        symbol_name = request.POST.get('symbol').upper().replace('-', '').replace('/', '').replace('USDT', '') + '-USDT'
+        symbol = MarketSymbol.objects.get(name=symbol_name, market=market)
+        strategy_name = request.POST.get('strategy', 'v1')
+        strategy = Strategy.objects.get(code=strategy_name)
+        session_group = SessionGroup.objects.create(
+            symbol=symbol,
+            market=market,
+            strategy=strategy
+        )
+        for account in accounts:
+            Session.objects.create(
+                group=session_group,
+                account=account,
+                symbol=symbol,
+                freq=request.POST.get('freq'),
+                initial_capital=0,
+                capital=0,
+                initial_assets=0,
+                assets=0,
+                status=Session.Status.PLANNED,
+                session_type=Session.Type.LIVE_MAINNET,
+                buy_enabled=False,
+                sell_enabled=False,
+            )
+        return redirect('sessiongroup-detail', pk=session_group.pk)
+
+
+class SessionGroupDetailView(View):
+    def get(self, request, pk):
+        group = SessionGroup.objects.prefetch_related('sessions').get(pk=pk)
+        signals = Signal.objects.filter(group=group)
+        orders = [signal.cum_order for signal in signals]
+        return render(request, 'sessiongroup-detail.html', {
+            'group': group, 
+            'sessions': group.sessions.all(),
+            'orders': orders,
+            'signals': signals,
+        })
+    
+    @staticmethod
+    def update(request, pk):
+        group = SessionGroup.objects.get(pk=pk)
+        payload = request.POST
+        print('UPDATE', payload)
+        if 'capital' in payload:
+            session_pk = int(payload['session-pk'])
+            session = Session.objects.get(pk=session_pk)
+            if session.status == Session.Status.PLANNED:
+                session.initial_capital = float(payload['capital'])
+            session.capital = float(payload['capital'])
+            session.save()
+        elif 'start' in payload:
+            pass
+        return redirect('sessiongroup-detail', pk=group.pk)
+    
+    @staticmethod
+    def init(request, pk):
+        group = SessionGroup.objects.get(pk=pk)
+        loop  = LoopGroup(group, freq=group.freq)
+        loop.run()
+        return redirect('sessiongroup-detail', pk=group.pk)
+
+    @staticmethod
+    def pause(request, pk):
+        group = SessionGroup.objects.get(pk=pk)
+        loop:LoopGroup = cache.get(f'sessiongroup_{group.pk}')
+        if not loop:
+            group.status = SessionGroup.Status.PAUSED
+            group.save()
+        else:
+            loop.stop()
+        return redirect('sessiongroup-detail', pk=group.pk)
+    
+    @staticmethod
+    def resume(request, pk):
+        group = SessionGroup.objects.get(pk=pk)
+        if group.status in [SessionGroup.Status.ONGOING, SessionGroup.Status.PLANNED]:
+            messages.error(request, f'SessionGroup is not suitable for resuming.')
+            return redirect('sessiongroup-detail', pk=group.pk)
+        loop:LoopGroup = cache.get(f'sessiongroup_{group.pk}')
+        if not loop:
+            group.status = SessionGroup.Status.ONGOING
+            group.save()
+            loop = LoopGroup(group, freq=group.freq)
+            loop.run()
+        else:
+            loop.run()
+        return redirect('sessiongroup-detail', pk=group.pk)
+
+    @staticmethod
+    def terminate(request, pk):
+        group = SessionGroup.objects.get(pk=pk)
+        loop:LoopGroup = cache.get(f'sessiongroup_{group.pk}')
+        if loop:
+            loop.stop()
+        group.status = SessionGroup.Status.COMPLETED
+        group.save()
+        return redirect('sessiongroup-detail', pk=group.pk)
 
 
 class MarketListView(View):

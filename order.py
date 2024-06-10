@@ -28,7 +28,7 @@ class OrderManager:
             'deal_size': deal_size,
             'side': side,
             'symbol': symbol.name,
-            'market': self.market.market.exchange,
+            'market': self.market.market.exchange_name,
             'manual': manual,
         }
         deal_size_str = f'{deal_size:f}' if deal_size else None
@@ -38,7 +38,7 @@ class OrderManager:
                 deal_funds = float_to_precision(deal_funds, symbol.quote_precision)
                 request['deal_funds'] = deal_funds
 
-            filters = self.market.market.market.filters(symbol)
+            filters = self.market.market.filters(symbol)
             if (lot_step := filters.get('lot_step')):
                 deal_funds = float_to_precision(deal_funds, lot_step)
                 deal_funds_str = f'{deal_funds:f}'
@@ -49,7 +49,7 @@ class OrderManager:
                 deal_size = float_to_precision(deal_size, symbol.base_precision)
                 request['deal_size'] = deal_size
 
-            filters = self.market.market.market.filters(symbol)
+            filters = self.market.market.filters(symbol)
             if (lot_step := filters.get('lot_step')):
                 deal_size = float_to_precision(deal_size, lot_step)
                 deal_size_str = f'{deal_size:f}'
@@ -60,7 +60,7 @@ class OrderManager:
             order = self.market.place_market_order(symbol, side, deal_funds_str, deal_size_str)
             order.symbol = symbol
             order.placed_at = timezone.now()
-            order.market = self.market.market.market
+            order.market = self.market.market
             order.save()
         except (RejectedOrder, InsufficientBalance) as e:
             order = Order.objects.create(
@@ -70,7 +70,7 @@ class OrderManager:
                 status=Order.Status.REJECTED if isinstance(e, RejectedOrder) else Order.Status.INSUFFICIENT_BALANCE,
                 details=traceback.format_exc(),
                 messages_raw=f'RejectedOrder: {e!r}',
-                market=self.market.market.market,
+                market=self.market.market,
                 symbol=symbol,
             )
         except OrderPostProcessingError as e:
@@ -82,9 +82,9 @@ class OrderManager:
                 'deal_size': deal_size,
                 'deal_funds': deal_funds,
                 'status': order.status,
-                'market': self.market.market.market,
+                'market': self.market.market,
                 'symbol': symbol,
-                'price': order.price or json.loads(self.market.market.market.prices or '{}').get(symbol.base),
+                'price': order.price or json.loads(self.market.market.prices or '{}').get(symbol.base),
             })[0]
         except Exception as e:
             raise OrderPlacementError(f'Error placing order: {e!r}')
@@ -106,7 +106,7 @@ class OrderManager:
             order.force = True
         if not order.side:
             order.side = Order.Side.BUY if side == 'buy' else Order.Side.SELL
-        order.market = self.market.market.market
+        order.market = self.market.market
         order.symbol = symbol
         order.request = json.dumps(request)
         order.save()

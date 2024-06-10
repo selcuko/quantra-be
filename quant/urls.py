@@ -2,7 +2,7 @@ from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path
 from django.conf.urls.static import static
-from quantapi.views import BacktestInitView, BacktestResultView, CoinScanView, FavoritesView, HomeView, MarketDetailView, MarketListView, NotificationDetailView, NotificationsView, OrderBookView, OrderManagementView, PriceView, RunningThreadsView, \
+from quantapi.views import BacktestInitView, BacktestResultView, CoinScanView, FavoritesView, HomeView, MarketDetailView, MarketListView, NotificationDetailView, NotificationsView, OrderBookView, OrderManagementView, PriceView, RunningThreadsView, SessionGroupDetailView, SessionGroupInitView, \
     SessionInitView, SessionListView, SessionUpdateView,SessionDetailView, SymbolView, WatchdogView
 
 urlpatterns = [
@@ -16,6 +16,13 @@ urlpatterns = [
     path('session/<int:pk>/pause/', SessionUpdateView.pause, name='session-pause'),
     path('session/<int:pk>/resume/', SessionUpdateView.resume, name='session-resume'),
     path('session/<int:pk>/update/', SessionUpdateView.as_view(), name='session-update'),
+    path('sessiongroup/init/', SessionGroupInitView.as_view(), name='sessiongroup-init'),
+    path('sessiongroup/<int:pk>/', SessionGroupDetailView.as_view(), name='sessiongroup-detail'),
+    path('sessiongroup/<int:pk>/init/', SessionGroupDetailView.init, name='sessiongroup-detail-init'),
+    path('sessiongroup/<int:pk>/update/', SessionGroupDetailView.update, name='sessiongroup-update'),
+    path('sessiongroup/<int:pk>/pause/', SessionGroupDetailView.pause, name='sessiongroup-pause'),
+    path('sessiongroup/<int:pk>/resume/', SessionGroupDetailView.resume, name='sessiongroup-resume'),
+    path('sessiongroup/<int:pk>/terminate/', SessionGroupDetailView.terminate, name='sessiongroup-terminate'),
     path('markets/', MarketListView.as_view(), name='market-list'),
     path('market/<int:pk>/', MarketDetailView.as_view(), name='market-detail'),
     path('market/<int:pk>/raw/', MarketDetailView.raw, name='market-raw'),

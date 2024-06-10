@@ -20,6 +20,16 @@
             class="bg-red-100 text-red-800 text-xl font-semibold me-2 px-2.5 py-0.5 rounded dark:bg-red-200 dark:text-red-800 ms-2">STOPPED</span>
         {% endif %}
     </h1>
+    {% if session.group %}
+    <a href="{% url 'sessiongroup-detail' pk=session.group.pk %}">
+        <h3 class="mb-4 text-2xl leading-none tracking-tight text-gray-900 flex items-center hover:underline">
+        This session is part of a SessionGroup
+          <svg class="w-4 h-4 ms-2 rtl:rotate-180" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 14 10">
+            <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M1 5h12m0 0L9 1m4 4L9 9"/>
+        </svg>
+        </h3>
+    </a>
+    {% endif %}
 
     <div class="flex rounded-md w-full pt-4 items-center justify-between">
         <div>

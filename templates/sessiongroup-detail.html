@@ -1,0 +1,542 @@
+{% extends 'base.html' %}
+{% block content %}
+<style>
+    td a {
+        display: block;
+    }
+</style>
+
+<div class="m-3 p-3 flex flex-col">
+    
+    <h1 class="flex items-center text-4xl font-extrabold dark:text-white">
+        {{ group.symbol.base }} @ {{ group.market.exchange_name }}
+        
+        {% if group.status == 'PLANNED' or group.status == 'COMPLETED' %}
+        <span
+            class="bg-blue-100 text-blue-800 text-xl font-semibold me-2 px-2.5 py-0.5 rounded ms-2">{{ group.status|upper }}</span>
+        {% elif group.status == 'ONGOING' %}
+        <span
+            class="bg-green-100 text-green-800 text-xl font-semibold me-2 px-2.5 py-0.5 rounded ms-2 h-full">{{ group.status|upper }}</span>
+        {% elif group.status == 'PAUSED' %}
+        <span
+            class="bg-yellow-100 text-yellow-800 text-xl font-semibold me-2 px-2.5 py-0.5 rounded ms-2">{{ group.status|upper }}</span>
+        {% else %}
+        <span
+            class="bg-red-100 text-red-800 text-xl font-semibold me-2 px-2.5 py-0.5 rounded ms-2">{{ group.status|upper }}</span>
+        {% endif %}
+    </h1>
+    <h3 class="mb-4 text-2xl leading-none tracking-tight text-gray-900 flex items-center">
+        SessionGroup of {{ sessions|length }}
+        </h3>
+
+    <div class="flex rounded-md w-full pt-4 items-center justify-between">
+        <div>
+            {% if group.status == 'PLANNED' %}
+            <form action="init/" style="display: inline;" method="POST">
+                {% csrf_token %}
+                <button type="submit" class="text-white bg-green-700 hover:bg-green-800 focus:ring-4 focus:ring-green-300 font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2 dark:bg-yellow-600 dark:hover:bg-yellow-700 focus:outline-none dark:focus:ring-yellow-800">
+                    Start
+                </button>
+            </form>
+            {% elif group.status == 'ONGOING' %}
+            <form action="pause/" style="display: inline;">
+                {% csrf_token %}
+                <button type="submit" class="text-white bg-yellow-700 hover:bg-yellow-800 focus:ring-4 focus:ring-yellow-300 font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2 dark:bg-yellow-600 dark:hover:bg-yellow-700 focus:outline-none dark:focus:ring-yellow-800">
+                    Pause
+                </button>
+            </form>
+            {% elif group.status != 'COMPLETED' %}
+            <form action="resume/" style="display: inline;">
+                {% csrf_token %}
+                <button type="submit" class="text-white bg-green-700 hover:bg-green-800 focus:ring-4 focus:ring-green-300 font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2 dark:bg-green-600 dark:hover:bg-green-700 focus:outline-none dark:focus:ring-green-800">
+                    Resume
+                </button>
+            </form>
+            {% endif %}
+            {% if group.status == 'ONGOING' or session.status == 'PAUSED' %}
+            <form action="terminate/" method="POST" style="display: inline;">
+                {% csrf_token %}
+                <button type="submit" class="text-white bg-red-700 hover:bg-red-800 focus:ring-4 focus:ring-red-300 font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2 dark:bg-red-600 dark:hover:bg-red-700 focus:outline-none dark:focus:ring-red-800">
+                    Terminate
+                </button>
+            </form>
+            <form action="update/" method="POST" style="display: inline;">
+                {% csrf_token %}
+                {% if group.buy_enabled %}
+                <input type="hidden" name="session_buy_enabled" value="0">
+                <button type="submit" class="text-white bg-amber-700 hover:bg-amber-500 focus:ring-4 focus:ring-amber-300 font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2 dark:bg-amber-600 dark:hover:bg-amber-700 focus:outline-none dark:focus:ring-amber-800">
+                    Disable BUY
+                </button>
+                {% else %}
+                <input type="hidden" name="session_buy_enabled" value="1">
+                <button type="submit" class="text-white bg-green-700 hover:bg-green-800 focus:ring-4 focus:ring-green-300 font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2 dark:bg-green-600 dark:hover:bg-green-700 focus:outline-none dark:focus:ring-green-800">
+                    Enable BUY
+                </button>
+                {% endif %}
+            </form>
+            <form action="update/" method="POST" style="display: inline;">
+                {% csrf_token %}
+                {% if group.sell_enabled %}
+                <input type="hidden" name="session_sell_enabled" value="0">
+                <button type="submit" class="text-white bg-amber-700 hover:bg-amber-800 focus:ring-4 focus:ring-amber-300 font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2 dark:bg-amber-600 dark:hover:bg-amber-700 focus:outline-none dark:focus:ring-amber-800">
+                    Disable SELL
+                </button>
+                {% else %}
+                <input type="hidden" name="session_sell_enabled" value="1">
+                <button type="submit" class="text-white bg-green-700 hover:bg-green-800 focus:ring-4 focus:ring-green-300 font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2 dark:bg-green-600 dark:hover:bg-green-700 focus:outline-none dark:focus:ring-green-800">
+                    Enable SELL
+                </button>
+                {% endif %}
+            </form>
+            {% endif %}
+        </div>
+        {% if group.thread %}
+        <code>ThreadID {{ group.thread.ident }}</code>
+        {% else %}
+        <code>ThreadID N/A</code>
+        {% endif %}
+    </div>
+</div>
+
+<div class="m-3">
+    <div>
+        {% if messages %}
+        <ul class="messages">
+            {% for message in messages %}
+                {% if message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}
+                <div class="{{ message.tags }} p-4 mb-4 text-sm text-red-800 rounded-lg bg-red-50 dark:bg-gray-800 dark:text-red-400" role="alert">
+                    <span class="font-medium">Error:</span> {{ message }}
+                </div>
+                {% elif message.level == DEFAULT_MESSAGE_LEVELS.SUCCESS %}
+                <div class="{{ message.tags }} p-4 mb-4 text-sm text-green-800 rounded-lg bg-green-50 dark:bg-green-900 dark:text-green-300" role="alert">
+                    <span class="font-medium">Success:</span> {{ message }}
+                </div>
+                {% else %}
+                <div class="{{ message.tags }} p-4 mb-4 text-sm text-gray-800 rounded-lg bg-gray-50 dark:bg-gray-800 dark:text-gray-300" role="alert">
+                    {{ message }}
+                </div>
+                {% endif %}
+            {% endfor %}
+        </ul>
+        {% endif %}
+    </div>
+
+    {% if group.status == 'PLANNED' %}
+    <div class="flow-root rounded-lg border border-gray-300 p-3 shadow-sm">
+        <dl class="-my-3 divide-y divide-gray-100 text-sm">
+            {% if group.symbol.symbol %}
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">Symbol details</dt>
+                <dd class="text-gray-700 sm:col-span-2"><a class="text-blue-700 hover:underline" target="_blank" href="{% url 'symbol-detail' cid=group.symbol.symbol.cid %}">{{ group.symbol.symbol.base }} ({{ group.symbol.symbol.cid }})</a></dd>
+            </div>
+            {% endif %}
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">Strategy</dt>
+                <dd class="text-gray-700 sm:col-span-2">{{ group.strategy.name }}</dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">Created</dt>
+                <dd class="text-gray-700 sm:col-span-2">{{ group.created_at }}</dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">Updated</dt>
+                <dd class="text-gray-700 sm:col-span-2">{{ group.updated_at }}</dd>
+            </div>
+        </dl>
+    </div>
+    {% else %}
+    <div class="flow-root rounded-lg border border-gray-300 p-3 shadow-sm">
+        <dl class="-my-3 divide-y divide-gray-100 text-sm">
+            {% if group.symbol.symbol %}
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">Symbol details</dt>
+                <dd class="text-gray-700 sm:col-span-2"><a class="text-blue-700 hover:underline" target="_blank" href="{% url 'symbol-detail' cid=group.symbol.symbol.cid %}">{{ group.symbol.symbol.base }} ({{ group.symbol.symbol.cid }})</a></dd>
+            </div>
+            {% endif %}
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">Strategy</dt>
+                <dd class="text-gray-700 sm:col-span-2">{{ group.strategy.name }} {{ session.strategy.version|default:'1.0' }}</dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">Open pos.</dt>
+                <dd class="text-gray-700 sm:col-span-2">Not implemented </dd>
+            </div>
+
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">Equity change</dt>
+                <dd class="text-gray-700 sm:col-span-2">Not implemented</dd>
+            </div>
+
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">Total equity</dt>
+                <dd class="text-gray-700 sm:col-span-2">$ {{ group.equity|floatformat:2 }}</dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">Last price</dt>
+                <dd class="text-gray-700 sm:col-span-2">$ {{ group.last_price|default:'-' }} ({{ group.last_kline_dt|timesince }})</dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">Kline freq.</dt>
+                <dd class="text-gray-700 sm:col-span-2">{{ group.freq }}</dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">Created (updated)</dt>
+                <dd class="text-gray-700 sm:col-span-2">{{ group.created_at|timesince }} ({{ group.updated_at|timesince }})</dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900"># Account</dt>
+                <dd class="text-gray-700 sm:col-span-2">{{ sessions|length }}</dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">PNL</dt>
+                <dd class="text-gray-700 sm:col-span-2">Not implemented</dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">Candle source</dt>
+                <dd class="text-gray-700 sm:col-span-2">{{ group.source }}</dd>
+            </div>
+        </dl>
+    </div>
+    {% endif %}
+</div>
+
+{% if group.status == 'PLANNED' %}
+<div class="relative overflow-x-auto">
+    <table class="w-full text-sm text-left rtl:text-right text-gray-500 dark:text-gray-400">
+        <caption class="p-5 text-lg font-semibold text-left rtl:text-right text-gray-900 bg-white dark:text-white dark:bg-gray-800">
+            Capital division
+        </caption>
+        <thead class="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
+            <tr>
+                <th scope="col" class="px-6 py-3">
+                    Owner
+                </th>
+                <th scope="col" class="px-6 py-3">
+                    Available capital
+                </th>
+                <th scope="col" class="px-6 py-3">
+                    Assign capital
+                </th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for session in sessions %}
+            <tr class="bg-white border-b dark:bg-gray-800 dark:border-gray-700">
+                <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap dark:text-white">
+                    {{ session.account.owner }}
+                </th>
+                <td class="px-6 py-4">
+                    $ {{ session.account.capital|floatformat:2|default:'N/A' }}
+                </td>
+                <td class="px-6 py-4">
+                    <form action="update/" method="POST">
+                        {% csrf_token %}
+                        <label for=""><!-- for ref --></label>
+                        <div class="flex items center">
+                            <input type="hidden" value="{{ session.pk }}" name="session-pk">
+                            <input type="number" step="0.01" value="{{ session.capital|floatformat:2 }}" min="0" max="{{ session.account.capital|floatformat:2|default:'0' }}" name="capital" class=" bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 mr-2" required />                    
+                            <button type="submit" class="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm  sm:w-auto px-5 py-2.5 text-center">Update</button>                    
+                        </div>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="relative overflow-x-auto">
+    <table class="w-full text-sm text-left rtl:text-right text-gray-500 dark:text-gray-400">
+        <caption class="p-5 text-lg font-semibold text-left rtl:text-right text-gray-900 bg-white dark:text-white dark:bg-gray-800">
+            Capitals and assets
+        </caption>
+        <thead class="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
+            <tr>
+                <th scope="col" class="px-6 py-3">
+                    Owner
+                </th>
+                <th scope="col" class="px-6 py-3">
+                    Capital
+                </th>
+                <th scope="col" class="px-6 py-3">
+                    Assets
+                </th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for session in sessions %}
+            <tr class="bg-white border-b dark:bg-gray-800 dark:border-gray-700">
+                <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap dark:text-white">
+                    {{ session.account.owner }}
+                </th>
+                <td class="px-6 py-4">
+                    $ {{ session.capital|floatformat:2|default:'N/A' }}
+                </td>
+                <td class="px-6 py-4">
+                    {{ session.assets|floatformat:2|default:'N/A' }} {{ group.symbol.base }}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+{% if session.status == 'ONGOING' %}
+<div class="block max-w m-3 p-6 bg-white border border-gray-200 rounded-lg shadow dark:bg-gray-800 dark:border-gray-700 grid md:grid-cols-2 grid-cols-1">
+    <div class="grid-cols-1 p-3">
+        <form class="max-w mx-auto" {% if not buy_enabled %}disabled="disabled"{% endif %} method="POST" action="update/">
+            {% csrf_token %}
+            <div class="flex flex-row justify-between">
+                <h3>Buy {{ symbol.base }} with session capital</h3>
+                {% if not buy_enabled %}
+                <span class="bg-red-100 text-red-800 text-xs font-medium me-2 px-2.5 py-0.5 rounded dark:bg-red-900 dark:text-red-300">Disabled: Low Capital</span>
+                {% endif %}</div>
+            
+            
+            <div class="mb-5">
+              
+                <div class="relative mb-6">
+                    <label for="labels-range-input" class="sr-only">Labels range</label>
+                    <input id="labels-range-input" type="range" value="5" min="5" step="0.01" max="{{ session.capital }}" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700">
+                    <span class="text-sm text-gray-500 dark:text-gray-400 absolute start-0 -bottom-6">Min ($ 5)</span>
+                    <span class="text-sm text-gray-500 dark:text-gray-400 absolute start-1/4 -translate-x-1/2 rtl:translate-x-1/2 -bottom-6">25%</span>
+                    <span class="text-sm text-gray-500 dark:text-gray-400 absolute start-2/4 -translate-x-1/2 rtl:translate-x-1/2 -bottom-6">50%</span>
+                    <span class="text-sm text-gray-500 dark:text-gray-400 absolute start-3/4 -translate-x-1/2 rtl:translate-x-1/2 -bottom-6">75%</span>
+                    <span class="text-sm text-gray-500 dark:text-gray-400 absolute end-0 -bottom-6">Max ($ {{ session.capital|floatformat:2 }})</span>
+                </div>
+            </div>
+            <br>
+            <div class="mb-5">
+              <label for="password" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Amount (USDT)</label>
+              <input type="number" value="0" min="5" max="{{ session.capital }}" id="session-buy" name="session_buy" step="0.01" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" required />
+            </div>
+            <button type="submit" class="text-white bg-green-700 hover:bg-green-800 focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm w-full sm:w-auto px-5 py-2.5 text-center">Buy</button>
+          </form>
+    </div>
+
+<div class="grid-cols-1 p-3">
+
+    <form class="max-w mx-auto" {% if not buy_enabled %}disabled="disabled"{% endif %} method="POST" action="update/">
+        {% csrf_token %}
+        <div class="flex flex-row justify-between">
+            <h3>Sell {{ symbol.base }} from session</h3>
+            {% if not sell_enabled %}
+            <span class="bg-red-100 text-red-800 text-xs font-medium me-2 px-2.5 py-0.5 rounded dark:bg-red-900 dark:text-red-300">Disabled: No Assets</span>
+            {% endif %}</div>
+        
+        
+        <div class="mb-5">
+          
+            <div class="relative mb-6">
+                <label for="labels-range-input" class="sr-only">Labels range</label>
+                <input id="sell-range" type="range" value="0" min="0" step="{{ symbol.filters.lot_step|default:0.000000001 }}" max="{{ session.assets }}" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700">
+                <span class="text-sm text-gray-500 dark:text-gray-400 absolute start-0 -bottom-6">Min (0 {{ symbol.base }})</span>
+                <span class="text-sm text-gray-500 dark:text-gray-400 absolute start-1/4 -translate-x-1/2 rtl:translate-x-1/2 -bottom-6">25%</span>
+                <span class="text-sm text-gray-500 dark:text-gray-400 absolute start-2/4 -translate-x-1/2 rtl:translate-x-1/2 -bottom-6">50%</span>
+                <span class="text-sm text-gray-500 dark:text-gray-400 absolute start-3/4 -translate-x-1/2 rtl:translate-x-1/2 -bottom-6">75%</span>
+                <span class="text-sm text-gray-500 dark:text-gray-400 absolute end-0 -bottom-6">Max ({{ session.assets }} {{ symbol.base }})</span>
+            </div>
+        </div>
+        <br>
+        <div class="mb-5">
+          <label for="password" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Amount ({{ symbol.base }})</label>
+          <input type="number" min="0" max="{{ session.assets }}" value="0" name="session_sell" step="{{ symbol.filters.lot_step|default:0.000000001 }}" id="session-sell" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" required />
+        </div>
+        <button type="submit" class="text-white bg-red-700 hover:bg-red-800 focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm w-full sm:w-auto px-5 py-2.5 text-center">Sell</button>
+      </form>
+</div>
+
+  
+</div>
+{% endif %}
+
+<script>
+    const rangeInput = document.getElementById('labels-range-input');
+const currentValue = document.getElementById('session-buy');
+
+rangeInput.addEventListener('input', () => {
+    currentValue.value = rangeInput.value;
+});
+const rangeInputSell = document.getElementById('sell-range');
+const currentValueSell = document.getElementById('session-sell');
+
+rangeInputSell.addEventListener('input', () => {
+    currentValueSell.value = rangeInputSell.value;
+});
+
+</script>
+
+{% if group.status != 'PLANNED' %}
+<div class="grid grid-cols-1 grid-auto-rows: 1fr">
+    <div class="border-l border-gray-200 col-span-1 row-span-1 overflow-x-auto">
+        <table class="w-full text-sm text-left text-gray-500 dark:text-gray-400">
+            <caption
+                class="p-5 text-lg font-semibold text-left text-gray-900 bg-white dark:text-white dark:bg-gray-800">
+                Group orders
+            </caption>
+            <thead class="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
+                <tr>
+                    <th scope="col" class="px-6 py-3">
+                        Price
+                    </th>
+                    <th scope="col" class="px-6 py-3">
+                        Amount USDT
+                    </th>
+                    <th scope="col" class="px-6 py-3">
+                        Amount {{ group.symbol.base }}
+                    </th>
+                    <th scope="col" class="px-6 py-3">
+                        Side
+                    </th>
+                    <th scope="col" class="px-6 py-3">
+                        Status
+                    </th>
+                    <th scope="col" class="px-6 py-3">
+                        Timestamp
+                    </th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for order in orders %}
+                <tr class="bg-white border-b dark:bg-gray-800 dark:border-gray-700">
+                    <td class="whitespace-nowrap px-6 py-4">
+                        $ {{ order.price }}
+                    </td>
+                    <td class="whitespace-nowrap px-6 py-4">
+                        $ {{ order.deal_funds|floatformat:2 }}
+                    </td>
+                    <td class="whitespace-nowrap px-6 py-4">
+                        {{ order.deal_size }} {{ group.symbol.base }}
+                    </td>
+                    <td class="px-6 py-4">
+                        {% if order.side == 'BUY' %}
+                        <span
+                            class="nowrap bg-green-100 text-green-800 mr-2 px-2.5 py-0.5 rounded-full dark:bg-green-900 dark:text-green-300">
+                            {{ order.side }}
+                        </span>
+                        {% elif order.side == 'SELL' %}
+                        <span
+                            class="nowrap bg-red-100 text-red-800 mr-2 px-2.5 py-0.5 rounded-full dark:bg-red-900 dark:text-red-300">
+                            {{ order.side }}
+                        </span>
+                        {% else %}
+                        <span
+                            class="nowrap bg-gray-100 text-gray-800 mr-2 px-2.5 py-0.5 rounded-full dark:bg-gray-900 dark:text-gray-300">
+                            {{ order.side|default:'UNKNOWN' }}
+                        </span>
+                        {% endif %}
+
+                    </td>
+                    {% if order.status == 'ACTIVE' %}
+                    <td class="px-6 py-4">
+                        <span
+                            class="nowrap bg-blue-100 text-blue-800 mr-2 px-2.5 py-0.5 rounded-full dark:bg-blue-900 dark:text-blue-300">
+                            {{ order.status }}
+                        </span>
+                    </td>
+                    {% elif order.status == 'EXPIRED' or order.status == 'REJECTED' %}
+                    <td class="px-6 py-4">
+                        <span
+                            class="nowrap bg-red-100 text-red-800 mr-2 px-2.5 py-0.5 rounded-full dark:bg-red-900 dark:text-red-300">
+                            {{ order.status }}
+                        </span>
+                    </td>
+                    {% elif order.status == 'FILLED' %}
+                    <td class="px-6 py-4">
+                        <span
+                            class="nowrap bg-green-100 text-green-800 mr-2 px-2.5 py-0.5 rounded-full dark:bg-green-900 dark:text-green-300">
+                            {{ order.status }}
+                        </span>
+                    </td>
+                    {% else %}
+                    <td class="px-6 py-4">
+                        <span
+                            class="nowrap bg-gray-100 text-gray-800 mr-2 px-2.5 py-0.5 rounded-full dark:bg-gray-900 dark:text-gray-300">
+                            {{ order.status|default:'UNKNOWN' }}
+                        </span>
+                    </td>
+                    {% endif %}
+                    <td class="px-6 py-4">
+                        <span
+                            class="nowrap bg-gray-100 text-gray-800 mr-2 px-2.5 py-0.5 rounded-full dark:bg-gray-900 dark:text-gray-300">
+                            {{ order.created_at }} 
+                        </span>
+                        {% if order.force %}
+                            <span class="nowrap bg-blue-100 text-blue-800 mr-2 px-2.5 py-0.5 rounded-full dark:bg-blue-900 dark:text-blue-300">
+                            FORCE
+                            </span>
+                            {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr class="bg-white border-b border-t dark:bg-gray-800 dark:border-gray-700">
+                    <td class="hyphens-auto px-6 py-4 whitespace-nowrap">
+                        No orders yet.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="border-l border-gray-200 col-span-1 row-span-1 overflow-x-auto overflow-y-auto">
+        <table class="w-full text-sm text-left text-gray-500 dark:text-gray-400">
+            <caption
+                class="p-5 text-lg font-semibold text-left text-gray-900 bg-white dark:text-white dark:bg-gray-800">
+                Group signals
+            </caption>
+            <thead class="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
+                <tr>
+                    <th scope="col" class="px-6 py-3">
+                        Price
+                    </th>
+                    <th scope="col" class="px-6 py-3">
+                        Side
+                    </th>
+                    <th scope="col" class="px-6 py-3">
+                        Timestamp
+                    </th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for signal in signals %}
+                <tr class="bg-white border-b dark:bg-gray-800 dark:border-gray-700">
+                    <td class="whitespace-nowrap px-6 py-4">
+                        $ {{ signal.price }}
+                    </td>
+                    <td class="px-6 py-4">
+                        {% if signal.side == 'BUY' %}
+                        <span
+                            class="nowrap bg-green-100 text-green-800 mr-2 px-2.5 py-0.5 rounded-full dark:bg-green-900 dark:text-green-300">
+                            {{ signal.side }}
+                        </span>
+                        {% elif signal.side == 'SELL' %}
+                        <span
+                            class="nowrap bg-red-100 text-red-800 mr-2 px-2.5 py-0.5 rounded-full dark:bg-red-900 dark:text-red-300">
+                            {{ signal.side }}
+                        </span>
+                        {% else %}
+                        <span
+                            class="nowrap bg-gray-100 text-gray-800 mr-2 px-2.5 py-0.5 rounded-full dark:bg-gray-900 dark:text-gray-300">
+                            {{ signal.side|default:'UNKNOWN' }}
+                        </span>
+                        {% endif %}
+
+                    </td>
+                    <td class="px-6 py-4 hyphens-none whitespace-nowrap">
+                        {{ signal.timestamp|date:"d-m-Y H:i:s" }}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr class="bg-white border-b border-t dark:bg-gray-800 dark:border-gray-700">
+                    <td class="hyphens-auto px-6 py-4 whitespace-nowrap">
+                        No signals yet.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

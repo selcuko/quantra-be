@@ -4,13 +4,14 @@ from typing import TYPE_CHECKING, Callable, Literal, Optional
 from django.utils import timezone
 
 if TYPE_CHECKING:
-    from quantapi.models import Order, MarketSymbol, MarketAccount
+    from quantapi.models import Order, MarketSymbol, MarketAccount, Market
     from liveloop import LiveLoop
+    from loopgroup import LoopGroup
 
 
 
 class IMarket:
-    WS_MAX_RETRIES = 30
+    WS_MAX_RETRIES = 3
     authenticated: bool
     testnet: bool
     name: str = 'AbstractMarket'
@@ -19,7 +20,8 @@ class IMarket:
     capital: float
     assets: dict[str, float]
     commission: dict[str, float]
-    market: 'MarketAccount'
+    account: 'MarketAccount'
+    market: 'Market'
     stop_websocket_stream:bool = False
 
     def __init__(self, config:dict, market:'MarketAccount'):
@@ -62,7 +64,7 @@ class IMarket:
         candle_mapped['price'] = (candle_mapped['open'] + candle_mapped['close'] + candle_mapped['high'] + candle_mapped['low']) / 4
         return candle_mapped
 
-    def init_match_engine(self, symbol:str, interval:str, callback:Callable, liveloop:'LiveLoop|None'):
+    def init_match_engine(self, symbol:str, interval:str, callback:Callable, liveloop:'LiveLoop|LoopGroup|None'):
         """Blocking (sync) function to initialize a match engine for given symbol and interval. Run in a thread!
 
         Args:
@@ -272,16 +274,16 @@ class IMarket:
     def cache_to_db(self, force=False):
         if not self.market:
             return
-        if self.market.last_cache and (timezone.now() - self.market.last_cache) < timedelta(minutes=5):
+        if self.account.last_cache and (timezone.now() - self.account.last_cache) < timedelta(minutes=5):
             if not force: 
                 return
         self.get_account()
-        self.market.capital = self.capital
-        self.market.assets = json.dumps(self.assets)
-        self.market.last_cache = timezone.now()
+        self.account.capital = self.capital
+        self.account.assets = json.dumps(self.assets)
+        self.account.last_cache = timezone.now()
         prices = self.get_current_prices(save=False)
         self.get_equity(save=False)
+        self.account.save()
+        self.market.prices = json.dumps(prices)
+        self.market.prices_updated = timezone.now()
         self.market.save()
-        self.market.market.prices = json.dumps(prices)
-        self.market.market.prices_updated = timezone.now()
-        self.market.market.save()

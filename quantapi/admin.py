@@ -145,6 +145,15 @@ class ComplexOrderAdmin(admin.ModelAdmin):
     raw_id_fields = ('session', 'market_order')
 
 
+class SessionGroupAdmin(admin.ModelAdmin):
+    list_display = ('symbol', 'status', 'created_at', 'updated_at', 'source')
+    list_filter = ('status', 'source')
+
+    def get_queryset(self, request: HttpRequest) -> QuerySet[Any]:
+        return SessionGroup.objects.prefetch_related('symbol', 'strategy', 'symbol__market')
+
+
+admin.site.register(SessionGroup, SessionGroupAdmin)
 admin.site.register(GlobalSymbol, GlobalSymbolAdmin)
 admin.site.register(Market, MarketAdmin)
 admin.site.register(MarketAccount, MarketAccountAdmin)

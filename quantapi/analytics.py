@@ -92,7 +92,10 @@ class SessionAnalytics:
         Calculate the percentage change in equity for the session.
 
         """
-        return (self.equity_delta / self.initial_value) * 100
+        try:
+            return (self.equity_delta / self.initial_value) * 100
+        except ZeroDivisionError:
+            return 0
 
     @property
     def capital_delta(self):

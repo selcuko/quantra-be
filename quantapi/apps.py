@@ -9,8 +9,8 @@ from ob_server import start_orderbook_server
 
 def continue_sessions():
     PURGE_THRESHOLD = 100
-    from quantapi.models import Session
-    sessions = list(Session.objects.filter(status=Session.Status.ONGOING))
+    from quantapi.models import Session, SessionGroup
+    sessions = list(Session.objects.filter(status=Session.Status.ONGOING, group__isnull=True))
     for session in sessions:
         try:
             if session.last_kline_timestamp:
@@ -31,6 +31,21 @@ def continue_sessions():
             session.details = repr(e)
             session.save()
             logger.critical(f'Failed to resume session {session} on startup.', exc_info=True, extra={'n_type': 'CRASH', 'subject': 'Failed to resume session on reboot', 'details': session.details})
+
+    groups = SessionGroup.objects.filter(status=SessionGroup.Status.ONGOING)
+    for group in groups:
+        if group.last_kline_dt and group.last_kline_dt < datetime.now(pytz.utc) - timedelta(minutes=interval_to_minutes(group.freq) * PURGE_THRESHOLD):
+            group.status = SessionGroup.Status.PURGED
+            group.save()
+            logger.critical(f'Group {group} was suspended for too long ({PURGE_THRESHOLD} candles), purged.', exc_info=True, extra={'n_type': 'LOG', 'subject': 'Purged group on reboot'})
+            continue
+        try:
+            group.resume()
+        except Exception as e:
+            group.status = SessionGroup.Status.ERROR
+            group.stopped_at = datetime.now(pytz.utc)
+            group.save()
+            logger.critical(f'Failed to resume group {group} on startup.', exc_info=True, extra={'n_type': 'CRASH', 'subject': 'Failed to resume group on reboot'})
 
     from watchdog import watchdog_loop
     threading.Thread(target=watchdog_loop, daemon=True).start()

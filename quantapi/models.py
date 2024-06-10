@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import os
 from tabnanny import verbose
@@ -77,12 +77,15 @@ class Market(models.Model):
         return self.exchange_name
 
 
+def three_months_later():
+    return datetime.now(pytz.utc) + timedelta(days=90)
+
 class MarketCredentials(models.Model):
     market     = models.ForeignKey(Market, on_delete=models.PROTECT, related_name='credentials')
     encrypted  = models.TextField(help_text='Encrypted credentials. This field is encrypted automatically if it contains valid JSON data.')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    expires_at = models.DateTimeField()
+    expires_at = models.DateTimeField(default=three_months_later)
     owner      = models.CharField(max_length=30)
     internal   = models.BooleanField(default=False, help_text='Owned by a team member')
     active     = models.BooleanField(default=True, help_text='Account can be used for trading')
@@ -139,7 +142,9 @@ class MarketAccount(models.Model):
     @property
     def available_capital(self):
         assets = json.loads(self.assets or '{}')
-        return self.equity - assets.get('USDT', 0)
+        if not self.capital:
+            return None
+        return self.capital
 
     @property
     def owner(self):
@@ -216,6 +221,7 @@ class MarketSymbol(models.Model):
         return self.market.filters(self)
 
 
+
 class Session(models.Model):
     class CandleSource(models.TextChoices):
         TRADE = 'TRADE', 'Trade'
@@ -232,6 +238,7 @@ class Session(models.Model):
         ERROR      = 'ERROR',      'Error'
         PURGED     = 'PURGED',     'Purged'
         PAUSED     = 'PAUSED',     'Paused'
+        PLANNED    = 'PLANNED',    'Planned'
         TERMINATED = 'TERMINATED', 'Terminated'
     class Freq(models.TextChoices):
         MIN1  = '1 min',  '1 minute'
@@ -250,6 +257,7 @@ class Session(models.Model):
     session_type = models.CharField(max_length=30, choices=Type.choices)
     freq = models.CharField(max_length=30)
     account = models.ForeignKey(MarketAccount, on_delete=models.PROTECT, related_name='sessions', null=True)
+    group = models.ForeignKey('SessionGroup', on_delete=models.PROTECT, related_name='sessions', null=True, blank=True)
     started = models.DateTimeField(auto_now_add=True)
     ended = models.DateTimeField(null=True, blank=True)
     symbol = models.ForeignKey(MarketSymbol, on_delete=models.PROTECT, related_name='sessions')
@@ -277,6 +285,10 @@ class Session(models.Model):
     initiated_at = models.DateTimeField(auto_now_add=True)
     orders: models.QuerySet['Order']
 
+    @property
+    def equity(self):
+        return self.capital + (self.assets * self.last_price if self.last_price else 0)
+
     def save(self, *args, **kwargs):
         if not self.account:
             raise ValueError('Session must have at least an account before saving.')
@@ -299,6 +311,8 @@ class Session(models.Model):
 
     def resume(self):
         """Resume an interrupted session."""
+        if self.group:
+            raise ValueError('Cannot resume a session that belongs to a group, try resuming the SessionGroup instead')
         if not self.status == Session.Status.ONGOING:
             raise ValueError(f'Session status should be ONGOING to resume, not {self.status}')
         if not self.pk:
@@ -353,6 +367,85 @@ class Session(models.Model):
         if save: self.save()
 
 
+class SessionGroup(models.Model):
+    class Status(models.TextChoices):
+        PLANNED = 'PLANNED', 'Planned'
+        ONGOING = 'ONGOING', 'Ongoing'
+        COMPLETED = 'COMPLETED', 'Completed'
+        ERROR = 'ERROR', 'Error'
+        PAUSED = 'PAUSED', 'Paused'
+        PURGED = 'PURGED', 'Purged'
+
+    symbol = models.ForeignKey(MarketSymbol, on_delete=models.PROTECT, related_name='groups')
+    market = models.ForeignKey(Market, on_delete=models.PROTECT, related_name='groups')
+    sessions: models.QuerySet['Session']
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    stopped_at = models.DateTimeField(null=True, blank=True)
+    strategy = models.ForeignKey('Strategy', on_delete=models.PROTECT, related_name='groups')
+    status = models.CharField(max_length=30, choices=Status.choices, default=Status.PLANNED)
+    last_kline_dt = models.DateTimeField(null=True, blank=True, verbose_name='Last candle timestamp')
+    last_price = models.FloatField(null=True, blank=True, verbose_name='Last price')
+    thread_id = models.BigIntegerField(null=True, blank=True, verbose_name='Thread ID')
+    buy_enabled = models.BooleanField(default=True)
+    sell_enabled = models.BooleanField(default=True)
+    source = models.CharField(max_length=30, choices=Session.CandleSource.choices, default=Session.CandleSource.TRADE)
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            sessions = self.sessions.all()
+            for session in sessions:
+                if session.symbol != self.symbol or (session.strategy and session.strategy != self.strategy):
+                    raise ValueError('All sessions in a group should have the same symbol and strategy.')
+        super().save(*args, **kwargs)
+    
+    @property
+    def capital(self):
+        return sum([session.capital for session in self.sessions.all()])
+    
+    @property
+    def assets(self):
+        return sum([session.assets for session in self.sessions.all()])
+    
+    @property
+    def freq(self):
+        sess = self.sessions.first()
+        if sess:
+            return sess.freq
+        raise ValueError('No sessions in this group')
+    
+    @property
+    def equity(self):
+        return sum([session.equity for session in self.sessions.all()])
+
+    @property
+    def thread(self):
+        threads = threading.enumerate()
+        for thread in threads:
+            if thread.ident == self.thread_id and thread.is_alive():
+                return thread
+
+    def resume(self):
+        if not self.status == SessionGroup.Status.ONGOING:
+            raise ValueError(f'SessionGroup status should be ONGOING to resume, not {self.status}')
+        if not self.pk:
+            raise ValueError('SessionGroup must be saved before resuming')
+        if not self.strategy:
+            raise ValueError('SessionGroup must have a strategy to resume')
+        from loopgroup import LoopGroup
+        loop = LoopGroup(group=self, freq=self.freq)
+        try:
+            loop.run(source=self.source)
+        except Exception as e:
+            raise SessionCannotContinue(f'Failed to resume group {self} due to {e!r}')
+        return loop
+
+
+class SessionCannotContinue(Exception):
+    pass
+
+
 class Strategy(models.Model):
     name = models.CharField(max_length=30)
     technical_name = models.CharField(max_length=30, null=True, blank=True)
@@ -372,19 +465,45 @@ class Signal(models.Model):
     class Side(models.TextChoices):
         BUY = 'BUY'
         SELL = 'SELL'
-    session = models.ForeignKey(Session, on_delete=models.PROTECT, related_name='signals')
+    session = models.ForeignKey(Session, on_delete=models.PROTECT, related_name='signals', null=True, blank=True)
+    group = models.ForeignKey(SessionGroup, on_delete=models.PROTECT, related_name='signals', null=True, blank=True)
     timestamp = models.DateTimeField()
     side = models.CharField(max_length=30, choices=Side.choices)
     price = models.FloatField()
     raw = models.CharField(max_length=512)
-    order: Optional[models.OneToOneField['Order']]
+    orders: models.QuerySet['Order']
+
+    def save(self, *args, **kwargs):
+        if not self.group and not self.session:
+            raise ValueError('Signal must belong to a Session or a SessionGroup.')
+        return super().save(*args, **kwargs)
 
     def __str__(self) -> str:
-        return f'{self.side} {self.session.symbol.name} {self.price}'
+        return f'{self.side} {self.symbol} {self.price}'
     
     @property
     def symbol(self):
-        return self.session.symbol
+        return self.session.symbol if self.session else self.group.symbol if self.group else None
+
+    @property
+    def cum_order(self):
+        orders = self.orders.all()
+        all_filled = all([order.status == Order.Status.FILLED for order in orders])
+        return Order(
+            price=self.price,
+            oid='cumulative',
+            client_oid='cumulative',
+            deal_size=sum([order.deal_size for order in orders if order.deal_size]),
+            deal_funds=sum([order.deal_funds for order in orders if order.deal_funds]),
+            funds=sum([order.funds for order in orders if order.funds]),
+            order_type=Order.Type.MARKET,
+            signal=self,
+            created_at=self.timestamp,
+            status=Order.Status.FILLED if all_filled else Order.Status.OPEN,
+            side=self.side,
+            symbol=self.symbol,
+        )
+
 
 
 class Order(models.Model):
@@ -411,7 +530,7 @@ class Order(models.Model):
     deal_funds = models.FloatField(help_text='Amount of base currency in this order (e.g. USDT)', null=True, blank=True)
     funds = models.FloatField(help_text='Amount of base currency of this order initially placed with', null=True, blank=True)
     order_type = models.CharField(max_length=30, choices=Type.choices, default=Type.MARKET)
-    signal = models.OneToOneField(Signal, on_delete=models.PROTECT, related_name='order', null=True, blank=True)
+    signal = models.ForeignKey(Signal, on_delete=models.PROTECT, related_name='orders', null=True, blank=True)
     market_timestamp = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=30, choices=Status.choices)
     force = models.BooleanField(default=False)
@@ -730,7 +849,7 @@ class GlobalSymbol(models.Model):
                 self.save()
 
     def mainnet_symbols(self):
-        return MarketSymbol.objects.all()
+        return MarketSymbol.objects.filter(symbol=self)
 
     @property
     def tags_display(self):
