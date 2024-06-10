@@ -48,15 +48,15 @@ class LoopGroup:
     def __init__(
             self,
             group: SessionGroup,
-            freq: str = '15 min',
+            freq: Optional[str]=None,
             strategy: Optional[Strategy]=None,
     ) -> None:
         self.group = group
         self.symbol = group.symbol
         self.market = group.market
         self.strategy = strategy
-        self.freq = freq
-        self.loop_interval_s = interval_to_minutes(freq) * 60
+        self.freq = freq or group.freq
+        self.loop_interval_s = interval_to_minutes(self.freq) * 60
 
         self.thread: Optional[Thread] = None
         self.died = []
@@ -76,10 +76,7 @@ class LoopGroup:
         for a in self.accounts:
             if not a:
                 continue
-            try:
-                self.interfaces[a] = a.get_interface()
-            except:
-                continue
+            self.interfaces[a] = a.get_interface()
         self.interface = None
         cache.set(f'sessiongroup_{group.pk}', self)
         logger.info(
@@ -167,7 +164,7 @@ class LoopGroup:
         Session.objects.bulk_update(self.sessions, fields=['status', 'ended'])
         raise CriticalFailure('This SessionGroup encountered a fatal error and cannot continue running.')
 
-    
+
     def stop(self):
         self.will_stop = True
         self.group.status = SessionGroup.Status.PAUSED
@@ -188,7 +185,7 @@ class LoopGroup:
             extra={'group': self, 'subject': 'LoopGroup started.'}
         )
         if threaded:
-            Thread(target=self.run, name='LoopGroupPrepper', kwargs={'threaded':False, **kwargs}).start()
+            Thread(target=self.run, name='LoopGroupPrepper', kwargs={'threaded':False, **kwargs}, daemon=True).start()
             return
         self.will_stop = False
 
@@ -208,7 +205,7 @@ class LoopGroup:
         source = kwargs.get('source', self.group.source).lower()
         if source == 'trade':
             thread_name = f'LoopGroup-MatchEngine-{self.symbol.name}'
-            self.thread = Thread(target=self.run_match_engine, name=thread_name)
+            self.thread = Thread(target=self.run_match_engine, name=thread_name, daemon=True)
         else:
             raise ValueError(f'Invalid source for LoopGroup (source={source}).')
         self.thread.start()

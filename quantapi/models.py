@@ -137,7 +137,7 @@ class MarketAccount(models.Model):
     
     def get_interface(self):
         from markets import get_market
-        return get_market(self.market.exchange_name, self.credentials.decrypted, self)
+        return get_market(self.market.exchange_name, self.credentials.decrypted, self.market)
 
     @property
     def available_capital(self):
@@ -256,7 +256,7 @@ class Session(models.Model):
 
     session_type = models.CharField(max_length=30, choices=Type.choices)
     freq = models.CharField(max_length=30)
-    account = models.ForeignKey(MarketAccount, on_delete=models.PROTECT, related_name='sessions', null=True)
+    account = models.ForeignKey(MarketAccount, on_delete=models.PROTECT, related_name='sessions')
     group = models.ForeignKey('SessionGroup', on_delete=models.PROTECT, related_name='sessions', null=True, blank=True)
     started = models.DateTimeField(auto_now_add=True)
     ended = models.DateTimeField(null=True, blank=True)
@@ -391,30 +391,25 @@ class SessionGroup(models.Model):
     buy_enabled = models.BooleanField(default=True)
     sell_enabled = models.BooleanField(default=True)
     source = models.CharField(max_length=30, choices=Session.CandleSource.choices, default=Session.CandleSource.TRADE)
+    freq = models.CharField(max_length=30, choices=Session.Freq.choices, default=Session.Freq.MIN15)
 
     def save(self, *args, **kwargs):
         if self.pk:
             sessions = self.sessions.all()
             for session in sessions:
                 if session.symbol != self.symbol or (session.strategy and session.strategy != self.strategy):
+                    print(self.symbol, session.symbol, self.strategy, session.strategy)
                     raise ValueError('All sessions in a group should have the same symbol and strategy.')
         super().save(*args, **kwargs)
-    
+
     @property
     def capital(self):
         return sum([session.capital for session in self.sessions.all()])
-    
+
     @property
     def assets(self):
         return sum([session.assets for session in self.sessions.all()])
-    
-    @property
-    def freq(self):
-        sess = self.sessions.first()
-        if sess:
-            return sess.freq
-        raise ValueError('No sessions in this group')
-    
+
     @property
     def equity(self):
         return sum([session.equity for session in self.sessions.all()])
@@ -440,6 +435,28 @@ class SessionGroup(models.Model):
         except Exception as e:
             raise SessionCannotContinue(f'Failed to resume group {self} due to {e!r}')
         return loop
+    
+    def add_account(self, account:MarketAccount):
+        if not self.pk:
+            raise ValueError('SessionGroup must be saved before adding accounts.')
+        if account.market != self.market:
+            raise ValueError(f'Account should be for the same market as the group (account.market={account.market}, group.market={self.market}).')
+        for session in self.sessions.all():
+            if session.account == account:
+                return
+        session = Session.objects.create(
+            group=self,
+            freq=self.freq,
+            account=account,
+            symbol=self.symbol,
+            strategy=self.strategy,
+            status=self.status,
+            initial_capital=0,
+            initial_assets=0,
+            capital=0,
+            assets=0,
+        )
+        return session
 
 
 class SessionCannotContinue(Exception):

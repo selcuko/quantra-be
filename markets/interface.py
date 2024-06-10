@@ -27,7 +27,8 @@ class IMarket:
     def __init__(self, config:dict, market:'MarketAccount'):
         """Initialize a market instance with config if provided."""
         self.config = config
-        self.market = market
+        self.account = market
+        self.market = self.account.market
         raise NotImplementedError
     
     def json(self) -> dict:
