@@ -137,7 +137,7 @@ class MarketAccount(models.Model):
     
     def get_interface(self):
         from markets import get_market
-        return get_market(self.market.exchange_name, self.credentials.decrypted, self.market)
+        return get_market(self.market.exchange_name, self.credentials.decrypted, self)
 
     @property
     def available_capital(self):

@@ -39,9 +39,47 @@ class IMarket:
         """
         raise NotImplementedError(f'{self.name} does not implement json()')
 
-    @staticmethod
-    def format_match(payload:dict) -> dict:
-        raise NotImplementedError(f'AbstractMarket does not implement format_match()')
+    def format_match(self, data:dict) -> dict:
+        raise NotImplementedError(f'{self.name} does not implement format_match()')
+    
+    def format_orderbook_snapshot(self, orderbook:dict) -> dict:
+        raise NotImplementedError(f'{self.name} does not implement format_orderbook_snapshot()')
+    
+    def format_orderbook_update(self, orderbook:dict) -> dict:
+        raise NotImplementedError(f'{self.name} does not implement format_orderbook_update()')
+    
+    def format_symbol(self, name:str) -> str:
+        """Format symbol to market specific format
+
+        Args:
+            name (str): symbol name
+
+        Returns:
+            str: market specific symbol
+        """
+        raise NotImplementedError(f'{self.name} does not implement format_symbol()')
+    
+    def format_timestamp(self, ts:datetime) -> str:
+        """Format timestamp to market specific format
+
+        Args:
+            timestamp (datetime): timestamp
+
+        Returns:
+            int: market specific timestamp
+        """
+        raise NotImplementedError(f'{self.name} does not implement format_timestamp()')
+
+    def format_interval(self, interval:str) -> str:
+        """Format interval to market specific format
+
+        Args:
+            interval (str): in "1 min" format
+
+        Returns:
+            str: market specific interval
+        """
+        raise NotImplementedError(f'{self.name} does not implement format_interval()')
 
     @staticmethod
     def format_candle(candle:list) -> dict:

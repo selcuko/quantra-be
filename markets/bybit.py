@@ -240,7 +240,6 @@ class BybitMarket(IMarket):
         engine = MatchEngine(interval, callback)
         retries = 30
         while not self.stop_websocket_stream and not (liveloop and liveloop.should_stop()):
-            print('LL will stop', liveloop.should_stop())
             if last_ping - timezone.now() > timedelta(seconds=30):
                 ws.send(json.dumps({'op': 'ping'}))
                 last_ping = timezone.now()
@@ -347,7 +346,7 @@ class BybitMarket(IMarket):
     def format_orderbook(self, data:dict) -> dict:
         if (data.get('seq') or 0) <= self.orderbook_seq:
             print('Ignoring orderbook update, seq:', data['seq'], 'current:', self.orderbook_seq)
-            return { 'bids' : [], 'asks': [] }
+            return { 'bids': [], 'asks': [] }
         return {
             'bids': [ { 'price': Decimal(bid[0]), 'size': Decimal(bid[1]), 'count': 1 } for bid in data['b'] ],
             'asks': [ { 'price': Decimal(ask[0]), 'size': Decimal(ask[1]), 'count': 1 } for ask in data['a'] ]

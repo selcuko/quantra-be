@@ -475,7 +475,7 @@ class OKXMarket(IMarket):
         }
         return candle
 
-    def format_match(self, data:dict):
+    def format_match(self, data:dict) -> dict:
         return {
             'time': self.standardize_timestamp(data['ts']),
             'price': float(data['px']),

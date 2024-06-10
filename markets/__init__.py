@@ -8,10 +8,10 @@ from markets.gateio import GateIOMarket
 
 import typing
 if typing.TYPE_CHECKING:
-    from quantapi.models import Market as DBMarket
+    from quantapi.models import MarketAccount
 
 
-def get_market(market_name, config=None, market:'DBMarket|None'=None) -> 'IMarket':
+def get_market(market_name, config=None, account:'MarketAccount|None'=None) -> 'IMarket':
     market_map = { 
         'binance': BinanceMarket,
         'kucoin': KucoinMarket,
@@ -24,7 +24,7 @@ def get_market(market_name, config=None, market:'DBMarket|None'=None) -> 'IMarke
         config = {}
     market_name = market_name.lower()
     if market_name in market_map:
-        market_instance:IMarket = market_map[market_name](config, market)
+        market_instance:IMarket = market_map[market_name](config, account)
         market_instance.cache_to_db()
         return market_instance
     else:

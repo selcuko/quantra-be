@@ -23,7 +23,7 @@
       required>
       <option value="" disabled selected>Select a strategy</option>
       {% for strategy in strategies %}
-      <option value="{{ strategy.name }}"> {{ strategy.name }} {{ strategy.version }} ({{ strategy.technical_name }}) </option>
+      <option value="{{ strategy.code }}"> {{ strategy.name }} {{ strategy.version }} ({{ strategy.technical_name }}) </option>
       {% endfor %}
     </select>
     <label for="market">Market</label>
