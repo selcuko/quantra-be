@@ -26,7 +26,7 @@ SYMKEY = b'REDACTED'
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
-ENVIRONMENT = os.environ.get('ENVIRONMENT', 'dev')
+ENVIRONMENT = os.environ.get('ENVIRONMENT', 'local')
 
 ALLOWED_HOSTS = ['*']
 CSRF_TRUSTED_ORIGINS = ['https://example.org', 'https://example.com']
@@ -100,7 +100,7 @@ WSGI_APPLICATION = 'quant.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
-QUANTDEV_RDS = {
+RDS = {
         'ENGINE': 'django.db.backends.postgresql_psycopg2',
         'NAME': os.environ.get('DATABASE_NAME', 'quantdev'),
         'USER': 'postgres',
@@ -112,7 +112,7 @@ SQLITE = {
             'ENGINE': 'django.db.backends.sqlite3',
             'NAME': BASE_DIR / 'db.sqlite3',
         }
-default_db = QUANTDEV_RDS if ENVIRONMENT == 'prod' else SQLITE
+default_db = SQLITE if ENVIRONMENT == 'local' else RDS
 
 DATABASES = {
     'default': default_db
