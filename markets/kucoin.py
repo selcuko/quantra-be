@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Literal
 if typing.TYPE_CHECKING:
-    from quantapi.models import Session, MarketSymbol, Order, Market as MarketModel
+    from quantapi.models import MarketSymbol, Order, MarketAccount
     from liveloop import LiveLoop
     
 
@@ -26,9 +26,9 @@ from websockets.sync.client import ClientConnection
 
 
 class KucoinMarket(IMarket):
-    name = 'KUCOIN'
+    name = 'KuCoin'
     
-    def __init__(self, config=None, market=None) -> None:
+    def __init__(self, config:dict, account:'MarketAccount') -> None:
         from quantapi.models import Market as MarketModel
         if not config:
             config = {}
@@ -37,7 +37,8 @@ class KucoinMarket(IMarket):
         self.spot_trading_enabled = False
         self.capital = 0
         self.assets = {}
-        self.market = market or MarketModel.objects.filter(exchange_name=self.name).first()
+        self.account = account
+        self.market = self.account.market
         self.commission = {}
         
         try:
@@ -59,16 +60,13 @@ class KucoinMarket(IMarket):
         except:
             logger.fatal(f'Error while initializing {self.name}', exc_info=True)
             raise
-        
+
         self.symbols = self.get_symbols()
-        
+
         if self.authenticated:
             self.get_account()
-        
+
         self.stop_websocket_stream = False
-    
-    def __str__(self) -> str:
-        return f'{self.name} (Authenticated: {self.authenticated})'
 
     def get_websocket_token(self) -> str:
         uri = 'https://api.kucoin.com/api/v1/bullet-public'
@@ -79,7 +77,7 @@ class KucoinMarket(IMarket):
         if not token:
             raise ValueError(f'Error while getting websocket token for {self.name}: {response.json()}')
         return token
-    
+
     def format_ws_candle(self, candle:dict) -> dict:      
         return {
             'time': candle['start'].astimezone(pytz.UTC),
@@ -223,14 +221,6 @@ class KucoinMarket(IMarket):
             self.symbols = self.get_symbols()
         return symbol in self.symbols
 
-    def json(self) -> dict:
-        return {
-            'name': self.name,
-            'authenticated': self.authenticated,
-            'testnet': self.testnet,
-            'spot_trading_enabled': self.spot_trading_enabled,
-        }
-    
     def _standardize_klines(self, klines:list) -> list[list]:
         try:
             klines.reverse()
@@ -632,10 +622,10 @@ class KucoinMarket(IMarket):
     def get_equity(self, save=True) -> float:
         prices = self.get_current_prices(save=False)
         equity = self.capital + sum([ self.assets.get(asset, 0) * prices.get(asset+'-USDT', 0) for asset in self.assets ])
-        if self.market and self.market.equity != equity:
-            self.market.equity = equity
+        if self.account and self.account.equity != equity:
+            self.account.equity = equity
             if save:
-                self.market.save()
+                self.account.save()
         return equity
     
     def orderbook_snapshot(self, symbol:'MarketSymbol|str'):

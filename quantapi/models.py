@@ -292,6 +292,8 @@ class Session(models.Model):
     def save(self, *args, **kwargs):
         if not self.account:
             raise ValueError('Session must have at least an account before saving.')
+        if self.group and self.symbol.market != self.group.market:
+            raise ValueError('Session market should be the same as the group market.')
         super().save(*args, **kwargs)
 
     def __str__(self):

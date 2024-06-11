@@ -21,7 +21,7 @@ from match import MatchEngine
 from models import interval_to_minutes
 
 if typing.TYPE_CHECKING:
-    from quantapi.models import MarketSymbol, Order, Session, Market
+    from quantapi.models import MarketSymbol, Order, MarketAccount
     from liveloop import LiveLoop
 
 
@@ -30,9 +30,9 @@ from websockets.sync.client import connect
 
 
 class BinanceMarket(IMarket):
-    name = 'BINANCE'
+    name = 'Binance'
 
-    def __init__(self, config, market:'Market', retries=0):
+    def __init__(self, config, account:'MarketAccount'):
         if config is None:
             config = {}
         self.authenticated = bool(config.get('API_KEY') and config.get('API_SECRET'))
@@ -41,44 +41,20 @@ class BinanceMarket(IMarket):
         self.capital = 0
         self.assets = {}
         self.commission = {}
-        self.market = market
+        self.account = account
+        self.market = self.account.market
         self.stop_websocket_stream = False
-        max_init_retry = 3
-        try:
-            if self.authenticated:
-                self.testnet = config.get('TESTNET', False)
-                self.client = Client(
-                    api_key=config['API_KEY'],
-                    api_secret=config['API_SECRET'],
-                    testnet=self.testnet)
-            else:
-                self.client = Client()
-        except Exception as e:
-            if retries < max_init_retry:
-                retries += 1
-                time.sleep(1)
-                self.__init__(config, market)
-                return
-            logger.fatal(f'Error while initializing {self.name}', exc_info=True)
-            raise MarketAPIError(f'Cannot initialize {self.name} (tried {retries}) times).') from e
+        if self.authenticated:
+            self.testnet = config.get('TESTNET', False)
+            self.client = Client(
+                api_key=config['API_KEY'],
+                api_secret=config['API_SECRET'],
+                testnet=self.testnet)
+        else:
+            self.client = Client()
         self.symbols = self.get_symbols()
         if self.authenticated:
             self.get_account()
-        
-        if self.market.key_expiry_date and self.market.key_expiry_date - timezone.now() < timedelta(days=7):
-            logger.warning(f'API key for {self.market.exchange_name}:{self.market.pk} is expiring soon ({self.market.key_expiry_date})',
-                           extra={'type': 'MARKET', 'market': self.market})
-
-    def __str__(self) -> str:
-        return f'{self.name} ({"Mainnet" if not self.testnet else "Testnet"})'
-
-    def json(self) -> dict:
-        return {
-            'name': self.name,
-            'authenticated': self.authenticated,
-            'testnet': self.testnet,
-            'spot_trading_enabled': self.spot_trading_enabled,
-        }
 
     def get_websocket_uri(self, symbol:'MarketSymbol|str', interval:str) -> str:
         if isinstance(symbol, str):
@@ -525,8 +501,8 @@ class BinanceMarket(IMarket):
         if not prices:
             prices = json.loads(self.market.prices or '{}')
         equity = self.capital + sum([ self.assets.get(asset, 0) * prices.get(asset+'-USDT', 0) for asset in self.assets ])
-        if self.market and self.market.equity != equity:
-            self.market.equity = equity
+        if self.account and self.account.equity != equity:
+            self.account.equity = equity
             if save:
-                self.market.save()
+                self.account.save()
         return equity

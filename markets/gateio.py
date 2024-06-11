@@ -18,14 +18,14 @@ from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
 from match import MatchEngine
 from models import interval_to_minutes
 if typing.TYPE_CHECKING:
-    from quantapi.models import Market, MarketSymbol, Order
+    from quantapi.models import MarketAccount, MarketSymbol, Order
     from liveloop import LiveLoop
 
 
 class GateIOMarket(IMarket):
     name = 'Gate.io'
 
-    def __init__(self, config: dict, market: 'Market'):
+    def __init__(self, config: dict, account: 'MarketAccount'):
         self.url = 'https://api.gateio.ws'
         self.api_key = config['API_KEY']
         self.api_secret = config['API_SECRET']
@@ -36,7 +36,8 @@ class GateIOMarket(IMarket):
             'Content-Type': 'application/json'
         })
 
-        self.market = market
+        self.account = account
+        self.market = self.account.market
         self.spot_trading_enabled = True
         self.capital = 0
         self.symbols = {}
@@ -47,18 +48,6 @@ class GateIOMarket(IMarket):
 
         self.get_account()
         self.get_symbols()
-        self.get_current_prices()
-
-    def __str__(self) -> str:
-        return f'{self.name} ({"Mainnet" if not self.testnet else "Testnet"})'
-
-    def json(self) -> dict:
-        return {
-            'name': self.name,
-            'authenticated': self.authenticated,
-            'testnet': False,
-            'spot_trading_enabled': self.spot_trading_enabled,
-        }
 
     def sign(self, payload:dict, path:str, method:str='GET') -> str:
         if not payload:
@@ -86,11 +75,11 @@ class GateIOMarket(IMarket):
         for symbol in data:
             self.assets[symbol['currency']] = float(symbol['available'])
         self.capital = self.assets.get('USDT', 0)
-        if self.market:
-            self.market.usdt = self.capital
-            self.market.assets = json.dumps(self.assets)
+        if self.account:
+            self.account.capital = self.capital
+            self.account.assets = json.dumps(self.assets)
             if save:
-                self.market.save()
+                self.account.save()
 
     def get_symbols(self):
         path = '/api/v4/spot/currency_pairs'
@@ -370,10 +359,10 @@ class GateIOMarket(IMarket):
         if not prices:
             prices = json.loads(self.market.prices or '{}')
         equity = self.capital + sum([ self.assets.get(asset, 0) * prices.get(asset+'-USDT', 0) for asset in self.assets ])
-        if self.market and self.market.equity != equity:
-            self.market.equity = equity
+        if self.account and self.account.equity != equity:
+            self.account.equity = equity
             if save:
-                self.market.save()
+                self.account.save()
         return equity
 
     def prep_order(self, order:dict) -> 'Order':

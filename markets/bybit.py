@@ -17,12 +17,12 @@ from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
 from match import MatchEngine
 from models import interval_to_minutes
 if typing.TYPE_CHECKING:
-    from quantapi.models import Market, MarketSymbol, Order, MarketAccount
+    from quantapi.models import MarketSymbol, Order, MarketAccount
     from liveloop import LiveLoop
 
 
 class BybitMarket(IMarket):
-    name = 'BYBIT'
+    name = 'Bybit'
 
     def __init__(self, config: dict, market: 'MarketAccount'):
         self.url = 'https://api.bybit.com'
@@ -49,19 +49,7 @@ class BybitMarket(IMarket):
 
         self.get_account()
         self.get_symbols()
-        self.get_current_prices()
         self.orderbook_seq = 0
-
-    def __str__(self) -> str:
-        return f'{self.name} ({"Mainnet" if not self.testnet else "Testnet"})'
-
-    def json(self) -> dict:
-        return {
-            'name': self.name,
-            'authenticated': self.authenticated,
-            'testnet': False,
-            'spot_trading_enabled': self.spot_trading_enabled,
-        }
 
     def sign(self, payload:dict, method:str='GET') -> str:
         if not payload:
