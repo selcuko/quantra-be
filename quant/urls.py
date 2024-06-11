@@ -2,7 +2,7 @@ from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path
 from django.conf.urls.static import static
-from quantapi.views import BacktestInitView, BacktestResultView, CoinScanView, FavoritesView, HomeView, MarketDetailView, MarketListView, NotificationDetailView, NotificationsView, OrderBookView, OrderManagementView, PriceView, RunningThreadsView, SessionGroupDetailView, SessionGroupInitView, \
+from quantapi.views import BacktestInitView, BacktestResultView, CoinScanView, FavoritesView, HomeView, MarketDetailView, MarketListView, NotificationDetailView, NotificationsView, OrderBookView, OrderManagementView, PriceView, RunningThreadsView, SessionGroupDetailView, SessionGroupInitView, SessionGroupListView, \
     SessionInitView, SessionListView, SessionUpdateView,SessionDetailView, SymbolView, WatchdogView
 
 urlpatterns = [
@@ -16,6 +16,7 @@ urlpatterns = [
     path('session/<int:pk>/pause/', SessionUpdateView.pause, name='session-pause'),
     path('session/<int:pk>/resume/', SessionUpdateView.resume, name='session-resume'),
     path('session/<int:pk>/update/', SessionUpdateView.as_view(), name='session-update'),
+    path('sessiongroups/', SessionGroupListView.as_view(), name='sessiongroup-list'),
     path('sessiongroup/init/', SessionGroupInitView.as_view(), name='sessiongroup-init'),
     path('sessiongroup/<int:pk>/', SessionGroupDetailView.as_view(), name='sessiongroup-detail'),
     path('sessiongroup/<int:pk>/init/', SessionGroupDetailView.init, name='sessiongroup-detail-init'),

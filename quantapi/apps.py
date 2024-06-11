@@ -37,6 +37,9 @@ def continue_sessions():
         if group.last_kline_dt and group.last_kline_dt < datetime.now(pytz.utc) - timedelta(minutes=interval_to_minutes(group.freq) * PURGE_THRESHOLD):
             group.status = SessionGroup.Status.PURGED
             group.save()
+            for session in group.sessions.all():
+                session.status = Session.Status.PURGED
+            Session.objects.bulk_update(group.sessions.all(), ['status'])
             logger.critical(f'Group {group} was suspended for too long ({PURGE_THRESHOLD} candles), purged.', exc_info=True, extra={'n_type': 'LOG', 'subject': 'Purged group on reboot'})
             continue
         try:

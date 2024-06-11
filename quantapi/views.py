@@ -72,12 +72,12 @@ class SessionDetailView(View):
 class SessionListView(View):
     def get(self, request, query=None):
         if query is None:
-            query = Session.objects.all().prefetch_related('symbol', 'symbol__market')
-        query = query.order_by('-started')
+            query = Session.objects.filter(group__isnull=True).prefetch_related('symbol', 'symbol__market')
+        query = query.filter(group__isnull=True).order_by('-started')
         paginator = Paginator(query, 20)
         page_number = request.GET.get('page')
         page = paginator.get_page(page_number)
-        markets = MarketAccount.objects.filter(credentials__active=True).order_by('market__exchange_name')
+        markets = Market.objects.filter(credentials__active=True).order_by('exchange_name').distinct()
         return render(request, 'session-list.html', {
             'sessions': page, 
             'markets': markets,
@@ -401,6 +401,12 @@ class SessionGroupDetailView(View):
         group.status = SessionGroup.Status.COMPLETED
         group.save()
         return redirect('sessiongroup-detail', pk=group.pk)
+
+
+class SessionGroupListView(View):
+    def get(self, request):
+        groups = SessionGroup.objects.all()
+        return render(request, 'sessiongroup-list.html', {'groups': groups})
 
 
 class MarketListView(View):

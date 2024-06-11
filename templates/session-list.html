@@ -106,7 +106,9 @@
                         </li>
                     </ul>
                 </div>
+                <a class="m-2 hover:underline" href="{% url 'sessiongroup-list' %}">See SessionGroups</a>
             </div>
+            
             <label for="table-search" class="sr-only">Search</label>
             <div class="relative">
                 <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
@@ -192,7 +194,6 @@
                 </td>
                 {% endif %}
             </tr>
-            </a>
             {% empty %}
             <tr class="bg-white border-b border-t dark:bg-gray-800 dark:border-gray-700">
                 <td class="hyphens-auto px-6 py-4 whitespace-nowrap">
