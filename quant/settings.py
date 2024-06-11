@@ -29,7 +29,7 @@ DEBUG = True
 ENVIRONMENT = os.environ.get('ENVIRONMENT', 'local')
 
 ALLOWED_HOSTS = ['*']
-CSRF_TRUSTED_ORIGINS = ['https://example.org', 'https://example.com']
+CSRF_TRUSTED_ORIGINS = ['https://example.org', 'https://example.com', 'https://dev.example.com']
 WHITELISTED_DEFAULT_EMAILS = ['user@example.com', 'user2@example.com']
 
 # Application definition

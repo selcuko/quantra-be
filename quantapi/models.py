@@ -99,9 +99,9 @@ class MarketCredentials(models.Model):
     def save(self, *args, **kwargs):
         if self.encrypted:
             try:
-                data = json.loads(self.encrypted)
+                data = json.dumps(json.loads(self.encrypted))
                 fernet = Fernet(settings.SYMKEY)
-                self.encrypted = fernet.encrypt(data.dumps().encode()).decode()
+                self.encrypted = fernet.encrypt(data.encode()).decode()
             except:
                 pass
         create_market_account = not bool(self.pk)

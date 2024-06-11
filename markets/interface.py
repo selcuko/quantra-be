@@ -31,13 +31,20 @@ class IMarket:
         self.market = self.account.market
         raise NotImplementedError
     
+    def __str__(self) -> str:
+        return f'{self.name} Interface <{self.account.owner}>'
+
     def json(self) -> dict:
         """Return a dict/JSON for this instance. Serialization done whenever necessary.
 
         Returns:
             dict: dict representing this market instance
         """
-        raise NotImplementedError(f'{self.name} does not implement json()')
+        return {
+            'name': self.name,
+            'owner': self.account.owner,
+            'exchange': self.market.exchange_name,
+        }
 
     def format_match(self, data:dict) -> dict:
         raise NotImplementedError(f'{self.name} does not implement format_match()')

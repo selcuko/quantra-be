@@ -24,14 +24,14 @@ from websockets.sync.client import connect
 from websockets.sync.client import ClientConnection
 from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
 if typing.TYPE_CHECKING:
-    from quantapi.models import Market, Order, MarketSymbol
+    from quantapi.models import MarketAccount, Order, MarketSymbol
     from liveloop import LiveLoop
 
 
 class MEXCMarket(IMarket):
     name = 'MEXC'
 
-    def __init__(self, config, market) -> None:
+    def __init__(self, config: dict, account: 'MarketAccount') -> None:
         self.authenticated = False
         self.session = requests.Session()
         self.url = 'https://api.mexc.com'
@@ -42,8 +42,8 @@ class MEXCMarket(IMarket):
             self.session.headers.update({
                 'X-MEXC-APIKEY': config['ACCESS_KEY'],
             })
-        from quantapi.models import Market
-        self.market = market
+        self.account = account
+        self.market = account.market
 
         self.symbols = {}
         self.capital = 0
@@ -56,7 +56,7 @@ class MEXCMarket(IMarket):
         self.spot_trading_enabled = False
         self.margin_trading_enabled = False
         self.stop_websocket_stream = False
-    
+
     def format_ws_candle(self, candle):
         return {
                 'time': datetime.fromtimestamp(candle['t'], pytz.UTC).replace(second=0, microsecond=0),
@@ -270,7 +270,7 @@ class MEXCMarket(IMarket):
             '1 week': '1w',
             '1 month': '1M',
         }[interval]
-    
+
     @staticmethod
     def _format_datetime(dt):
         return str(int(dt.timestamp()*1000))
@@ -347,7 +347,7 @@ class MEXCMarket(IMarket):
     def _prep_symbol(self, symbol):
         from quantapi.models import MarketSymbol
         return MarketSymbol(
-            market=self.market.market,
+            market=self.account.market,
             name=self._standardize_symbol(symbol['symbol']),
             base=symbol['baseAsset'],
             quote=symbol['quoteAsset'],
@@ -505,8 +505,8 @@ class MEXCMarket(IMarket):
     def get_equity(self, save=True):
         prices = self.get_current_prices(save=False)
         equity = self.capital + sum([ self.assets.get(asset, 0) * prices.get(asset+'-USDT', 0) for asset in self.assets ])
-        if self.market:
-            self.market.equity = equity
+        if self.account:
+            self.account.equity = equity
             if save:
-                self.market.save()
+                self.account.save()
         return equity
