@@ -18,6 +18,7 @@ class OrderManager:
     def __init__(self, market:IMarket, session:'Session|None'=None):
         self.session = session
         self.market = market
+        self.account = self.market.account
         self.order  = None
 
     def place(self, symbol:MarketSymbol, side:Literal['buy', 'sell'], deal_size:float|None=None, deal_funds:float|None=None, validate:bool=True, manual:bool=False, silent:bool=True) -> Order:
@@ -60,7 +61,7 @@ class OrderManager:
             order = self.market.place_market_order(symbol, side, deal_funds_str, deal_size_str)
             order.symbol = symbol
             order.placed_at = timezone.now()
-            order.market = self.market.market
+            order.account = self.account
             order.save()
         except (RejectedOrder, InsufficientBalance) as e:
             order = Order.objects.create(
@@ -106,7 +107,7 @@ class OrderManager:
             order.force = True
         if not order.side:
             order.side = Order.Side.BUY if side == 'buy' else Order.Side.SELL
-        order.market = self.market.market
+        order.account = self.account
         order.symbol = symbol
         order.request = json.dumps(request)
         order.save()

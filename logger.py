@@ -3,6 +3,7 @@ import logging
 import os
 import traceback
 
+from django.conf import settings
 from logtail import LogtailHandler
 
 
@@ -75,6 +76,8 @@ if LOGTAIL_TOKEN and 0:
 
 class NotificationHandler(logging.Handler):
     def emit(self, record):
+        if settings.TESTING:
+            return
         from quantapi.models import Notification
         if record.levelno <= logging.WARNING:
             return

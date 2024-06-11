@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 
 import os
 from pathlib import Path
+import sys
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -27,6 +28,8 @@ SYMKEY = b'REDACTED'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 ENVIRONMENT = os.environ.get('ENVIRONMENT', 'local')
+TESTING = sys.argv[1:2] == ['test']
+
 
 ALLOWED_HOSTS = ['*']
 CSRF_TRUSTED_ORIGINS = ['https://example.org', 'https://example.com', 'https://dev.example.com']

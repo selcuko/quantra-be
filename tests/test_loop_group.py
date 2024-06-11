@@ -7,7 +7,7 @@ from django.test import TestCase
 from logger import logger
 from loopgroup import LoopGroup
 from quantapi.models import (Market, MarketAccount, MarketCredentials,
-                             MarketSymbol, SessionGroup, Strategy)
+                             MarketSymbol, Order, SessionGroup, Signal, Strategy)
 from tests.mocks import MockCache, mock_get_interface, mock_get_strategy
 
 
@@ -109,3 +109,67 @@ class LoopGroupTests(TestCase):
         }
         loop.on_candle(candle)
         self.assertEqual(loop.last_kline_dt, candle['time'])
+
+    @mock.patch('loopgroup.cache', MockCache)
+    @mock.patch('loopgroup.get_strategy', mock_get_strategy)
+    @mock.patch.object(MarketAccount, 'get_interface', mock_get_interface)
+    def test_loop_can_handle_buy_signal(self):
+        self.account1.capital = 10
+        self.account1.save()
+        self.session1.capital = 10
+        self.session1.save()
+        loop = LoopGroup(self.group)
+        loop.precheck()
+        loop.run(threaded=False)
+        candle = {
+            'time': datetime(2024, 1, 2, tzinfo=pytz.UTC).timestamp(),
+            'close': 38000.0,
+        }
+        loop.buy(candle)
+
+        signals = Signal.objects.filter(group=self.group)
+        self.assertEqual(signals.count(), 1)
+        signal = signals[0]
+        self.assertEqual(signal.side, Signal.Side.BUY)
+        self.assertEqual(signal.price, 38000.0)
+
+        orders = Order.objects.filter(signal=signal)
+        self.assertEqual(orders.count(), 1)
+        order = orders[0]
+        self.assertEqual(order.account, self.account1)
+        self.assertEqual(order.status, Order.Status.FILLED)
+        self.assertEqual(order.signal, signal)
+        self.assertEqual(order.signal.price, 38000.0)   # type: ignore
+        self.assertEqual(order.side, Order.Side.BUY)
+        self.assertEqual(order.deal_funds, 10)
+
+    @mock.patch('loopgroup.cache', MockCache)
+    @mock.patch('loopgroup.get_strategy', mock_get_strategy)
+    @mock.patch.object(MarketAccount, 'get_interface', mock_get_interface)
+    def test_loop_can_handle_sell_signal(self):
+        self.session1.assets = 10
+        self.session1.save()
+        loop = LoopGroup(self.group)
+        loop.precheck()
+        loop.run(threaded=False)
+        candle = {
+            'time': datetime(2024, 1, 2, tzinfo=pytz.UTC).timestamp(),
+            'close': 38000.0,
+        }
+        loop.sell(candle)
+
+        signals = Signal.objects.filter(group=self.group)
+        self.assertEqual(signals.count(), 1)
+        signal = signals[0]
+        self.assertEqual(signal.side, Signal.Side.SELL)
+        self.assertEqual(signal.price, 38000.0)
+
+        orders = Order.objects.filter(signal=signal)
+        self.assertEqual(orders.count(), 1)
+        order = orders[0]
+        self.assertEqual(order.account, self.account1)
+        self.assertEqual(order.status, Order.Status.FILLED)
+        self.assertEqual(order.signal, signal)
+        self.assertEqual(order.signal.price, 38000.0)   # type: ignore
+        self.assertEqual(order.side, Order.Side.SELL)
+        self.assertEqual(order.deal_funds, 1)

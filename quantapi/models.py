@@ -445,7 +445,7 @@ class SessionGroup(models.Model):
             raise ValueError(f'Account should be for the same market as the group (account.market={account.market}, group.market={self.market}).')
         for session in self.sessions.all():
             if session.account == account:
-                return
+                return session
         session = Session.objects.create(
             group=self,
             freq=self.freq,
@@ -549,7 +549,6 @@ class Order(models.Model):
     deal_funds = models.FloatField(help_text='Amount of base currency in this order (e.g. USDT)', null=True, blank=True)
     funds = models.FloatField(help_text='Amount of base currency of this order initially placed with', null=True, blank=True)
     order_type = models.CharField(max_length=30, choices=Type.choices, default=Type.MARKET)
-    signal = models.ForeignKey(Signal, on_delete=models.PROTECT, related_name='orders', null=True, blank=True)
     market_timestamp = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=30, choices=Status.choices)
     force = models.BooleanField(default=False)
@@ -562,8 +561,9 @@ class Order(models.Model):
     pnl = models.FloatField(null=True, blank=True)
     average_cost = models.FloatField(null=True, blank=True)
     session = models.ForeignKey(Session, on_delete=models.PROTECT, related_name='orders', null=True, blank=True)
+    signal = models.ForeignKey(Signal, on_delete=models.PROTECT, related_name='orders', null=True, blank=True)
     symbol = models.ForeignKey(MarketSymbol, on_delete=models.PROTECT, related_name='orders')
-    market = models.ForeignKey(Market, on_delete=models.PROTECT, related_name='orders')
+    account = models.ForeignKey(MarketAccount, on_delete=models.PROTECT, related_name='orders', null=True, blank=True)
 
     def save(self, *args, **kwargs):
         if not self.side and self.signal: 
@@ -648,7 +648,6 @@ class Order(models.Model):
             'average_cost': self.average_cost,
             'session': self.session.pk if self.session else None,
             'symbol': self.symbol.name,
-            'market': self.market.exchange_name,
         }
 
 

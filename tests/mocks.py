@@ -1,6 +1,6 @@
 from datetime import datetime
 import time
-from typing import Callable
+from typing import Callable, Literal
 from unittest.mock import Mock
 
 import pytz
@@ -8,14 +8,15 @@ import pytz
 from liveloop import LiveLoop
 from loopgroup import LoopGroup
 from markets.interface import IMarket
-from quantapi.models import MarketAccount, MarketSymbol
+from quantapi.models import MarketAccount, MarketSymbol, Order
 from strategy.interface import Strategy
 
 
 class MockIMarket(Mock, IMarket):
-    def __init__(self, config, market) -> None:
-        super().__init__()
-        self.market = market
+    def __init__(self, config, account, **kwargs) -> None:
+        super().__init__(config, account, **kwargs)
+        self.account = account
+        self.market = account.market
 
     def get_last_klines(self, symbol: MarketSymbol | str, interval: str, limit: int = 100, retry=1, silent=True) -> list[list]:
         return [[
@@ -35,6 +36,15 @@ class MockIMarket(Mock, IMarket):
 
     def cache_to_db(self, force=False):
         pass
+
+    def place_market_order(self, symbol: MarketSymbol | str, side: Literal['buy'] | Literal['sell'], funds: str | None = None, quantity: str | None = None, validate=True) -> Order:
+        return Order(
+            symbol=symbol,
+            side=side.upper(),
+            deal_funds=float(funds) if funds else 1,
+            deal_size=float(quantity) if quantity else 1,
+            status='FILLED',
+        )
 
 
 class MockStrategy(Mock, Strategy):
@@ -61,7 +71,7 @@ class MockCache(Mock):
 
 
 def mock_get_interface(account:MarketAccount):
-    return MockIMarket({}, account.market)
+    return MockIMarket({}, account)
 
 
 def mock_get_strategy(name):
