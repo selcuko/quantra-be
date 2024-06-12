@@ -71,7 +71,7 @@ class OrderManager:
                 status=Order.Status.REJECTED if isinstance(e, RejectedOrder) else Order.Status.INSUFFICIENT_BALANCE,
                 details=traceback.format_exc(),
                 messages_raw=f'RejectedOrder: {e!r}',
-                market=self.market.market,
+                account=self.market.account,
                 symbol=symbol,
             )
         except OrderPostProcessingError as e:

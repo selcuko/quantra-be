@@ -1,23 +1,69 @@
-from datetime import datetime, timedelta
 import json
-import os
-from tabnanny import verbose
 import threading
+import traceback
 import typing
+from datetime import datetime, timedelta
+from decimal import Decimal
+
+import pytz
+from cryptography.fernet import Fernet
 from django.conf import settings
 from django.contrib.auth.models import User
-from logger import logger
-import pytz
-from typing import Optional
+from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
+from django.contrib.contenttypes.models import ContentType
 from django.db import models
-from cryptography.fernet import Fernet
-from markets import get_market
-from markets.helper import float_to_precision
 
+from errors import SessionCannotContinue
+from logger import logger
 from strategy import get_strategy
-from decimal import Decimal
+
 if typing.TYPE_CHECKING:
     from liveloop import LiveLoop
+
+
+class Issue(models.Model):
+    class Level(models.TextChoices):
+        INFO = 'INFO', 'Info'
+        WARNING = 'WARNING', 'Warning'
+        ERROR = 'ERROR', 'Error'
+        CRITICAL = 'CRITICAL', 'Critical'
+    class Status(models.TextChoices):
+        ACTIVE = 'ACTIVE', 'Active'
+        ACKNOWLEDGED = 'ACKNOWLEDGED', 'Acknowledged'
+        IGNORED = 'IGNORED', 'Ignored'
+
+    level = models.CharField(max_length=30, choices=Level.choices, default=Level.INFO)
+    status = models.CharField(max_length=30, choices=Status.choices, default=Status.ACTIVE)
+    message = models.TextField()
+    subject = models.CharField(max_length=250)
+    traceback = models.TextField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    # Generic relationship fields
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.PositiveIntegerField()
+    object = GenericForeignKey()
+
+    def __str__(self):
+        return f'{self.status} {self.level} {self.subject}'
+
+    @property
+    def class_name(self):
+        if (cls:=self.content_type.model_class()):
+            return cls.__name__
+        else:
+            return 'Unknown'
+
+    @classmethod
+    def from_exception(cls, e:Exception, save=False):
+        issue = cls()
+        issue.traceback = traceback.format_exc()
+        issue.message = repr(e)
+        issue.subject = str(e)
+        if save:
+            issue.save()
+        return issue
 
 
 class Market(models.Model):
@@ -126,9 +172,10 @@ class MarketAccount(models.Model):
     capital    = models.FloatField(null=True, blank=True, help_text='Total USDT capital in this account')
     assets     = models.TextField(null=True, blank=True, help_text='Assets in this account')
     last_cache = models.DateTimeField(null=True, blank=True, help_text='Last time equity/assets were updated')
+    issues     = GenericRelation(Issue)
 
     def __str__(self):
-        return f'{self.market.exchange_name} {self.credentials.owner} (${self.equity or 0})'
+        return f'{self.market.exchange_name} {self.credentials.owner} (${round(self.equity, 2) if self.equity else 0})'
 
     def save(self, *args, **kwargs):
         if self.market != self.credentials.market:
@@ -167,6 +214,7 @@ class MarketAccount(models.Model):
         if only_internal:
             return cls.objects.filter(credentials__internal=True, credentials__active=True)
         return cls.objects.filter(credentials__active=True)
+
 
 class MarketSymbol(models.Model):
     class Meta:
@@ -219,7 +267,6 @@ class MarketSymbol(models.Model):
 
     def filters(self):
         return self.market.filters(self)
-
 
 
 class Session(models.Model):
@@ -284,21 +331,15 @@ class Session(models.Model):
     sell_enabled = models.BooleanField(default=True)
     initiated_at = models.DateTimeField(auto_now_add=True)
     orders: models.QuerySet['Order']
+    issues     = GenericRelation(Issue)
 
     @property
     def equity(self):
         return self.capital + (self.assets * self.last_price if self.last_price else 0)
 
-    def save(self, *args, **kwargs):
-        if not self.account:
-            raise ValueError('Session must have at least an account before saving.')
-        if self.group and self.symbol.market != self.group.market:
-            raise ValueError('Session market should be the same as the group market.')
-        super().save(*args, **kwargs)
-
     def __str__(self):
         return f'{self.strategy} - {self.symbol} - {self.status}'
-    
+
     @property
     def analytics(self):
         from quantapi.analytics import SessionAnalytics
@@ -380,6 +421,7 @@ class SessionGroup(models.Model):
 
     symbol = models.ForeignKey(MarketSymbol, on_delete=models.PROTECT, related_name='groups')
     market = models.ForeignKey(Market, on_delete=models.PROTECT, related_name='groups')
+    interface = models.ForeignKey(MarketAccount, on_delete=models.PROTECT, related_name='groups', null=True, blank=True)
     sessions: models.QuerySet['Session']
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -394,15 +436,10 @@ class SessionGroup(models.Model):
     sell_enabled = models.BooleanField(default=True)
     source = models.CharField(max_length=30, choices=Session.CandleSource.choices, default=Session.CandleSource.TRADE)
     freq = models.CharField(max_length=30, choices=Session.Freq.choices, default=Session.Freq.MIN15)
+    issues     = GenericRelation(Issue)
 
-    def save(self, *args, **kwargs):
-        if self.pk:
-            sessions = self.sessions.all()
-            for session in sessions:
-                if session.symbol != self.symbol or (session.strategy and session.strategy != self.strategy):
-                    print(self.symbol, session.symbol, self.strategy, session.strategy)
-                    raise ValueError('All sessions in a group should have the same symbol and strategy.')
-        super().save(*args, **kwargs)
+    def __str__(self):
+        return f'{self.status} SessionGroup for {self.symbol.base}@{self.market.exchange_name}'
 
     @property
     def capital(self):
@@ -437,12 +474,10 @@ class SessionGroup(models.Model):
         except Exception as e:
             raise SessionCannotContinue(f'Failed to resume group {self} due to {e!r}')
         return loop
-    
+
     def add_account(self, account:MarketAccount):
         if not self.pk:
             raise ValueError('SessionGroup must be saved before adding accounts.')
-        if account.market != self.market:
-            raise ValueError(f'Account should be for the same market as the group (account.market={account.market}, group.market={self.market}).')
         for session in self.sessions.all():
             if session.account == account:
                 return session
@@ -459,10 +494,6 @@ class SessionGroup(models.Model):
             assets=0,
         )
         return session
-
-
-class SessionCannotContinue(Exception):
-    pass
 
 
 class Strategy(models.Model):
@@ -491,6 +522,7 @@ class Signal(models.Model):
     price = models.FloatField()
     raw = models.CharField(max_length=512)
     orders: models.QuerySet['Order']
+    issues     = GenericRelation(Issue)
 
     def save(self, *args, **kwargs):
         if not self.group and not self.session:
@@ -522,7 +554,6 @@ class Signal(models.Model):
             side=self.side,
             symbol=self.symbol,
         )
-
 
 
 class Order(models.Model):
@@ -564,6 +595,8 @@ class Order(models.Model):
     signal = models.ForeignKey(Signal, on_delete=models.PROTECT, related_name='orders', null=True, blank=True)
     symbol = models.ForeignKey(MarketSymbol, on_delete=models.PROTECT, related_name='orders')
     account = models.ForeignKey(MarketAccount, on_delete=models.PROTECT, related_name='orders', null=True, blank=True)
+    group = models.ForeignKey('GroupOrder', on_delete=models.PROTECT, related_name='orders', null=True, blank=True)
+    issues     = GenericRelation(Issue)
 
     def save(self, *args, **kwargs):
         if not self.side and self.signal: 
@@ -649,6 +682,28 @@ class Order(models.Model):
             'session': self.session.pk if self.session else None,
             'symbol': self.symbol.name,
         }
+
+
+class GroupOrder(models.Model):
+    class Status(models.TextChoices):
+        FILLED = 'FILLED'
+        PARTIAL = 'PARTIAL'
+        EXPIRED = 'EXPIRED'
+
+    group = models.ForeignKey(SessionGroup, on_delete=models.PROTECT, related_name='orders')
+    signal = models.ForeignKey(Signal, on_delete=models.PROTECT, related_name='group_orders', null=True, blank=True)
+    side = models.CharField(max_length=30, choices=Order.Side.choices)
+    price = models.FloatField()
+    deal_size = models.FloatField()
+    deal_funds = models.FloatField()
+    status = models.CharField(max_length=30, choices=Status.choices)
+    issues = GenericRelation(Issue)
+
+    def __str__(self):
+        if self.side == Order.Side.BUY:
+            return f'{self.status} {self.side} {self.deal_size} {self.group.symbol.name} @ {self.price}'
+        return f'{self.status} {self.side} {self.deal_funds} {self.group.symbol.name} @ {self.price}'
+
 
 
 class ComplexOrder(models.Model):
@@ -845,6 +900,7 @@ class GlobalSymbol(models.Model):
     atl_prox = models.FloatField(null=True, blank=True, help_text='Proximity to all time low')
     atl_ratio = models.FloatField(null=True, blank=True, help_text='Current price / ATL')
     volume24h_to_mcap = models.FloatField(null=True, blank=True, help_text='Volume 24H / Market cap')
+    issues = GenericRelation(Issue)
 
     @property
     def markets(self):

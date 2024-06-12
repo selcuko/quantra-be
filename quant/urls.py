@@ -2,7 +2,7 @@ from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path
 from django.conf.urls.static import static
-from quantapi.views import BacktestInitView, BacktestResultView, CoinScanView, FavoritesView, HomeView, MarketDetailView, MarketListView, NotificationDetailView, NotificationsView, OrderBookView, OrderManagementView, PriceView, RunningThreadsView, SessionGroupDetailView, SessionGroupInitView, SessionGroupListView, \
+from quantapi.views import BacktestInitView, BacktestResultView, CoinScanView, FavoritesView, HomeView, IssueDetailView, MarketDetailView, MarketListView, NotificationDetailView, NotificationsView, OrderBookView, OrderManagementView, PriceView, RunningThreadsView, SessionGroupDetailView, SessionGroupInitView, SessionGroupListView, \
     SessionInitView, SessionListView, SessionUpdateView,SessionDetailView, SymbolView, WatchdogView
 
 urlpatterns = [
@@ -24,6 +24,7 @@ urlpatterns = [
     path('sessiongroup/<int:pk>/pause/', SessionGroupDetailView.pause, name='sessiongroup-pause'),
     path('sessiongroup/<int:pk>/resume/', SessionGroupDetailView.resume, name='sessiongroup-resume'),
     path('sessiongroup/<int:pk>/terminate/', SessionGroupDetailView.terminate, name='sessiongroup-terminate'),
+    path('sessiongroup/<int:pk>/issues/', SessionGroupDetailView.issues, name='sessiongroup-issues'),
     path('markets/', MarketListView.as_view(), name='market-list'),
     path('market/<int:pk>/', MarketDetailView.as_view(), name='market-detail'),
     path('market/<int:pk>/raw/', MarketDetailView.raw, name='market-raw'),
@@ -42,6 +43,7 @@ urlpatterns = [
     path('notifications/', NotificationsView.as_view(), name='notification-list'),
     path('notifications/<int:pk>/', NotificationDetailView.as_view(), name='notification-detail'),
     path('notifications/<int:pk>/acknowledge/', NotificationDetailView.acknowledge, name='notification-acknowledge'),
+    path('issue/<int:pk>/', IssueDetailView.as_view(), name='issue-detail'),
 ]
 urlpatterns += [path('silk/', include('silk.urls', namespace='silk'))]
 if settings.DEBUG:

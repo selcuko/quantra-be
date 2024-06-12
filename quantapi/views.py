@@ -20,7 +20,7 @@ from markets.errors import (InsufficientBalance, MarketDisabledTrading,
                             SymbolNotInMarket)
 from order import OrderManager
 from quantapi.analytics import MarketAnalytics, TotalSessionAnalytics
-from quantapi.models import (Backtest, GlobalSymbol, Market, MarketAccount, MarketSymbol, Notification,
+from quantapi.models import (Backtest, GlobalSymbol, Issue, Market, MarketAccount, MarketSymbol, Notification,
                              Order, Session, SessionGroup, Signal, Strategy)
 from strategy import get_strategy
 from django.contrib import messages
@@ -295,7 +295,7 @@ class SessionGroupInitView(View):
         markets = MarketAccount.get_available_accounts()
         strategies = Strategy.objects.all().order_by('-version')
         return render(request, 'sessiongroup-init.html', {'markets': markets, 'strategies': strategies})
-    
+
     def post(self, request):
         account_ids = request.POST.getlist('market')
         accounts = MarketAccount.objects.filter(pk__in=account_ids)
@@ -335,13 +335,15 @@ class SessionGroupDetailView(View):
         group = SessionGroup.objects.prefetch_related('sessions').get(pk=pk)
         signals = Signal.objects.filter(group=group)
         orders = [signal.cum_order for signal in signals]
+        issues = group.issues.filter(status=Issue.Status.ACTIVE)
         return render(request, 'sessiongroup-detail.html', {
             'group': group, 
             'sessions': group.sessions.all(),
             'orders': orders,
             'signals': signals,
+            'issues': issues,
         })
-    
+
     @staticmethod
     def update(request, pk):
         group = SessionGroup.objects.get(pk=pk)
@@ -401,6 +403,31 @@ class SessionGroupDetailView(View):
         group.status = SessionGroup.Status.COMPLETED
         group.save()
         return redirect('sessiongroup-detail', pk=group.pk)
+
+    @staticmethod
+    def issues(request, pk):
+        group = SessionGroup.objects.get(pk=pk)
+        issues = group.issues.all()
+        return render(request, 'issues-list.html', {
+            'group': group,
+            'object': group,
+            'class': 'SessionGroup',
+            'issues': issues
+        })
+
+
+class IssueDetailView(View):
+    def get(self, request, pk):
+        issue = Issue.objects.get(pk=pk)
+        return render(request, 'issue-detail.html', {'issue': issue})
+
+    def post(self, request, pk):
+        issue = Issue.objects.get(pk=pk)
+        if 'status' in request.POST:
+            issue.status = request.POST['status']
+            issue.save()
+        return redirect('issue-detail', pk=issue.pk)
+
 
 
 class SessionGroupListView(View):

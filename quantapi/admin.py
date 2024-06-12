@@ -1,9 +1,20 @@
-from typing import Any
 from django.contrib import admin
+from django.contrib.contenttypes.admin import GenericTabularInline
 from django.db.models.query import QuerySet
 from django.http import HttpRequest
 
 from quantapi.models import *
+
+
+class IssuesInline(GenericTabularInline):
+    fields = ['level', 'status', 'subject']
+    model = Issue
+    extra = 0
+
+
+class IssueAdmin(admin.ModelAdmin):
+    list_filter = ('level', 'status')
+    list_display = ('object', 'subject', 'level', 'status', 'created_at')
 
 
 class BacktestAdmin(admin.ModelAdmin):
@@ -19,17 +30,22 @@ class MarketAdmin(admin.ModelAdmin):
 
 
 class MarketCredentialsAdmin(admin.ModelAdmin):
-    list_display = ('market', 'owner', 'created_at', 'expires_at', 'internal', 'active')
+    list_display = ('market', 'owner', 'expires_at', 'internal', 'active')
     search_fields = ('market__exchange_name', 'owner')
     list_filter = ('market__exchange_name', 'internal', 'active')
 
+    def get_queryset(self, request: HttpRequest) -> QuerySet[MarketCredentials]:
+        return super().get_queryset(request).select_related('market')
+
+
 class MarketAccountAdmin(admin.ModelAdmin):
     list_display = ('market', 'owner', 'equity', 'capital', 'last_cache')
-    search_fields = ('market__exchange_name', 'owner')
+    search_fields = ('owner', )
     list_filter = ('market__exchange_name', )
+    inlines = [IssuesInline]
 
-    def get_queryset(self, request: HttpRequest) -> QuerySet[Any]:
-        return MarketAccount.objects.prefetch_related('market')
+    def get_queryset(self, request: HttpRequest) -> QuerySet[MarketAccount]:
+        return MarketAccount.objects.select_related('market')
 
 class MarketSymbolAdmin(admin.ModelAdmin):
     list_display = ('name', 'market', 'base', 'quote', 'spot_trading_enabled', 'margin_trading_enabled')
@@ -38,14 +54,15 @@ class MarketSymbolAdmin(admin.ModelAdmin):
 
 
 class SessionAdmin(admin.ModelAdmin):
-    list_display = ('__str__', 'freq', 'status', 'started', 'ended', 'session_type', 'last_heartbeat', 'candle_source', 'use_heikin_ashi')
+    list_display = ('symbol', 'freq', 'status', 'started')
     search_fields = ('symbol__name', 'symbol__market__exchange_name')
     list_filter = ('freq', 'status', 'session_type', 'use_heikin_ashi', 'candle_source')
     readonly_fields = ('started', 'ended', 'last_heartbeat')
     raw_id_fields = ('symbol', 'strategy')
+    inlines = [IssuesInline]
 
-    def get_queryset(self, request: HttpRequest) -> QuerySet[Any]:
-        return Session.objects.prefetch_related('symbol', 'strategy', 'symbol__market')
+    def get_queryset(self, request: HttpRequest) -> QuerySet[Session]:
+        return Session.objects.select_related('symbol', 'strategy', 'symbol__market')
 
 
 class SignalAdmin(admin.ModelAdmin):
@@ -53,8 +70,8 @@ class SignalAdmin(admin.ModelAdmin):
     search_fields = ('session__symbol__name', 'session__symbol__market__exchange_name')
     list_filter = ('side',)
     raw_id_fields = ('session',)
-
-    def get_queryset(self, request: HttpRequest) -> QuerySet[Any]:
+    inlines = [IssuesInline]
+    def get_queryset(self, request: HttpRequest) -> QuerySet[Signal]:
         return super().get_queryset(request).prefetch_related('session__symbol', 'session__symbol__market')
 
 
@@ -62,7 +79,7 @@ class OrderAdmin(admin.ModelAdmin):
     list_display = ('__str__', 'oid', 'status', 'order_type','deal_funds', 'force', 'created_at')
     list_filter = ('status', 'order_type', 'force')
     raw_id_fields = ('signal', 'session', 'symbol', 'account')
-
+    inlines = [IssuesInline]
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
         return queryset.prefetch_related('signal__session__symbol', 'signal__session__symbol__market')
@@ -126,31 +143,26 @@ class GlobalSymbolAdmin(admin.ModelAdmin):
     search_fields = ['name', 'data_source']
     list_filter = ['data_source', VolumeFilter]
     ordering = ['-volume']
+    inlines = [IssuesInline]
 
     def get_markets(self, obj):
         return json.loads(obj.available_markets)
-    
-    def get_queryset(self, request: HttpRequest) -> QuerySet[Any]:
-        return super().get_queryset(request)
-    
-    # enable vol0 filter by default
-
-
-
 
 
 class ComplexOrderAdmin(admin.ModelAdmin):
     list_display = ('__str__', 'status', 'type', 'session', 'deal_funds')
     list_filter = ('status', 'type', 'side',)
     raw_id_fields = ('session', 'market_order')
+    inlines = [IssuesInline]
 
 
 class SessionGroupAdmin(admin.ModelAdmin):
-    list_display = ('symbol', 'status', 'created_at', 'updated_at', 'source')
+    list_display = ('symbol', 'status', 'created_at', 'source')
     list_filter = ('status', 'source')
+    inlines = [IssuesInline]
 
-    def get_queryset(self, request: HttpRequest) -> QuerySet[Any]:
-        return SessionGroup.objects.prefetch_related('symbol', 'strategy', 'symbol__market')
+    def get_queryset(self, request: HttpRequest) -> QuerySet[SessionGroup]:
+        return SessionGroup.objects.select_related('symbol', 'strategy')
 
 
 admin.site.register(SessionGroup, SessionGroupAdmin)
@@ -169,3 +181,4 @@ admin.site.register(WhitelistedUser)
 admin.site.register(Strategy)
 admin.site.register(Notification, NotificationAdmin)
 admin.site.register(ComplexOrder, ComplexOrderAdmin)
+admin.site.register(Issue, IssueAdmin)

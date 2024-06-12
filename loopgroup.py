@@ -325,10 +325,10 @@ class LoopGroup:
 
         if buy_signal:
             self.buy(self.last_kline)
-        
+
         elif sell_signal:
             self.sell(self.last_kline)
-        
+
         self.group.last_kline_dt = self.last_kline_dt
         self.group.save()
         return True
