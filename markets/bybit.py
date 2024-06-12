@@ -6,10 +6,9 @@ import json
 import time
 import requests
 from logger import logger
-from markets.errors import InsufficientBalance, KlineFetchFailed, MarketAPIError, OrderPlacementError, OrderPostProcessingError, RejectedOrder
+from markets.errors import InsufficientBalance, KlineFetchFailed, MarketAPIError, MarketAPIUnavailable, OrderPlacementError, OrderPostProcessingError, RejectedOrder
 from markets.interface import IMarket
 from logger import logger
-
 from django.utils import timezone
 import typing
 from websockets.sync.client import ClientConnection, connect
@@ -24,7 +23,7 @@ if typing.TYPE_CHECKING:
 class BybitMarket(IMarket):
     name = 'Bybit'
 
-    def __init__(self, config: dict, market: 'MarketAccount'):
+    def __init__(self, config: dict, account: 'MarketAccount'):
         self.url = 'https://api.bybit.com'
         self.api_key = config['API_KEY']
         self.api_secret = config['API_SECRET']
@@ -37,7 +36,7 @@ class BybitMarket(IMarket):
             'Content-Type': 'application/json'
         })
 
-        self.account = market
+        self.account = account
         self.market = self.account.market
         self.spot_trading_enabled = True
         self.capital = 0
@@ -47,8 +46,11 @@ class BybitMarket(IMarket):
         self.authenticated = True
         self.stop_websocket_stream = False
 
-        self.get_account()
-        self.get_symbols()
+        try:
+            self.get_account()
+            self.get_symbols()
+        except requests.ConnectionError as exc:
+            raise MarketAPIUnavailable(f'Could not connect to {self.name} API') from exc
         self.orderbook_seq = 0
 
     def sign(self, payload:dict, method:str='GET') -> str:
@@ -398,7 +400,7 @@ class BybitMarket(IMarket):
             side=order['side'].upper(),
             market_timestamp=self.standardize_timestamp(order['createdTime']),
             symbol=self.get_symbol_from_name(self.standardize_symbol(order['symbol'])),
-            market=self.market,
+            account=self.account,
             details=json.dumps(order, indent=2)
         )
 

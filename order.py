@@ -11,7 +11,7 @@ from markets.errors import (InsufficientBalance, OrderNotFilledError,
                             OrderPlacementError, OrderPostProcessingError,
                             RejectedOrder)
 from markets.helper import float_to_precision
-from quantapi.models import MarketSymbol, Order, Session
+from quantapi.models import GroupOrder, Issue, MarketSymbol, Order, Session, SessionGroup
 
 
 class OrderManager:
@@ -113,3 +113,48 @@ class OrderManager:
         order.save()
 
         return order
+
+
+class GroupOrderManager:
+    def __init__(self, group:SessionGroup):
+        self.group = group
+        self.market = group.market
+        self.sessions = group.sessions.all()
+
+
+    def place(self, side:Literal['buy', 'sell']) -> GroupOrder:
+        group_order = GroupOrder.objects.create(
+            group=self.group,
+            side=side,
+            status=GroupOrder.Status.PENDING,
+        )
+        orders = {}
+        for session in self.sessions:
+            if side == 'buy' and session.capital < 5:
+                continue
+            if side == 'sell' and session.assets < 0:
+                continue
+            interface = session.account.get_interface()
+            manager   = OrderManager(interface, session)
+            try:
+                order = manager.place(self.group.symbol, side, deal_funds=session.capital, deal_size=session.assets, validate=False)
+            except Exception as exc:
+                issue = Issue.from_exception(exc)
+                issue.object = session.account
+                issue.level = Issue.Level.CRITICAL
+                issue.save()
+                logger.critical(f'Error placing order for {session.account}: {exc!r}')
+                continue
+            order.group = group_order # type: ignore
+            order.save()
+            group_order.deal_funds += order.deal_funds if order.deal_funds else 0
+            group_order.deal_size  += order.deal_size if order.deal_size else 0
+            if order.status == Order.Status.FILLED and group_order.status != GroupOrder.Status.PARTIAL:
+                group_order.status = GroupOrder.Status.FILLED
+            elif group_order.status == GroupOrder.Status.FILLED:
+                group_order.status = GroupOrder.Status.PARTIAL
+            orders[session] = order
+        if group_order.status == GroupOrder.Status.PENDING:
+            group_order.status = GroupOrder.Status.EXPIRED
+        group_order.save()
+        return group_order

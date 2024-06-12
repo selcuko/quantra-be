@@ -7,7 +7,7 @@ import time
 import traceback
 import requests
 from logger import logger
-from markets.errors import InsufficientBalance, KlineFetchFailed, MarketAPIError, OrderPlacementError, OrderPostProcessingError, RejectedOrder
+from markets.errors import InsufficientBalance, KlineFetchFailed, MarketAPIError, MarketAPIUnavailable, OrderPlacementError, OrderPostProcessingError, RejectedOrder
 from markets.interface import IMarket
 from logger import logger
 import base64
@@ -50,8 +50,11 @@ class OKXMarket(IMarket):
         self.stop_websocket_stream = False
         self.orderbook_seq = 0
 
-        self.get_account()
-        self.get_symbols()
+        try:
+            self.get_account()
+            self.get_symbols()
+        except requests.ConnectionError as exc:
+            raise MarketAPIUnavailable(f'Could not connect to {self.name} API') from exc
 
     def sign(self, payload:dict, path:str, method:str='GET') -> str:
         if not payload:
@@ -395,7 +398,8 @@ class OKXMarket(IMarket):
             side=order['side'].upper(),
             market_timestamp=self.standardize_timestamp(order['fillTime']),
             symbol=self.get_symbol_from_name(self.standardize_symbol(order['instId'])),
-            details=json.dumps(order, indent=2)
+            details=json.dumps(order, indent=2),
+            account=self.account
         )
 
     def prep_symbol(self, symbol:dict) -> 'MarketSymbol':

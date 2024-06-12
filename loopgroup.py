@@ -12,10 +12,10 @@ from django.utils import timezone
 django.setup()
 
 from logger import logger
-from markets.errors import OrderPostProcessingError
+from markets.errors import MarketAPIUnavailable, OrderPostProcessingError
 from models import OHLCVDataset, interval_to_minutes
-from order import OrderManager
-from quantapi.models import Order, Session, SessionGroup, Signal
+from order import GroupOrderManager, OrderManager
+from quantapi.models import Issue, Order, Session, SessionGroup, Signal
 from quantapi.models import Strategy as StrategyModel
 from strategy import Strategy, get_strategy
 
@@ -74,10 +74,19 @@ class LoopGroup:
         # XXX: also get_interface() is not async
         self.interfaces = {}
         for a in self.accounts:
-            if not a:
-                continue
-            self.interfaces[a] = a.get_interface()
-        self.interface = None
+            try:
+                self.interfaces[a] = a.get_interface()
+            except MarketAPIUnavailable as exc:
+                issue = Issue.from_exception(exc)
+                issue.object = a
+                issue.level = Issue.Level.CRITICAL
+                issue.save()
+                logger.critical(
+                    f'Error while getting interface for account {a.pk}.',
+                    extra={'group': self, 'subject': 'Error while getting interface.', 'account': a},
+                    exc_info=True
+                )
+        self.interface = group.interface.get_interface() if group.interface else None
         cache.set(f'sessiongroup_{group.pk}', self)
         logger.info(
             f'LoopGroup initialized with {len(self.sessions)} sessions.',
@@ -104,18 +113,17 @@ class LoopGroup:
         if len(self.interfaces) == 0:
             raise PrecheckFailed('No interfaces found in group.')
 
-        if len(self.accounts) != len(self.interfaces):
-            raise PrecheckFailed('At least one interface failed to initialize.')
-
         # assert capital assignment is good enough
         for session in self.sessions:
             if session.capital < MINIMUM_INITIAL_CAPITAL:
                 raise PrecheckFailed(f'Capital (${session.capital}) of session (id={session.pk}) is less than minimum initial capital of ${MINIMUM_INITIAL_CAPITAL}.')
 
         # the interface to fetch data from
-        account = self.accounts[0]
-        assert account is not None
-        self.interface = self.interfaces[account]
+        if not self.interface:
+            account = self.accounts[0]
+            self.interface = self.interfaces[account]
+            self.group.interface = account
+            self.group.save()
         self.precheck_passed = True
         logger.info(
             f'LoopGroup precheck passed.',
@@ -297,7 +305,7 @@ class LoopGroup:
 
         if self.group.last_kline_dt and self.group.last_kline_dt >= self.last_kline_dt:
             logger.warning(
-                f'LoopGroup received an outdated candle event.',
+                f'LoopGroup received an outdated candle event. Last kline time: {self.group.last_kline_dt}, received kline time: {self.last_kline_dt}.',
                 extra={'group': self, 'subject': 'LoopGroup received outdated event.'}
             )
             return
@@ -336,7 +344,7 @@ class LoopGroup:
 
     def can_buy(self, session:Session):
         assert session.account is not None
-        return (session.capital or 0) >= MINIMUM_BUY_AMOUNT and self.group.buy_enabled
+        return (session.capital or 0) > MINIMUM_BUY_AMOUNT and self.group.buy_enabled
 
 
     def can_sell(self, session:Session):
@@ -411,13 +419,10 @@ class LoopGroup:
             price=last_kline['close'],
             raw=json.dumps(last_kline)
         )
-        for session in self.sessions:
-            order = self.buy_for_session(session)
-            if not order:
-                continue
-            order.signal = signal
-            order.save()
-        return
+        group_order_manager = GroupOrderManager(self.group)
+        group_order = group_order_manager.place('buy')
+        group_order.signal = signal
+        group_order.save()
 
 
     def sell_for_session(self, session: Session):
@@ -476,12 +481,10 @@ class LoopGroup:
             price=last_kline['close'],
             raw=json.dumps(last_kline)
         )
-        for session in self.sessions:
-            order = self.sell_for_session(session)
-            if not order:
-                continue
-            order.signal = signal
-            order.save()
+        group_order_manager = GroupOrderManager(self.group)
+        group_order = group_order_manager.place('sell')
+        group_order.signal = signal
+        group_order.save()
         return
 
 
@@ -495,8 +498,13 @@ if __name__ == '__main__':
         print('No SessionGroup found.')
         exit(1)
     loop = LoopGroup(group, freq='1 min')
-    loop.run()
-    loop.buy({'close': 100})
+    gom = GroupOrderManager(group)
+    gorder = gom.place('buy')
+    print(gorder.status)
+    orders = Order.objects.filter(group=gorder)
+    for order in orders:
+        print(order.status)
+        print(order.details)
 
     while True:
         try:

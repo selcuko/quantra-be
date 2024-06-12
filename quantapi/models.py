@@ -215,6 +215,9 @@ class MarketAccount(models.Model):
             return cls.objects.filter(credentials__internal=True, credentials__active=True)
         return cls.objects.filter(credentials__active=True)
 
+    def active_issues(self):
+        return self.issues.filter(status=Issue.Status.ACTIVE)
+
 
 class MarketSymbol(models.Model):
     class Meta:
@@ -495,6 +498,15 @@ class SessionGroup(models.Model):
         )
         return session
 
+    def save(self, *args, **kwargs):
+        if self.interface:
+            try:
+                self.symbol = self.interface.market.symbols.get(name=self.symbol.name)
+            except MarketSymbol.DoesNotExist:
+                raise ValueError('Symbol must be available in the market to set interface.')
+            self.market = self.interface.market
+        super().save(*args, **kwargs)
+
 
 class Strategy(models.Model):
     name = models.CharField(max_length=30)
@@ -596,7 +608,7 @@ class Order(models.Model):
     symbol = models.ForeignKey(MarketSymbol, on_delete=models.PROTECT, related_name='orders')
     account = models.ForeignKey(MarketAccount, on_delete=models.PROTECT, related_name='orders', null=True, blank=True)
     group = models.ForeignKey('GroupOrder', on_delete=models.PROTECT, related_name='orders', null=True, blank=True)
-    issues     = GenericRelation(Issue)
+    issues = GenericRelation(Issue)
 
     def save(self, *args, **kwargs):
         if not self.side and self.signal: 
@@ -689,21 +701,15 @@ class GroupOrder(models.Model):
         FILLED = 'FILLED'
         PARTIAL = 'PARTIAL'
         EXPIRED = 'EXPIRED'
+        PENDING = 'PENDING'
 
     group = models.ForeignKey(SessionGroup, on_delete=models.PROTECT, related_name='orders')
     signal = models.ForeignKey(Signal, on_delete=models.PROTECT, related_name='group_orders', null=True, blank=True)
     side = models.CharField(max_length=30, choices=Order.Side.choices)
-    price = models.FloatField()
-    deal_size = models.FloatField()
-    deal_funds = models.FloatField()
+    deal_size = models.FloatField(default=0)
+    deal_funds = models.FloatField(default=0)
     status = models.CharField(max_length=30, choices=Status.choices)
     issues = GenericRelation(Issue)
-
-    def __str__(self):
-        if self.side == Order.Side.BUY:
-            return f'{self.status} {self.side} {self.deal_size} {self.group.symbol.name} @ {self.price}'
-        return f'{self.status} {self.side} {self.deal_funds} {self.group.symbol.name} @ {self.price}'
-
 
 
 class ComplexOrder(models.Model):

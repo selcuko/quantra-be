@@ -20,7 +20,7 @@ from markets.errors import (InsufficientBalance, MarketDisabledTrading,
                             SymbolNotInMarket)
 from order import OrderManager
 from quantapi.analytics import MarketAnalytics, TotalSessionAnalytics
-from quantapi.models import (Backtest, GlobalSymbol, Issue, Market, MarketAccount, MarketSymbol, Notification,
+from quantapi.models import (Backtest, GlobalSymbol, GroupOrder, Issue, Market, MarketAccount, MarketSymbol, Notification,
                              Order, Session, SessionGroup, Signal, Strategy)
 from strategy import get_strategy
 from django.contrib import messages
@@ -298,18 +298,31 @@ class SessionGroupInitView(View):
 
     def post(self, request):
         account_ids = request.POST.getlist('market')
+        interface_id = request.POST.get('interface')
         accounts = MarketAccount.objects.filter(pk__in=account_ids)
-        first_account = accounts.first()
-        if not first_account:
-            return redirect('sessiongroup-init')
-        market = first_account.market
+        interface = MarketAccount.objects.get(pk=interface_id) if interface_id else accounts[0]
+        market = interface.market
         symbol_name = request.POST.get('symbol').upper().replace('-', '').replace('/', '').replace('USDT', '') + '-USDT'
         symbol = MarketSymbol.objects.get(name=symbol_name, market=market)
         strategy_name = request.POST.get('strategy', 'v1')
         strategy = Strategy.objects.get(code=strategy_name)
+        freq = request.POST.get('freq')
+
+        # check symbols support spot trading
+        for account in accounts:
+            try:
+                ms = MarketSymbol.objects.get(name=symbol_name, market=account.market)
+            except MarketSymbol.DoesNotExist:
+                messages.error(request, f'Symbol {symbol_name} not found in market {account.market.exchange_name}')
+                return redirect('sessiongroup-init')
+            if not ms.spot_trading_enabled:
+                messages.error(request, f'Symbol {ms.name} does not support spot trading on {account.market.exchange_name}')
+                return redirect('sessiongroup-init')
+
         session_group = SessionGroup.objects.create(
             symbol=symbol,
             market=market,
+            freq=freq,
             strategy=strategy
         )
         for account in accounts:
@@ -334,7 +347,7 @@ class SessionGroupDetailView(View):
     def get(self, request, pk):
         group = SessionGroup.objects.prefetch_related('sessions').get(pk=pk)
         signals = Signal.objects.filter(group=group)
-        orders = [signal.cum_order for signal in signals]
+        orders = GroupOrder.objects.filter(group=group)
         issues = group.issues.filter(status=Issue.Status.ACTIVE)
         return render(request, 'sessiongroup-detail.html', {
             'group': group, 
@@ -348,7 +361,6 @@ class SessionGroupDetailView(View):
     def update(request, pk):
         group = SessionGroup.objects.get(pk=pk)
         payload = request.POST
-        print('UPDATE', payload)
         if 'capital' in payload:
             session_pk = int(payload['session-pk'])
             session = Session.objects.get(pk=session_pk)
@@ -356,15 +368,25 @@ class SessionGroupDetailView(View):
                 session.initial_capital = float(payload['capital'])
             session.capital = float(payload['capital'])
             session.save()
-        elif 'start' in payload:
-            pass
+        if 'interface' in payload:
+            interface = MarketAccount.objects.get(pk=payload['interface'])
+            group.interface = interface
+            group.save()
         return redirect('sessiongroup-detail', pk=group.pk)
     
     @staticmethod
     def init(request, pk):
         group = SessionGroup.objects.get(pk=pk)
-        loop  = LoopGroup(group, freq=group.freq)
-        loop.run()
+        for session in group.sessions.all():
+            if session.capital < 5:
+                messages.error(request, f'Account {session.account} has insufficient capital assigned to its Session.')
+                return redirect('sessiongroup-detail', pk=group.pk)
+        try:
+            loop  = LoopGroup(group, freq=group.freq)
+            loop.run()
+        except Exception as e:
+            messages.error(request, f'Failed to start SessionGroup: {e!r}')
+        messages.success(request, f'SessionGroup {group} started.')
         return redirect('sessiongroup-detail', pk=group.pk)
 
     @staticmethod
@@ -419,14 +441,25 @@ class SessionGroupDetailView(View):
 class IssueDetailView(View):
     def get(self, request, pk):
         issue = Issue.objects.get(pk=pk)
-        return render(request, 'issue-detail.html', {'issue': issue})
+        return render(request, 'issue-detail.html', {'issue': issue, 'object': issue.object, 'class': issue.content_type.model})
 
     def post(self, request, pk):
         issue = Issue.objects.get(pk=pk)
         if 'status' in request.POST:
             issue.status = request.POST['status']
             issue.save()
+            return redirect('issue-forobject', object_type=issue.content_type.model, object_id=issue.object_id)
         return redirect('issue-detail', pk=issue.pk)
+
+    @staticmethod
+    def for_object(request, object_type, object_id):
+        # object_type is class name, e.g. marketaccount
+        issues = Issue.objects.filter(content_type__model=object_type, object_id=object_id, status=Issue.Status.ACTIVE)
+        return render(request, 'issues-list.html', {
+            'object': object_id,
+            'class': object_type,
+            'issues': issues
+        })
 
 
 

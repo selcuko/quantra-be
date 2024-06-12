@@ -162,6 +162,22 @@
                 <dd class="text-gray-700 sm:col-span-2">{{ group.strategy.name }}</dd>
             </div>
             <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
+                <dt class="font-medium text-gray-900">Interface</dt>
+                <dd class="text-gray-700 sm:col-span-2">
+                    <form action="update/" method="post" class="flex flex-row">
+                        {% csrf_token %}
+                        <select name="interface"
+                        class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500">
+                        {% for session in sessions %}
+                        <option value="{{ session.account.pk }}" {% if group.interface == session.account %}selected{% endif %}>{{ session.account }}</option>
+                        {% endfor %}
+                        </select>
+                        <input type="submit" class="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 ml-2 dark:bg-blue-600 dark:hover:bg-blue-700 focus:outline-none dark:focus:ring-blue-800"></input>
+                    </form>
+
+                </dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
                 <dt class="font-medium text-gray-900">Created</dt>
                 <dd class="text-gray-700 sm:col-span-2">{{ group.created_at }}</dd>
             </div>
@@ -185,8 +201,8 @@
                 <dd class="text-gray-700 sm:col-span-2">{{ group.strategy.name }} {{ session.strategy.version|default:'1.0' }}</dd>
             </div>
             <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
-                <dt class="font-medium text-gray-900">Open pos.</dt>
-                <dd class="text-gray-700 sm:col-span-2">Not implemented </dd>
+                <dt class="font-medium text-gray-900">Interface</dt>
+                <dd class="text-gray-700 sm:col-span-2">{{ group.interface.exchange }}</dd>
             </div>
 
             <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
@@ -261,7 +277,7 @@
                         <label for=""><!-- for ref --></label>
                         <div class="flex items center">
                             <input type="hidden" value="{{ session.pk }}" name="session-pk">
-                            <input type="number" step="0.01" value="{{ session.capital|floatformat:2 }}" min="0" max="{{ session.account.capital|floatformat:2|default:'0' }}" name="capital" class=" bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 mr-2" required />                    
+                            <input type="number" step="0.01" value="{{ session.capital|floatformat:2 }}" min="5" max="{{ session.account.capital|floatformat:2|default:'0' }}" name="capital" class=" bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 mr-2" required />                    
                             <button type="submit" class="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm  sm:w-auto px-5 py-2.5 text-center">Update</button>                    
                         </div>
                     </form>
@@ -288,19 +304,40 @@
                 <th scope="col" class="px-6 py-3">
                     Assets
                 </th>
+                <th scope="col" class="px-6 py-3">
+                    Health
+                </th>
             </tr>
         </thead>
         <tbody>
             {% for session in sessions %}
             <tr class="bg-white border-b dark:bg-gray-800 dark:border-gray-700">
                 <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap dark:text-white">
-                    {{ session.account.owner }}
+                    [{{ session.account.exchange }}] {{ session.account.owner }}
                 </th>
                 <td class="px-6 py-4">
                     $ {{ session.capital|floatformat:2|default:'N/A' }}
                 </td>
                 <td class="px-6 py-4">
                     {{ session.assets|floatformat:2|default:'N/A' }} {{ group.symbol.base }}
+                </td>
+                <td class="px-6 py-4">
+                    {% if session.account.active_issues %}
+                    <a href="{% url 'issue-forobject' object_type='marketaccount' object_id=session.account.pk %}" class="inline-flex items-center font-bold text-red-600 hover:underline">
+                        {% if session.account.active_issues|length == 1 %}
+                        {{ session.account.active_issues.0.subject }}
+                        {% else %}
+                        {{ session.account.active_issues|length }} issues
+                        {% endif %}
+                        <svg class="w-4 h-4 ms-2 rtl:rotate-180" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 14 10">
+                            <path stroke="red" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M1 5h12m0 0L9 1m4 4L9 9"/>
+                        </svg>
+                    </a>
+                    {% else %}
+                    <a class="inline-flex items-center font-bold text-green-600 cursor-default">
+                        OK
+                    </a>
+                    {% endif %}
                 </td>
             </tr>
             {% endfor %}
@@ -437,15 +474,15 @@ rangeInputSell.addEventListener('input', () => {
                         {{ order.deal_size }} {{ group.symbol.base }}
                     </td>
                     <td class="px-6 py-4">
-                        {% if order.side == 'BUY' %}
+                        {% if order.side == 'buy' %}
                         <span
                             class="nowrap bg-green-100 text-green-800 mr-2 px-2.5 py-0.5 rounded-full dark:bg-green-900 dark:text-green-300">
-                            {{ order.side }}
+                            {{ order.side|upper }}
                         </span>
-                        {% elif order.side == 'SELL' %}
+                        {% elif order.side == 'sell' %}
                         <span
                             class="nowrap bg-red-100 text-red-800 mr-2 px-2.5 py-0.5 rounded-full dark:bg-red-900 dark:text-red-300">
-                            {{ order.side }}
+                            {{ order.side|upper }}
                         </span>
                         {% else %}
                         <span

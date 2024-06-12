@@ -8,13 +8,33 @@
       Session Group
     </span>
   </h1>
+  <div>
+    {% if messages %}
+    <ul class="messages">
+        {% for message in messages %}
+            {% if message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}
+            <div class="{{ message.tags }} p-4 mb-4 text-sm text-red-800 rounded-lg bg-red-50 dark:bg-gray-800 dark:text-red-400" role="alert">
+                <span class="font-medium">Unhandled error:</span> {{ message }}
+            </div>
+            {% elif message.level == DEFAULT_MESSAGE_LEVELS.SUCCESS %}
+            <div class="{{ message.tags }} p-4 mb-4 text-sm text-green-800 rounded-lg bg-green-50 dark:bg-green-900 dark:text-green-300" role="alert">
+                <span class="font-medium">Success:</span> {{ message }}
+            </div>
+            {% else %}
+            <div class="{{ message.tags }} p-4 mb-4 text-sm text-gray-800 rounded-lg bg-gray-50 dark:bg-gray-800 dark:text-gray-300" role="alert">
+                {{ message }}
+            </div>
+            {% endif %}
+        {% endfor %}
+    </ul>
+    {% endif %}
+</div>
   <form method="POST" action="">
     {% csrf_token %}
     <label for="strategy">Strategy</label>
     <select id="strategy" name="strategy"
       class="mb-6 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
       required>
-      <option value="" disabled selected>Select a strategy</option>
       {% for strategy in strategies %}
       <option value="{{ strategy.code }}"> {{ strategy.name }} {{ strategy.version }} ({{ strategy.technical_name }}) </option>
       {% endfor %}
@@ -23,9 +43,8 @@
     <select id="market" name="market"
       class="mb-6 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
       multiple required>
-      <option value="" disabled selected>Select a market</option>
       {% for market in markets %}
-      <option value="{{ market.id }}">[{{market.exchange}}] {{ market.owner }}</option>
+      <option {% if market.capital < 5 %}disabled{% endif %} value="{{ market.id }}">[{{market.exchange}}] {{ market.owner }} - ${{ market.capital|floatformat:2|default:0 }}</option>
       {% endfor %}
     </select>
     <div>

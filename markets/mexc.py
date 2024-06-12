@@ -1,31 +1,29 @@
-from decimal import Decimal
 import hashlib
 import hmac
 import json
-
-
 import time
-from datetime import datetime, timedelta
-from typing import Callable, Literal
 import typing
-from urllib.parse import urlencode
 import uuid
+from datetime import datetime, timedelta
+from decimal import Decimal
+from typing import Callable, Literal
+from urllib.parse import urlencode
 
 import pytz
 import requests
+from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
+from websockets.sync.client import ClientConnection, connect
 
 from logger import logger
 from markets import IMarket
-from markets.errors import InsufficientBalance, KlineFetchFailed, RejectedOrder
-from markets.helper import authentication_required, float_to_precision
+from markets.errors import InsufficientBalance, KlineFetchFailed, MarketAPIUnavailable, RejectedOrder
+from markets.helper import authentication_required
 from match import MatchEngine
 from models import interval_to_minutes
-from websockets.sync.client import connect
-from websockets.sync.client import ClientConnection
-from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
+
 if typing.TYPE_CHECKING:
-    from quantapi.models import MarketAccount, Order, MarketSymbol
     from liveloop import LiveLoop
+    from quantapi.models import MarketAccount, MarketSymbol, Order
 
 
 class MEXCMarket(IMarket):
@@ -50,8 +48,11 @@ class MEXCMarket(IMarket):
         self.assets = {}
         self.commission = {}
 
-        self.get_symbols()
-        self.get_account()
+        try:
+            self.get_symbols()
+            self.get_account()
+        except requests.ConnectionError as exc:
+            raise MarketAPIUnavailable(f'Could not connect to {self.name} API') from exc
 
         self.spot_trading_enabled = False
         self.margin_trading_enabled = False
@@ -411,7 +412,8 @@ class MEXCMarket(IMarket):
             deal_size=float(order.get('executedQty', 0)) or float(order.get('origQty', 0)),
             funds=float(order.get('origQuoteOrderQty', 0)),
             status=order.get('status', 'FILLED' if order.get('orderId') else 'REJECTED'),
-            details=json.dumps(order),        
+            details=json.dumps(order),
+            account=self.account,
         )
 
     @authentication_required

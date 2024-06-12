@@ -43,6 +43,7 @@ urlpatterns = [
     path('notifications/', NotificationsView.as_view(), name='notification-list'),
     path('notifications/<int:pk>/', NotificationDetailView.as_view(), name='notification-detail'),
     path('notifications/<int:pk>/acknowledge/', NotificationDetailView.acknowledge, name='notification-acknowledge'),
+    path('issue/<slug:object_type>/<int:object_id>/', IssueDetailView.for_object, name='issue-forobject'),
     path('issue/<int:pk>/', IssueDetailView.as_view(), name='issue-detail'),
 ]
 urlpatterns += [path('silk/', include('silk.urls', namespace='silk'))]
