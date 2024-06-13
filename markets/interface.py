@@ -2,6 +2,9 @@ from datetime import datetime, timedelta
 import json
 from typing import TYPE_CHECKING, Callable, Literal, Optional
 from django.utils import timezone
+import requests
+
+from markets.errors import MarketAPIUnavailable
 
 if TYPE_CHECKING:
     from quantapi.models import Order, MarketSymbol, MarketAccount, Market
@@ -323,13 +326,16 @@ class IMarket:
         if self.account.last_cache and (timezone.now() - self.account.last_cache) < timedelta(minutes=5):
             if not force: 
                 return
-        self.get_account()
-        self.account.capital = self.capital
-        self.account.assets = json.dumps(self.assets)
-        self.account.last_cache = timezone.now()
-        prices = self.get_current_prices(save=False)
-        self.get_equity(save=False)
-        self.account.save()
-        self.market.prices = json.dumps(prices)
-        self.market.prices_updated = timezone.now()
-        self.market.save()
+        try:
+            self.get_account()
+            self.account.capital = self.capital
+            self.account.assets = json.dumps(self.assets)
+            self.account.last_cache = timezone.now()
+            prices = self.get_current_prices(save=False)
+            self.get_equity(save=False)
+            self.account.save()
+            self.market.prices = json.dumps(prices)
+            self.market.prices_updated = timezone.now()
+            self.market.save()
+        except requests.ConnectionError as exc:
+            raise MarketAPIUnavailable(f'Could not connect to {self.name} API') from exc

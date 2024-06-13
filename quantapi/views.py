@@ -303,7 +303,11 @@ class SessionGroupInitView(View):
         interface = MarketAccount.objects.get(pk=interface_id) if interface_id else accounts[0]
         market = interface.market
         symbol_name = request.POST.get('symbol').upper().replace('-', '').replace('/', '').replace('USDT', '') + '-USDT'
-        symbol = MarketSymbol.objects.get(name=symbol_name, market=market)
+        try:
+            symbol = MarketSymbol.objects.get(name=symbol_name, market=market)
+        except MarketSymbol.DoesNotExist:
+            messages.error(request, f'Symbol {symbol_name} not found in market {market.exchange_name}')
+            return redirect('sessiongroup-init')
         strategy_name = request.POST.get('strategy', 'v1')
         strategy = Strategy.objects.get(code=strategy_name)
         freq = request.POST.get('freq')
@@ -356,6 +360,26 @@ class SessionGroupDetailView(View):
             'signals': signals,
             'issues': issues,
         })
+
+    def post(self, request, pk):
+        payload = request.POST
+        if 'buy' in payload:
+            buy_pct = int(payload['buy'])
+            lgroup = cache.get(f'sessiongroup_{pk}')
+            if not lgroup:
+                messages.error(request, f'SessionGroup {pk} has not an associated LoopGroup in the cache.')
+                return redirect('sessiongroup-detail', pk=pk)
+            lgroup.buy_manual(pct=buy_pct)
+            messages.success(request, f'SessionGroup {pk} bought {buy_pct}% of assets.')
+        if 'sell' in payload:
+            sell_pct = int(payload['sell'])
+            lgroup = cache.get(f'sessiongroup_{pk}')
+            if not lgroup:
+                messages.error(request, f'SessionGroup {pk} has not an associated LoopGroup in the cache.')
+                return redirect('sessiongroup-detail', pk=pk)
+            lgroup.sell_manual(pct=sell_pct)
+            messages.success(request, f'SessionGroup {pk} sold {sell_pct}% of assets.')
+        return redirect('sessiongroup-detail', pk=pk)
 
     @staticmethod
     def update(request, pk):

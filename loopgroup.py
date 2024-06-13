@@ -15,7 +15,7 @@ from logger import logger
 from markets.errors import MarketAPIUnavailable, OrderPostProcessingError
 from models import OHLCVDataset, interval_to_minutes
 from order import GroupOrderManager, OrderManager
-from quantapi.models import Issue, Order, Session, SessionGroup, Signal
+from quantapi.models import GroupOrder, Issue, Order, Session, SessionGroup, Signal
 from quantapi.models import Strategy as StrategyModel
 from strategy import Strategy, get_strategy
 
@@ -352,7 +352,7 @@ class LoopGroup:
         return (session.assets or 0) > 0 and self.group.sell_enabled
 
 
-    def buy_for_session(self, session: Session):
+    def buy_for_session(self, session: Session, amount:Optional[float]=None):
         if not self.can_buy(session):
             return
 
@@ -364,7 +364,7 @@ class LoopGroup:
             order = manager.place(
                 symbol=self.symbol,
                 side='buy',
-                deal_funds=session.capital,
+                deal_funds=amount or session.capital,
             )
         except OrderPostProcessingError:
             logger.critical(
@@ -425,7 +425,27 @@ class LoopGroup:
         group_order.save()
 
 
-    def sell_for_session(self, session: Session):
+    def buy_manual(self, pct:int):
+        group_order = GroupOrder.objects.create(
+            group=self.group,
+            side=Order.Side.BUY,
+            status=GroupOrder.Status.PENDING
+        )
+        for session in self.sessions:
+            if not self.can_buy(session):
+                continue
+            amount = session.capital * pct / 100
+            order = self.buy_for_session(session, amount)
+            if not order:
+                continue
+            group_order.deal_funds += order.deal_funds
+            group_order.deal_size += order.deal_size
+        group_order.save()
+        return group_order
+
+
+
+    def sell_for_session(self, session: Session, amount:Optional[float]=None):
         if not self.can_sell(session):
             return
 
@@ -437,7 +457,7 @@ class LoopGroup:
             order = manager.place(
                 symbol=self.symbol,
                 side='sell',
-                deal_size=session.assets,
+                deal_size=amount or session.assets,
             )
         except OrderPostProcessingError:
             logger.critical(
@@ -493,18 +513,12 @@ if __name__ == '__main__':
         'LoopGroup started as main.',
         extra={'subject': 'LoopGroup started as main.'}
     )
-    group = SessionGroup.objects.get(id=3)
+    group = SessionGroup.objects.get(id=10)
     if not group:
         print('No SessionGroup found.')
         exit(1)
     loop = LoopGroup(group, freq='1 min')
-    gom = GroupOrderManager(group)
-    gorder = gom.place('buy')
-    print(gorder.status)
-    orders = Order.objects.filter(group=gorder)
-    for order in orders:
-        print(order.status)
-        print(order.details)
+    loop.buy({'close': 100})
 
     while True:
         try:

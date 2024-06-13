@@ -56,6 +56,7 @@ class OrderManager:
                 deal_size_str = f'{deal_size:f}'
                 request['deal_size'] = deal_size
         else:
+            print('deal_size:', deal_size, 'deal_funds:', deal_funds, 'side:', side)
             raise ValueError('deal_size for sell or deal_funds for buy must be provided.')
         try:
             order = self.market.place_market_order(symbol, side, deal_funds_str, deal_size_str)
@@ -131,8 +132,10 @@ class GroupOrderManager:
         orders = {}
         for session in self.sessions:
             if side == 'buy' and session.capital < 5:
+                print('capital:', session.capital, 'session:', session)
                 continue
             if side == 'sell' and session.assets < 0:
+                print('assets:', session.assets, 'session:', session)
                 continue
             interface = session.account.get_interface()
             manager   = OrderManager(interface, session)
