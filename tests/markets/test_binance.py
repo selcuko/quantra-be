@@ -17,7 +17,7 @@ class BinanceMarketTests(QuantTestCase):
 
     @mock.patch.object(BinanceMarket, 'get_symbols', mock_get_symbols)
     @mock.patch.object(BinanceMarket, 'get_account', mock_get_account)
-    @mock.patch('binance.client.Client', autospec=True)
+    @mock.patch('markets.binance.Client', autospec=True)
     def test_market_attributes_are_initialized(self, mock_client):
         interface = BinanceMarket(self.FAKE_CONFIG, self.account)
         self.assertEqual(interface.name, 'Binance')

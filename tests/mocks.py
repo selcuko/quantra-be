@@ -47,6 +47,17 @@ class MockIMarket(Mock, IMarket):
         )
 
 
+class MockResponse(Mock):
+    def __init__(self, **kwargs) -> None:
+        super().__init__()
+        self.kwargs = kwargs
+        self.status_code = kwargs.get('code', 200)
+        self.body = kwargs.get('body', {})
+
+    def json(self):
+        return self.body
+
+
 class MockStrategy(Mock, Strategy):
     def __init__(self, params=None) -> None:
         super().__init__()

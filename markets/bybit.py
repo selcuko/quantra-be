@@ -163,9 +163,15 @@ class BybitMarket(IMarket):
 
     def get_last_klines(self, symbol:str, interval:str, limit=100, retry=1, silent=True) -> list[list]:
         minutes = interval_to_minutes(interval)
-        now = timezone.now() + timedelta(minutes=1)
+        now = timezone.now().replace(second=0, microsecond=0) + timedelta(minutes=1)
         start = now - timedelta(minutes=minutes*limit+1)
-        klines = self.get_klines(symbol, interval, start, now, limit=limit*2)
+        klines = self.get_klines(
+            symbol=symbol,
+            interval=interval,
+            start=start,
+            end=now,
+            limit=limit,
+        )
         if not klines:
             return []
         last_kline_dt = klines[-1][0]
