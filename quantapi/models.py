@@ -710,6 +710,12 @@ class GroupOrder(models.Model):
     deal_funds = models.FloatField(default=0)
     status = models.CharField(max_length=30, choices=Status.choices)
     issues = GenericRelation(Issue)
+    orders: models.QuerySet[Order]
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        if self.signal:
+            self.orders.update(signal=self.signal)
 
 
 class ComplexOrder(models.Model):

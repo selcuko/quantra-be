@@ -423,6 +423,7 @@ class LoopGroup:
         group_order = group_order_manager.place('buy')
         group_order.signal = signal
         group_order.save()
+        return group_order
 
 
     def buy_manual(self, pct:int):
@@ -442,7 +443,6 @@ class LoopGroup:
             group_order.deal_size += order.deal_size
         group_order.save()
         return group_order
-
 
 
     def sell_for_session(self, session: Session, amount:Optional[float]=None):
@@ -505,7 +505,7 @@ class LoopGroup:
         group_order = group_order_manager.place('sell')
         group_order.signal = signal
         group_order.save()
-        return
+        return group_order
 
 
 if __name__ == '__main__':

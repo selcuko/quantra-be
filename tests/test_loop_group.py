@@ -6,7 +6,7 @@ from django.test import TestCase
 
 from logger import logger
 from loopgroup import LoopGroup
-from quantapi.models import (Market, MarketAccount, MarketCredentials,
+from quantapi.models import (GroupOrder, Market, MarketAccount, MarketCredentials,
                              MarketSymbol, Order, SessionGroup, Signal, Strategy)
 from tests.mocks import MockCache, mock_get_interface, mock_get_strategy
 
@@ -125,7 +125,11 @@ class LoopGroupTests(TestCase):
             'time': datetime(2024, 1, 2, tzinfo=pytz.UTC).timestamp(),
             'close': 38000.0,
         }
-        loop.buy(candle)
+        group_order = loop.buy(candle)
+        self.assertEqual(group_order.status, GroupOrder.Status.FILLED)
+        self.assertEqual(group_order.deal_funds, 10)
+        self.assertEqual(group_order.deal_size, 1)
+        self.assertEqual(group_order.side, Order.Side.BUY)
 
         signals = Signal.objects.filter(group=self.group)
         self.assertEqual(signals.count(), 1)
@@ -156,7 +160,11 @@ class LoopGroupTests(TestCase):
             'time': datetime(2024, 1, 2, tzinfo=pytz.UTC).timestamp(),
             'close': 38000.0,
         }
-        loop.sell(candle)
+        group_order = loop.sell(candle)
+        self.assertEqual(group_order.status, GroupOrder.Status.FILLED)
+        self.assertEqual(group_order.deal_funds, 1)
+        self.assertEqual(group_order.deal_size, 10)
+        self.assertEqual(group_order.side, Order.Side.SELL)
 
         signals = Signal.objects.filter(group=self.group)
         self.assertEqual(signals.count(), 1)

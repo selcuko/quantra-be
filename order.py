@@ -12,6 +12,7 @@ from markets.errors import (InsufficientBalance, OrderNotFilledError,
                             RejectedOrder)
 from markets.helper import float_to_precision
 from quantapi.models import GroupOrder, Issue, MarketSymbol, Order, Session, SessionGroup
+from utils import can_session_buy, can_session_sell
 
 
 class OrderManager:
@@ -126,16 +127,14 @@ class GroupOrderManager:
     def place(self, side:Literal['buy', 'sell']) -> GroupOrder:
         group_order = GroupOrder.objects.create(
             group=self.group,
-            side=side,
+            side=side.upper(),
             status=GroupOrder.Status.PENDING,
         )
         orders = {}
         for session in self.sessions:
-            if side == 'buy' and session.capital < 5:
-                print('capital:', session.capital, 'session:', session)
+            if side == 'buy' and not can_session_buy(session):
                 continue
-            if side == 'sell' and session.assets < 0:
-                print('assets:', session.assets, 'session:', session)
+            if side == 'sell' and not can_session_sell(session):
                 continue
             interface = session.account.get_interface()
             manager   = OrderManager(interface, session)
