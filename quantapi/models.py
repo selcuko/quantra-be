@@ -338,7 +338,8 @@ class Session(models.Model):
 
     @property
     def equity(self):
-        return self.capital + (self.assets * self.last_price if self.last_price else 0)
+        last_price = self.last_price or self.group.last_price if self.group else 0
+        return self.capital + (self.assets * last_price)
 
     def __str__(self):
         return f'{self.strategy} - {self.symbol} - {self.status}'
@@ -709,8 +710,14 @@ class GroupOrder(models.Model):
     deal_size = models.FloatField(default=0)
     deal_funds = models.FloatField(default=0)
     status = models.CharField(max_length=30, choices=Status.choices)
+    manual = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
     issues = GenericRelation(Issue)
     orders: models.QuerySet[Order]
+
+    @property
+    def price(self):
+        return self.deal_funds / self.deal_size if self.deal_size else 0
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)

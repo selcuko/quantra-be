@@ -9,13 +9,15 @@ import pandas as pd
 import django
 from django.core.cache import cache
 from django.utils import timezone
+
+from markets.interface import IMarket
 django.setup()
 
 from logger import logger
-from markets.errors import MarketAPIUnavailable, OrderPostProcessingError
+from markets.errors import MarketAPIUnavailable
 from models import OHLCVDataset, interval_to_minutes
-from order import GroupOrderManager, OrderManager
-from quantapi.models import GroupOrder, Issue, Order, Session, SessionGroup, Signal
+from order import GroupOrderManager
+from quantapi.models import Issue, MarketAccount, Session, SessionGroup, Signal
 from quantapi.models import Strategy as StrategyModel
 from strategy import Strategy, get_strategy
 
@@ -72,7 +74,7 @@ class LoopGroup:
 
         # XXX: remove "if a" part once session.account is not nullable
         # XXX: also get_interface() is not async
-        self.interfaces = {}
+        self.interfaces:dict[MarketAccount, IMarket] = {}
         for a in self.accounts:
             try:
                 self.interfaces[a] = a.get_interface()
@@ -86,7 +88,7 @@ class LoopGroup:
                     extra={'group': self, 'subject': 'Error while getting interface.', 'account': a},
                     exc_info=True
                 )
-        self.interface = group.interface.get_interface() if group.interface else None
+        self.interface = None
         cache.set(f'sessiongroup_{group.pk}', self)
         logger.info(
             f'LoopGroup initialized with {len(self.sessions)} sessions.',
@@ -120,10 +122,13 @@ class LoopGroup:
 
         # the interface to fetch data from
         if not self.interface:
-            account = self.accounts[0]
-            self.interface = self.interfaces[account]
-            self.group.interface = account
-            self.group.save()
+            if self.group.interface:
+                self.interface = self.interfaces[self.group.interface]
+            else:
+                account = self.accounts[0]
+                self.interface = self.interfaces[account]
+                self.group.interface = account
+                self.group.save()
         self.precheck_passed = True
         logger.info(
             f'LoopGroup precheck passed.',
@@ -155,9 +160,11 @@ class LoopGroup:
                 self.fail()
 
         last_klines_ds = OHLCVDataset(last_klines)
-        self.last_kline_dt = last_klines_ds.index[-1].to_pydatetime()
+        self.last_kline_dt = last_klines_ds.index[0].to_pydatetime()
         self.last_kline = last_klines_ds.iloc[-1].to_dict()
         self.last_100_klines = last_klines_ds
+        self.group.last_kline_dt = self.last_kline_dt
+        self.group.save()
         return True
 
 
@@ -341,173 +348,48 @@ class LoopGroup:
         self.group.save()
         return True
 
-
-    def can_buy(self, session:Session):
-        assert session.account is not None
-        return (session.capital or 0) > MINIMUM_BUY_AMOUNT and self.group.buy_enabled
-
-
-    def can_sell(self, session:Session):
-        assert session.account is not None
-        return (session.assets or 0) > 0 and self.group.sell_enabled
-
-
-    def buy_for_session(self, session: Session, amount:Optional[float]=None):
-        if not self.can_buy(session):
-            return
-
-        assert session.account is not None
-        interface = self.interfaces[session.account]
-        manager = OrderManager(interface, session)
-
-        try:
-            order = manager.place(
-                symbol=self.symbol,
-                side='buy',
-                deal_funds=amount or session.capital,
+    def buy(self, last_kline:dict={}, manual:bool=False, pct=100):
+        if not last_kline and not manual:
+            raise ValueError('buy() must be called with a kline or manual=True.')
+        if not manual:
+            signal = Signal.objects.create(
+                group=self.group,
+                timestamp=self.last_kline_dt,
+                side=Signal.Side.BUY,
+                price=last_kline['close'],
+                raw=json.dumps(last_kline)
             )
-        except OrderPostProcessingError:
-            logger.critical(
-                f'Order post process failed for session {session.pk} within SessionGroup Order might or might not be placed.',
-                extra={'group': self, 'subject': 'Order post process failed.', 'type': 'ORDER'},
-                exc_info=True
-            )
-            return
-        except:
-            logger.critical(
-                f'Unhandled error while placing BUY order for session {session.pk}.',
-                extra={'group': self, 'subject': 'Unhandled error prevented buy order', 'type': 'ORDER'},
-                exc_info=True
-            )
-            return
-
-        if order.status == Order.Status.INSUFFICIENT_BALANCE:
-            interface.get_account()
-            old_capital = session.capital
-            session.capital = max(interface.capital, 0)
-            session.save()
-            logger.warning(
-                f'Insufficient balance for session {session.pk} to place order. Capital reduced from ${old_capital} to ${session.capital}.',
-                extra={'group': self, 'subject': 'Insufficient balance for buy order.', 'type': 'ORDER'}
-            )
-            return self.buy_for_session(session)
-
-        elif order.status == Order.Status.REJECTED:
-            logger.critical(
-                f'Order was rejected for session {session.pk} (OrderID={order.pk}).',
-                extra={'group': self, 'subject': 'Order was rejected.', 'type': 'ORDER', 'order': order}
-            )
-            return
-        elif order.status == Order.Status.FILLED:
-            assert order.deal_funds is not None
-            assert order.deal_size is not None
-            session.capital -= order.deal_funds
-            session.assets += order.deal_size
-            session.save()
-            logger.info(
-                f'Order was filled for session {session.pk} (OrderID={order.pk}).',
-                extra={'group': self, 'subject': 'Order was filled.', 'type': 'ORDER', 'order': order}
-            )
-        return order
-
-
-    def buy(self, last_kline:dict):
-        signal = Signal.objects.create(
-            group=self.group,
-            timestamp=self.last_kline_dt,
-            side=Signal.Side.BUY,
-            price=last_kline['close'],
-            raw=json.dumps(last_kline)
-        )
         group_order_manager = GroupOrderManager(self.group)
-        group_order = group_order_manager.place('buy')
+        group_order = group_order_manager.place('buy', pct=pct)
         if not group_order:
             return
-        group_order.signal = signal
+        if manual:
+            group_order.manual = True
+        else:
+            group_order.signal = signal
         group_order.save()
         return group_order
 
 
-    def buy_manual(self, pct:int):
-        group_order = GroupOrder.objects.create(
-            group=self.group,
-            side=Order.Side.BUY,
-            status=GroupOrder.Status.PENDING
-        )
-        for session in self.sessions:
-            if not self.can_buy(session):
-                continue
-            amount = session.capital * pct / 100
-            order = self.buy_for_session(session, amount)
-            if not order:
-                continue
-            group_order.deal_funds += order.deal_funds
-            group_order.deal_size += order.deal_size
-        group_order.save()
-        return group_order
-
-
-    def sell_for_session(self, session: Session, amount:Optional[float]=None):
-        if not self.can_sell(session):
-            return
-
-        assert session.account is not None
-        interface = self.interfaces[session.account]
-        manager = OrderManager(interface, session)
-
-        try:
-            order = manager.place(
-                symbol=self.symbol,
-                side='sell',
-                deal_size=amount or session.assets,
+    def sell(self, last_kline:dict={}, manual:bool=False, pct=100):
+        if not last_kline and not manual:
+            raise ValueError('sell() must be called with a kline or manual=True.')
+        if not manual:
+            signal = Signal.objects.create(
+                group=self.group,
+                timestamp=self.last_kline_dt,
+                side=Signal.Side.SELL,
+                price=last_kline['close'],
+                raw=json.dumps(last_kline)
             )
-        except OrderPostProcessingError:
-            logger.critical(
-                f'Order post process failed for session {session.pk} within SessionGroup Order might or might not be placed.',
-                extra={'group': self, 'subject': 'Order post process failed.', 'type': 'ORDER'},
-                exc_info=True
-            )
-            return
-        except:
-            logger.critical(
-                f'Unhandled error while placing SELL order for session {session.pk}.',
-                extra={'group': self, 'subject': 'Unhandled error prevented sell order', 'type': 'ORDER'},
-                exc_info=True
-            )
-            return
-
-        if order.status == Order.Status.REJECTED:
-            logger.critical(
-                f'Order was rejected for session {session.pk} (OrderID={order.pk}).',
-                extra={'group': self, 'subject': 'Order was rejected.', 'type': 'ORDER', 'order': order}
-            )
-            return
-        elif order.status == Order.Status.FILLED:
-            assert order.deal_funds is not None
-            assert order.deal_size is not None
-            session.capital += order.deal_funds
-            session.assets -= order.deal_size
-            session.save()
-            logger.info(
-                f'Order was filled for session {session.pk} (OrderID={order.pk}).',
-                extra={'group': self, 'subject': 'Order was filled.', 'type': 'ORDER', 'order': order}
-            )
-        return order
-
-
-    def sell(self, last_kline:dict):
-        signal = Signal.objects.create(
-            group=self.group,
-            timestamp=self.last_kline_dt,
-            side=Signal.Side.SELL,
-            price=last_kline['close'],
-            raw=json.dumps(last_kline)
-        )
         group_order_manager = GroupOrderManager(self.group)
-        group_order = group_order_manager.place('sell')
+        group_order = group_order_manager.place('sell', pct=pct)
         if not group_order:
             return
-        group_order.signal = signal
+        if manual:
+            group_order.manual = True
+        else:
+            group_order.signal = signal
         group_order.save()
         return group_order
 

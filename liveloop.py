@@ -315,21 +315,6 @@ class LiveLoop:
             logger.error(f'Unhandled error while placing order.', exc_info=True, extra={'type': 'ORDER', 'loop': repr(self)})
             return
 
-        if order.status == Order.Status.INSUFFICIENT_BALANCE:
-            self.imarket.get_account()
-            old_cap = self.session.capital
-            self.session.capital = max(self.imarket.capital, 0)
-            self.session.save()
-            logger.warning(f'Insufficient balance, capital updated to {self.session.capital}', extra={'prefix': repr(self), 'type': 'ORDER'})
-            if old_cap == self.session.capital:
-                return
-            return self.buy(last_kline)
-        elif order.status == Order.Status.REJECTED:
-            logger.error(f'RejectedOrder: {order!s}', extra={'type': 'ORDER', 'prefix': repr(self)})
-        elif order.status == Order.Status.FILLED and order.deal_size and order.deal_funds:
-            self.session.assets += order.deal_size
-            self.session.capital -= order.deal_funds
-            self.session.save()
         order.signal = signal
         order.save()
         return order
@@ -359,21 +344,6 @@ class LiveLoop:
             logger.error(f'Unhandled error while placing order.', exc_info=True, extra={'type': 'ORDER', 'loop': repr(self)})
             return
 
-        if order.status == Order.Status.INSUFFICIENT_BALANCE:
-            self.imarket.get_account()
-            old_assets = self.session.assets
-            self.session.assets = self.imarket.assets.get(self.symbol.base, 0)
-            self.session.save()
-            logger.warning(f'Insufficient balance, assets updated to {self.session.assets}', extra={'prefix': repr(self), 'type': 'ORDER'})
-            if old_assets == self.session.assets:
-                return
-            return self.sell(last_kline)
-        elif order.status == Order.Status.REJECTED:
-            logger.error(f'RejectedOrder: {order!s}', extra={'type': 'ORDER', 'prefix': repr(self)})
-        elif order.status == Order.Status.FILLED and order.deal_size and order.deal_funds:
-            self.session.assets -= order.deal_size
-            self.session.capital += order.deal_funds
-            self.session.save()
         order.signal = signal
         order.save()
         return order

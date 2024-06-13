@@ -194,8 +194,6 @@ class SessionUpdateView(View):
                 order.add_message(msg)
             order.save()
             if order.status == Order.Status.FILLED and order.deal_size and order.deal_funds:
-                session.capital -= order.deal_funds
-                session.assets += order.deal_size
                 iface.cache_to_db(force=True)
                 messages.add_message(request, messages.SUCCESS, f'Bought {order.deal_size} {session.symbol.base} for {order.deal_funds} USDT')
             else:
@@ -225,8 +223,6 @@ class SessionUpdateView(View):
                 order.add_message(msg)
             order.save()
             if order.status == Order.Status.FILLED and order.deal_size and order.deal_funds:
-                session.capital += order.deal_funds
-                session.assets -= order.deal_size
                 iface.cache_to_db(force=True)
                 messages.add_message(request, messages.SUCCESS, f'Sold {order.deal_size} {session.symbol.base} for {order.deal_funds} USDT')
             else:
@@ -365,20 +361,28 @@ class SessionGroupDetailView(View):
         payload = request.POST
         if 'buy' in payload:
             buy_pct = int(payload['buy'])
-            lgroup = cache.get(f'sessiongroup_{pk}')
+            lgroup: LoopGroup = cache.get(f'sessiongroup_{pk}')
             if not lgroup:
                 messages.error(request, f'SessionGroup {pk} has not an associated LoopGroup in the cache.')
                 return redirect('sessiongroup-detail', pk=pk)
-            lgroup.buy_manual(pct=buy_pct)
-            messages.success(request, f'SessionGroup {pk} bought {buy_pct}% of assets.')
+            gorder = lgroup.buy(pct=buy_pct, manual=True)
+            if not gorder:
+                most_capital = max([session.capital for session in lgroup.sessions])
+                messages.error(request, f'Not a single account has enough capital to buy. Most capital: {most_capital:.2f} USDT (effective: {most_capital * buy_pct / 100:.2f} USDT, {buy_pct}% of total capital)')
+            else:
+                messages.success(request, f'SessionGroup {pk} bought {buy_pct}% of assets. (status={gorder.status})')
         if 'sell' in payload:
             sell_pct = int(payload['sell'])
-            lgroup = cache.get(f'sessiongroup_{pk}')
+            lgroup: LoopGroup = cache.get(f'sessiongroup_{pk}')
             if not lgroup:
                 messages.error(request, f'SessionGroup {pk} has not an associated LoopGroup in the cache.')
                 return redirect('sessiongroup-detail', pk=pk)
-            lgroup.sell_manual(pct=sell_pct)
-            messages.success(request, f'SessionGroup {pk} sold {sell_pct}% of assets.')
+            gorder = lgroup.sell(pct=sell_pct, manual=True)
+            if not gorder:
+                most_assets = max([session.assets for session in lgroup.sessions])
+                messages.error(request, f'Not a single account has enough assets to sell. Most assets: {most_assets} {lgroup.symbol.base} (effective: {most_assets * sell_pct / 100} {lgroup.symbol.base}, {sell_pct}% of total assets)')
+            else:
+                messages.success(request, f'SessionGroup {pk} sold {sell_pct}% of assets. (status={gorder.status})')
         return redirect('sessiongroup-detail', pk=pk)
 
     @staticmethod
@@ -479,6 +483,10 @@ class IssueDetailView(View):
     def for_object(request, object_type, object_id):
         # object_type is class name, e.g. marketaccount
         issues = Issue.objects.filter(content_type__model=object_type, object_id=object_id, status=Issue.Status.ACTIVE)
+        if request.method == 'POST':
+            if (status := request.POST.get('status')):
+                issues.update(status=status)
+                return redirect('issue-forobject', object_type=object_type, object_id=object_id)
         return render(request, 'issues-list.html', {
             'object': object_id,
             'class': object_type,

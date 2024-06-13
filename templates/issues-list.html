@@ -8,18 +8,41 @@
         <div class="relative overflow-hidden bg-white shadow-md dark:bg-gray-800 sm:rounded-lg">
             <div class="overflow-x-auto">
                 <table class="w-full text-sm text-left text-gray-500 dark:text-gray-400">
-                    <caption class="p-5 text-lg font-semibold text-left rtl:text-right text-gray-900 bg-white dark:text-white dark:bg-gray-800">
-                        {{ issues|length }} Issues
-                        <br>
-                        <small>
-                            Class: {{ class }}, ID: {{ object.pk }}
-                        </small>
+                    <caption class="p-5 text-lg font-semibold text-left text-gray-900 w-full">
+                        <div class="flex flex-row justify-between">
+                            <div>
+                                {{ issues|length }} Issues
+                                <br>
+                                <small>
+                                    Class: {{ class }}, ID: {{ object.pk }}
+                                </small>
+                            </div>
+                            <div>
+                                <div class="inline-flex rounded-md" role="group">
+                                    <form method="post" action="">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="status" value="ACKNOWLEDGE">
+                                        <button type="submit" class="px-4 py-2 text-sm font-medium text-gray-900 bg-white border border-gray-200 rounded-s-lg hover:bg-gray-100 hover:text-blue-700">
+                                            Acknowledge all
+                                        </button>
+                                    </form>
+                                    <form method="post" action="">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="status" value="IGNORE">
+                                        <button type="submit" class="px-4 py-2 text-sm font-medium text-gray-900 bg-white border border-gray-200 rounded-e-lg hover:bg-gray-100 hover:text-blue-700">
+                                            Ignore all
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
                     </caption>
                     <thead class="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
                         <tr>
                             <th scope="col" class="px-4 py-3">Level</th>
                             <th scope="col" class="px-4 py-3">Status</th>
                             <th scope="col" class="px-4 py-3">Subject</th>
+                            <th scope="col" class="px-4 py-3">Created</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -44,8 +67,11 @@
                             <td class="px-4 py-2">
                                 {{ issue.status }}
                             </td>
-                            <td class="px-4 py-2 font-medium text-gray-900 whitespace-nowrap dark:text-white">
-                                {{ issue.subject|truncatechars:100 }}
+                            <td class="px-4 py-2 font-medium text-gray-900 dark:text-white">
+                                {{ issue.subject|truncatechars:50 }}
+                            </td>
+                            <td class="px-4 py-2 font-medium text-gray-900 dark:text-white">
+                                {{ issue.created_at|timesince }}
                             </td>
                         </tr>
                         {% endfor %}

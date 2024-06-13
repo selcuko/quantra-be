@@ -373,7 +373,7 @@
                     $ {{ session.capital|floatformat:2|default:'N/A' }}
                 </td>
                 <td class="px-6 py-4">
-                    {{ session.assets|floatformat:2|default:'N/A' }} {{ group.symbol.base }}
+                    {{ session.assets|default:'N/A' }} {{ group.symbol.base }}
                 </td>
                 <td class="px-6 py-4">
                     {% if session.account.active_issues %}
@@ -461,12 +461,12 @@ rangeInputSell.addEventListener('input', () => {
                         {{ order.deal_size }} {{ group.symbol.base }}
                     </td>
                     <td class="px-6 py-4">
-                        {% if order.side == 'buy' %}
+                        {% if order.side == 'BUY' %}
                         <span
                             class="nowrap bg-green-100 text-green-800 mr-2 px-2.5 py-0.5 rounded-full dark:bg-green-900 dark:text-green-300">
                             {{ order.side|upper }}
                         </span>
-                        {% elif order.side == 'sell' %}
+                        {% elif order.side == 'SELL' %}
                         <span
                             class="nowrap bg-red-100 text-red-800 mr-2 px-2.5 py-0.5 rounded-full dark:bg-red-900 dark:text-red-300">
                             {{ order.side|upper }}

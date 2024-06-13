@@ -22,6 +22,19 @@ class OrderManager:
         self.account = self.market.account
         self.order  = None
 
+    def reload_session(self, symbol:MarketSymbol):
+        if not self.session:
+            return False
+        self.market.get_account()
+        old_cap = self.session.capital
+        old_ass = self.session.assets
+        self.session.capital = max(self.market.capital, 0)
+        self.session.assets  = self.market.assets.get(symbol.base, 0)
+        if old_cap == self.session.capital and old_ass == self.session.assets:
+            return False
+        self.session.save()
+        return True
+
     def place(self, symbol:MarketSymbol, side:Literal['buy', 'sell'], deal_size:float|None=None, deal_funds:float|None=None, validate:bool=True, manual:bool=False, silent:bool=True) -> Order:
         request = {
             'initial_deal_size': deal_size,
@@ -102,13 +115,25 @@ class OrderManager:
                 time.sleep(0.5)
                 order = self.market.get_order(symbol, order)
                 validation_tries += 1
-
+        if order.status == Order.Status.INSUFFICIENT_BALANCE:
+            reloaded = self.reload_session(symbol)
+            if reloaded:
+                order.save()
+                return self.place(symbol, side, deal_size, deal_funds, validate, manual, silent)
         if not order.status == Order.Status.FILLED and not silent:
             order.save()
             raise OrderNotFilledError(f'Order not filled, status is {order.status} ({order.oid=}).', order=order)
 
         if self.session:
             order.session = self.session
+            if order.status == Order.Status.FILLED and order.deal_funds and order.deal_size:
+                if side == 'buy':
+                    self.session.capital -= order.deal_funds
+                    self.session.assets += order.deal_size
+                elif side == 'sell':
+                    self.session.capital += order.deal_funds
+                    self.session.assets -= order.deal_size
+                self.session.save()
         if manual:
             order.force = True
         if not order.side:
@@ -128,7 +153,7 @@ class GroupOrderManager:
         self.sessions = group.sessions.all()
 
 
-    def place(self, side:Literal['buy', 'sell']) -> GroupOrder | None:
+    def place(self, side:Literal['buy', 'sell'], pct=100) -> GroupOrder | None:
         group_order = GroupOrder.objects.create(
             group=self.group,
             side=side.upper(),
@@ -143,7 +168,12 @@ class GroupOrderManager:
             interface = session.account.get_interface()
             manager   = OrderManager(interface, session)
             try:
-                order = manager.place(self.group.symbol, side, deal_funds=session.capital, deal_size=session.assets, validate=False)
+                if side == 'buy':
+                    funds = session.capital * pct / 100
+                    order = manager.place(self.group.symbol, side, deal_funds=funds, validate=False)
+                elif side == 'sell':
+                    assets = session.assets * pct / 100
+                    order = manager.place(self.group.symbol, side, deal_size=assets, validate=False)
             except Exception as exc:
                 issue = Issue.from_exception(exc)
                 issue.object = session.account

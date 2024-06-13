@@ -57,6 +57,9 @@ class MockIMarket(Mock, IMarket):
             status='FILLED',
         )
 
+    def get_account(self):
+        pass
+
 
 class MockResponse(Mock):
     def __init__(self, **kwargs) -> None:
