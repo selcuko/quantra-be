@@ -151,7 +151,7 @@ class LoopGroupTests(TestCase):
     @mock.patch('loopgroup.get_strategy', mock_get_strategy)
     @mock.patch.object(MarketAccount, 'get_interface', mock_get_interface)
     def test_loop_can_handle_sell_signal(self):
-        self.session1.assets = 10
+        self.session1.assets = 0.1
         self.session1.save()
         loop = LoopGroup(self.group)
         loop.precheck()
@@ -163,7 +163,7 @@ class LoopGroupTests(TestCase):
         group_order = loop.sell(candle)
         self.assertEqual(group_order.status, GroupOrder.Status.FILLED)
         self.assertEqual(group_order.deal_funds, 1)
-        self.assertEqual(group_order.deal_size, 10)
+        self.assertEqual(group_order.deal_size, 0.1)
         self.assertEqual(group_order.side, Order.Side.SELL)
 
         signals = Signal.objects.filter(group=self.group)

@@ -36,6 +36,8 @@ class OrderManager:
         deal_size_str = f'{deal_size:f}' if deal_size else None
         deal_funds_str = f'{deal_funds:f}' if deal_funds else None
         if side == 'buy' and deal_funds:
+            if deal_funds < 0:
+                raise RejectedOrder('deal_funds must be positive.')
             if symbol.quote_precision:
                 deal_funds = float_to_precision(deal_funds, symbol.quote_precision)
                 request['deal_funds'] = deal_funds
@@ -47,6 +49,8 @@ class OrderManager:
                 request['deal_funds'] = deal_funds
 
         elif side == 'sell' and deal_size:
+            if deal_size < 0:
+                raise RejectedOrder('deal_size must be positive.')
             if symbol.base_precision:
                 deal_size = float_to_precision(deal_size, symbol.base_precision)
                 request['deal_size'] = deal_size

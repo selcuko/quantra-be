@@ -7,6 +7,7 @@ import pytz
 
 from liveloop import LiveLoop
 from loopgroup import LoopGroup
+from markets.errors import InsufficientBalance
 from markets.interface import IMarket
 from quantapi.models import MarketAccount, MarketSymbol, Order
 from strategy.interface import Strategy
@@ -17,6 +18,10 @@ class MockIMarket(Mock, IMarket):
         super().__init__(config, account, **kwargs)
         self.account = account
         self.market = account.market
+        self.capital = 10
+        self.assets = {
+            'BTC': 0.1
+        }
 
     def get_last_klines(self, symbol: MarketSymbol | str, interval: str, limit: int = 100, retry=1, silent=True) -> list[list]:
         return [[
@@ -38,6 +43,12 @@ class MockIMarket(Mock, IMarket):
         pass
 
     def place_market_order(self, symbol: MarketSymbol | str, side: Literal['buy'] | Literal['sell'], funds: str | None = None, quantity: str | None = None, validate=True) -> Order:
+        if isinstance(symbol, str):
+            symbol = MarketSymbol.objects.get(name=symbol, market=self.market)
+        if side == 'buy' and self.capital < float(funds or 0):
+            raise InsufficientBalance
+        if side == 'sell' and self.assets[symbol.base] < float(quantity or 0):
+            raise InsufficientBalance
         return Order(
             symbol=symbol,
             side=side.upper(),

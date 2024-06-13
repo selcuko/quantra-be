@@ -304,8 +304,8 @@ class Session(models.Model):
         HOUR12 = '12 hour', '12 hours'
         DAY1  = '1 day',  '1 day'
 
-    session_type = models.CharField(max_length=30, choices=Type.choices)
-    freq = models.CharField(max_length=30)
+    session_type = models.CharField(max_length=30, choices=Type.choices, default=Type.LIVE_MAINNET)
+    freq = models.CharField(max_length=30, default=Freq.MIN15, choices=Freq.choices)
     account = models.ForeignKey(MarketAccount, on_delete=models.PROTECT, related_name='sessions')
     group = models.ForeignKey('SessionGroup', on_delete=models.PROTECT, related_name='sessions', null=True, blank=True)
     started = models.DateTimeField(auto_now_add=True)
