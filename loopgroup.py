@@ -421,6 +421,8 @@ class LoopGroup:
         )
         group_order_manager = GroupOrderManager(self.group)
         group_order = group_order_manager.place('buy')
+        if not group_order:
+            return
         group_order.signal = signal
         group_order.save()
         return group_order
@@ -503,6 +505,8 @@ class LoopGroup:
         )
         group_order_manager = GroupOrderManager(self.group)
         group_order = group_order_manager.place('sell')
+        if not group_order:
+            return
         group_order.signal = signal
         group_order.save()
         return group_order

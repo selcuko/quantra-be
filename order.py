@@ -124,7 +124,7 @@ class GroupOrderManager:
         self.sessions = group.sessions.all()
 
 
-    def place(self, side:Literal['buy', 'sell']) -> GroupOrder:
+    def place(self, side:Literal['buy', 'sell']) -> GroupOrder | None:
         group_order = GroupOrder.objects.create(
             group=self.group,
             side=side.upper(),
@@ -156,6 +156,9 @@ class GroupOrderManager:
             elif group_order.status == GroupOrder.Status.FILLED:
                 group_order.status = GroupOrder.Status.PARTIAL
             orders[session] = order
+        if not orders:
+            group_order.delete()
+            return
         if group_order.status == GroupOrder.Status.PENDING:
             group_order.status = GroupOrder.Status.EXPIRED
         group_order.save()
