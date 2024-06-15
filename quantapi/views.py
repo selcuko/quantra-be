@@ -363,7 +363,7 @@ class SessionGroupDetailView(View):
             buy_pct = int(payload['buy'])
             lgroup: LoopGroup = cache.get(f'sessiongroup_{pk}')
             if not lgroup:
-                messages.error(request, f'SessionGroup {pk} has not an associated LoopGroup in the cache.')
+                messages.error(request, f'SessionGroup {pk} has no associated LoopGroup in the cache.')
                 return redirect('sessiongroup-detail', pk=pk)
             gorder = lgroup.buy(pct=buy_pct, manual=True)
             if not gorder:
@@ -375,7 +375,7 @@ class SessionGroupDetailView(View):
             sell_pct = int(payload['sell'])
             lgroup: LoopGroup = cache.get(f'sessiongroup_{pk}')
             if not lgroup:
-                messages.error(request, f'SessionGroup {pk} has not an associated LoopGroup in the cache.')
+                messages.error(request, f'SessionGroup {pk} has no associated LoopGroup in the cache.')
                 return redirect('sessiongroup-detail', pk=pk)
             gorder = lgroup.sell(pct=sell_pct, manual=True)
             if not gorder:
@@ -591,9 +591,9 @@ class WatchdogView(View):
 
 class OrderManagementView(View):
     def get(self, request):
-        markets = Market.objects.all().order_by('exchange_name')
-        return render(request, 'order-management.html', context={ 'markets': markets })
-    
+        accounts = MarketAccount.objects.filter(credentials__active=True).order_by('market__exchange_name')
+        return render(request, 'order-management.html', context={ 'accounts': accounts })
+
     def post(self, request):
         payload = request.POST
         if not all((
@@ -604,11 +604,11 @@ class OrderManagementView(View):
         )):
             messages.error(request, f'Invalid order parameters: {payload}')
             return redirect('order-management')
-        market = MarketAccount.objects.get(pk=payload['market'])
+        account = MarketAccount.objects.get(pk=payload['market'])
         symbol_name = payload['symbol']
         symbol_name = symbol_name.upper().replace('-', '').replace('/', '').replace('USDT', '') + '-USDT'
-        symbol = MarketSymbol.objects.get(name=symbol_name, market=market)
-        interface = market.get_interface()
+        symbol = MarketSymbol.objects.get(name=symbol_name, market=account.market)
+        interface = account.get_interface()
         amount = float(payload['amount'])
         order_manager = OrderManager(interface)
         try:

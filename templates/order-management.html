@@ -110,7 +110,14 @@
                 capital = data["USDT"];
                 delete data["USDT"];
                 Object.keys(data).forEach((key) => (data[key] == 0) && delete data[key]);
-                document.getElementById('market_detail').innerHTML = `{"USDT": ${capital},` + JSON.stringify(data, null, 2).slice(1);
+                //data = JSON.stringify(data, null, 2);
+                assets = JSON.stringify(data.assets, null, 2);
+                // drop keys from assets if value is 0
+                capital = data.capital;
+                pre_string = `Capital: ${capital} USDT
+                <br>
+                Assets: ${assets}`;
+                document.getElementById('market_detail').innerHTML = pre_string;
             }).catch((error) => {
                 console.log(error);
             });

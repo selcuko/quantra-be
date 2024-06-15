@@ -299,6 +299,7 @@ class LoopGroup:
             f'LoopGroup received a candle event.',
             extra={'group': self, 'subject': 'LoopGroup received event.'}
         )
+        cache.set(f'sessiongroup_{self.group.pk}', self)
         if self.group.status != SessionGroup.Status.ONGOING:
             logger.warning(
                 f'LoopGroup is not running, but received a candle event.',
