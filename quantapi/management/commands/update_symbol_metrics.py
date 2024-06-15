@@ -101,7 +101,7 @@ class Command(BaseCommand):
             sym_to_mar[ms.symbol].append(ms)
         gs_update = []
         for gs, msyms in sym_to_mar.items():
-            gs.available_markets = json.dumps([ms.market.exchange_name for ms in msyms])
+            gs.available_markets = json.dumps([ms.market.exchange_name for ms in msyms if ms.spot_trading_enabled])
             gs_update.append(gs)
         GlobalSymbol.objects.bulk_update(gs_update, ['available_markets'])
         print('OK')
