@@ -1,6 +1,7 @@
 
 
 import json
+import threading
 import time
 from threading import Thread
 from typing import Optional
@@ -60,7 +61,7 @@ class LoopGroup:
         self.freq = freq or group.freq
         self.loop_interval_s = interval_to_minutes(self.freq) * 60
 
-        self.thread: Optional[Thread] = None
+        self.thread_id: Optional[int] = None
         self.died = []
         self.health = 'alive'
         self.will_stop = False
@@ -94,6 +95,15 @@ class LoopGroup:
             f'LoopGroup initialized with {len(self.sessions)} sessions.',
             extra={'group': self, 'subject': 'LoopGroup initialized.'}
         )
+
+
+    @property
+    def thread(self) -> Thread | None:
+        if self.thread_id:
+            for thread in threading.enumerate():
+                if thread.ident == self.thread_id:
+                    return thread
+        return None
 
 
     def is_alive(self):
@@ -220,21 +230,22 @@ class LoopGroup:
         source = kwargs.get('source', self.group.source).lower()
         if source == 'trade':
             thread_name = f'LoopGroup-MatchEngine-{self.symbol.name}'
-            self.thread = Thread(target=self.run_match_engine, name=thread_name, daemon=True)
+            thread = Thread(target=self.run_match_engine, name=thread_name, daemon=True)
         else:
             raise ValueError(f'Invalid source for LoopGroup (source={source}).')
-        self.thread.start()
+        thread.start()
         logger.info(
             f'LoopGroup started with {source} as source.',
             extra={'group': self, 'subject': 'LoopGroup started.'}
         )
-        self.group.thread_id = self.thread.ident
+        self.thread_id = thread.ident
+        self.group.thread_id = thread.ident
         self.group.last_price = self.last_kline['close'] if self.last_kline else None
         self.group.last_kline_dt = self.last_kline_dt
         self.group.status = SessionGroup.Status.ONGOING
         self.group.started_at = timezone.now()
         self.group.save()
-        
+
         for session in self.sessions:
             session.started = timezone.now()
             session.status = Session.Status.ONGOING
@@ -282,11 +293,9 @@ class LoopGroup:
                     f'LoopGroup is behind schedule by {abs(delta)} seconds.',
                     extra={'group': self, 'subject': 'LoopGroup is behind schedule.'}
                 )
-
             while delta > 0 and not self.will_stop:
                 time.sleep(1)
                 delta -= 1
-
         return
 
 
