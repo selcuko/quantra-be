@@ -105,8 +105,8 @@ class NotificationAdmin(admin.ModelAdmin):
 
     actions = ['send']
 
-    @staticmethod
-    def send(request, queryset):
+    @admin.action(description="Send selected notifications to respective groups")
+    def send(self, request, queryset):
         for notification in queryset:
             notification.send()
 
