@@ -132,7 +132,7 @@ class LoopGroup:
 
         # the interface to fetch data from
         if not self.interface:
-            if self.group.interface:
+            if self.group.interface and self.group.interface in self.interfaces:
                 self.interface = self.interfaces[self.group.interface]
             else:
                 account = self.accounts[0]

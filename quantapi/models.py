@@ -338,8 +338,11 @@ class Session(models.Model):
 
     @property
     def equity(self):
-        last_price = self.last_price or self.group.last_price if self.group else 0
-        return self.capital + (self.assets * last_price)
+        try:
+            last_price = self.last_price or self.group.last_price if (self.group and self.group.last_price) else 0
+        except:
+            last_price = 0
+        return self.capital + self.assets * last_price
 
     def __str__(self):
         return f'{self.strategy} - {self.symbol} - {self.status}'
@@ -479,12 +482,19 @@ class SessionGroup(models.Model):
             raise SessionCannotContinue(f'Failed to resume group {self} due to {e!r}')
         return loop
 
-    def add_account(self, account:MarketAccount):
+    def add_account(self, account:MarketAccount, validate=True):
         if not self.pk:
             raise ValueError('SessionGroup must be saved before adding accounts.')
         for session in self.sessions.all():
             if session.account == account:
                 return session
+        if validate:
+            try:
+                ms = MarketSymbol.objects.get(name=self.symbol.name, market=account.market)
+                if not ms.spot_trading_enabled:
+                    raise ValueError(f'Spot trading is not enabled for {ms.name} in {account.market}')
+            except MarketSymbol.DoesNotExist:
+                raise ValueError(f'Symbol {self.symbol.name} not available in {account.market}')
         session = Session.objects.create(
             group=self,
             freq=self.freq,
@@ -496,6 +506,9 @@ class SessionGroup(models.Model):
             initial_assets=0,
             capital=0,
             assets=0,
+            session_type=Session.Type.LIVE_MAINNET,
+            buy_enabled=self.buy_enabled,
+            sell_enabled=self.sell_enabled,
         )
         return session
 

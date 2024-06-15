@@ -6,7 +6,7 @@ import traceback
 import pytz
 from django.core.paginator import Paginator
 from django.db.models import Q, Count
-from django.http import JsonResponse
+from django.http import HttpRequest, JsonResponse
 from django.shortcuts import redirect, render
 from django.views import View
 from django.core.cache import cache
@@ -326,20 +326,7 @@ class SessionGroupInitView(View):
             strategy=strategy
         )
         for account in accounts:
-            Session.objects.create(
-                group=session_group,
-                account=account,
-                symbol=symbol,
-                freq=request.POST.get('freq'),
-                initial_capital=0,
-                capital=0,
-                initial_assets=0,
-                assets=0,
-                status=Session.Status.PLANNED,
-                session_type=Session.Type.LIVE_MAINNET,
-                buy_enabled=False,
-                sell_enabled=False,
-            )
+            session_group.add_account(account, validate=False)   # validate=False because we already checked the symbol
         return redirect('sessiongroup-detail', pk=session_group.pk)
 
 
@@ -349,12 +336,16 @@ class SessionGroupDetailView(View):
         signals = Signal.objects.filter(group=group)
         orders = GroupOrder.objects.filter(group=group)
         issues = group.issues.filter(status=Issue.Status.ACTIVE)
+        accounts = MarketAccount.objects.filter(credentials__active=True)
+        selected_accounts = group.sessions.values_list('account', flat=True)
         return render(request, 'sessiongroup-detail.html', {
             'group': group, 
             'sessions': group.sessions.all(),
             'orders': orders,
             'signals': signals,
             'issues': issues,
+            'accounts': accounts,
+            'selected_accounts': selected_accounts,
         })
 
     def post(self, request, pk):
@@ -367,7 +358,7 @@ class SessionGroupDetailView(View):
                 return redirect('sessiongroup-detail', pk=pk)
             gorder = lgroup.buy(pct=buy_pct, manual=True)
             if not gorder:
-                most_capital = max([session.capital for session in lgroup.sessions])
+                most_capital = max([session.capital for session in Session.objects.filter(group=lgroup.group)])
                 messages.error(request, f'Not a single account has enough capital to buy. Most capital: {most_capital:.2f} USDT (effective: {most_capital * buy_pct / 100:.2f} USDT, {buy_pct}% of total capital)')
             else:
                 messages.success(request, f'SessionGroup {pk} bought {buy_pct}% of assets. (status={gorder.status})')
@@ -386,22 +377,50 @@ class SessionGroupDetailView(View):
         return redirect('sessiongroup-detail', pk=pk)
 
     @staticmethod
-    def update(request, pk):
+    def update(request: HttpRequest, pk):
         group = SessionGroup.objects.get(pk=pk)
         payload = request.POST
-        if 'capital' in payload:
-            session_pk = int(payload['session-pk'])
-            session = Session.objects.get(pk=session_pk)
-            if session.status == Session.Status.PLANNED:
-                session.initial_capital = float(payload['capital'])
-            session.capital = float(payload['capital'])
-            session.save()
+        if 'set-capital' in payload:
+            sessions = []
+            for key in payload.keys():
+                if not key.startswith('session-'):
+                    continue
+                _, session_pk = key.split('-')
+                session = Session.objects.get(pk=session_pk)
+                session.capital = float(payload[key])
+                sessions.append(session)
+            Session.objects.bulk_update(sessions, ['capital'])
         if 'interface' in payload:
             interface = MarketAccount.objects.get(pk=payload['interface'])
             group.interface = interface
             group.save()
+        if 'set-account' in payload:
+            existing_accounts = list(group.sessions.values_list('account', flat=True))
+            account_ids = payload.getlist('accounts')
+            accounts = MarketAccount.objects.filter(pk__in=account_ids)
+            added, failed = [], []
+            for account in accounts:
+                if account.pk in existing_accounts:
+                    existing_accounts.remove(account.pk)
+                    continue
+                try:
+                    group.add_account(account)
+                    added.append(account)
+                except Exception as e:
+                    failed.append({'account': account, 'error': repr(e)})
+            if failed:
+                for fail in failed:
+                    messages.error(request, f'Failed to add account {fail["account"]}: {fail["error"]}')
+            messages.success(request, f'Added {len(added)} accounts to SessionGroup {group}')
+        if 'rm-session' in payload:
+            session_pk = payload['rm-session']
+            session = Session.objects.get(pk=session_pk)
+            if group.sessions.count() == 1:
+                messages.error(request, f'Cannot remove the last session from a SessionGroup.')
+                return redirect('sessiongroup-detail', pk=group.pk)
+            session.delete()
         return redirect('sessiongroup-detail', pk=group.pk)
-    
+
     @staticmethod
     def init(request, pk):
         group = SessionGroup.objects.get(pk=pk)
