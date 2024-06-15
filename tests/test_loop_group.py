@@ -8,7 +8,7 @@ from logger import logger
 from loopgroup import LoopGroup
 from quantapi.models import (GroupOrder, Market, MarketAccount, MarketCredentials,
                              MarketSymbol, Order, SessionGroup, Signal, Strategy)
-from tests.mocks import MockCache, mock_get_interface, mock_get_strategy
+from tests.mocks import mock_get_interface, mock_get_strategy
 
 
 class LoopGroupTests(TestCase):
@@ -50,7 +50,6 @@ class LoopGroupTests(TestCase):
         self.session1 = self.group.add_account(self.account1)
         self.session2 = self.group.add_account(self.account2)
 
-    @mock.patch('loopgroup.cache', MockCache)
     @mock.patch.object(MarketAccount, 'get_interface', mock_get_interface)
     def test_loop_initiates_correctly(self):
         loop = LoopGroup(self.group)
@@ -64,7 +63,6 @@ class LoopGroupTests(TestCase):
         self.assertEqual(loop.thread, None)
         self.assertEqual(loop.will_stop, False)
 
-    @mock.patch('loopgroup.cache', MockCache)
     @mock.patch('loopgroup.get_strategy', mock_get_strategy)
     @mock.patch.object(MarketAccount, 'get_interface', mock_get_interface)
     def test_loop_precheck_passes(self):
@@ -75,7 +73,6 @@ class LoopGroupTests(TestCase):
         self.assertIsNotNone(loop.strategy)
         self.assertIsNotNone(loop.interface)
 
-    @mock.patch('loopgroup.cache', MockCache)
     @mock.patch('loopgroup.get_strategy', mock_get_strategy)
     @mock.patch.object(MarketAccount, 'get_interface', mock_get_interface)
     def test_loop_run_method_runs_ok(self):
@@ -97,7 +94,6 @@ class LoopGroupTests(TestCase):
 
         loop.stop()
 
-    @mock.patch('loopgroup.cache', MockCache)
     @mock.patch('loopgroup.get_strategy', mock_get_strategy)
     @mock.patch.object(MarketAccount, 'get_interface', mock_get_interface)
     def test_loop_can_handle_candle_event(self):
@@ -110,7 +106,6 @@ class LoopGroupTests(TestCase):
         loop.on_candle(candle)
         self.assertEqual(loop.last_kline_dt, candle['time'])
 
-    @mock.patch('loopgroup.cache', MockCache)
     @mock.patch('loopgroup.get_strategy', mock_get_strategy)
     @mock.patch.object(MarketAccount, 'get_interface', mock_get_interface)
     def test_loop_can_handle_buy_signal(self):
@@ -126,6 +121,7 @@ class LoopGroupTests(TestCase):
             'close': 38000.0,
         }
         group_order = loop.buy(candle)
+        assert group_order is not None
         self.assertEqual(group_order.status, GroupOrder.Status.FILLED)
         self.assertEqual(group_order.deal_funds, 10)
         self.assertEqual(group_order.deal_size, 1)
@@ -147,7 +143,6 @@ class LoopGroupTests(TestCase):
         self.assertEqual(order.side, Order.Side.BUY)
         self.assertEqual(order.deal_funds, 10)
 
-    @mock.patch('loopgroup.cache', MockCache)
     @mock.patch('loopgroup.get_strategy', mock_get_strategy)
     @mock.patch.object(MarketAccount, 'get_interface', mock_get_interface)
     def test_loop_can_handle_sell_signal(self):
@@ -161,6 +156,7 @@ class LoopGroupTests(TestCase):
             'close': 38000.0,
         }
         group_order = loop.sell(candle)
+        assert group_order is not None
         self.assertEqual(group_order.status, GroupOrder.Status.FILLED)
         self.assertEqual(group_order.deal_funds, 1)
         self.assertEqual(group_order.deal_size, 0.1)
@@ -181,3 +177,15 @@ class LoopGroupTests(TestCase):
         self.assertEqual(order.signal.price, 38000.0)   # type: ignore
         self.assertEqual(order.side, Order.Side.SELL)
         self.assertEqual(order.deal_funds, 1)
+
+    @mock.patch('loopgroup.get_strategy', mock_get_strategy)
+    @mock.patch.object(MarketAccount, 'get_interface', mock_get_interface)
+    def test_loop_can_stop(self):
+        loop = LoopGroup(self.group)
+        loop.run(threaded=False)
+        self.assertEqual(loop.is_alive(), True)
+        loop.stop()
+        thread = loop.thread
+        if thread:
+            thread.join(timeout=2)
+        self.assertEqual(loop.is_alive(), False)

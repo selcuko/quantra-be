@@ -8,7 +8,6 @@ from typing import Optional
 
 import pandas as pd
 import django
-from django.core.cache import cache
 from django.utils import timezone
 
 from markets.interface import IMarket
@@ -21,6 +20,7 @@ from order import GroupOrderManager
 from quantapi.models import Issue, MarketAccount, Session, SessionGroup, Signal
 from quantapi.models import Strategy as StrategyModel
 from strategy import Strategy, get_strategy
+from cache import set_loopgroup
 
 MINIMUM_INITIAL_CAPITAL = 0
 MINIMUM_BUY_AMOUNT = 5
@@ -54,6 +54,7 @@ class LoopGroup:
             freq: Optional[str]=None,
             strategy: Optional[Strategy]=None,
     ) -> None:
+        global LOOPGROUPS
         self.group = group
         self.symbol = group.symbol
         self.market = group.market
@@ -61,7 +62,7 @@ class LoopGroup:
         self.freq = freq or group.freq
         self.loop_interval_s = interval_to_minutes(self.freq) * 60
 
-        self.thread_id: Optional[int] = None
+        self.thread: Optional[Thread] = None
         self.died = []
         self.health = 'alive'
         self.will_stop = False
@@ -90,24 +91,15 @@ class LoopGroup:
                     exc_info=True
                 )
         self.interface = None
-        cache.set(f'sessiongroup_{group.pk}', self)
         logger.info(
             f'LoopGroup initialized with {len(self.sessions)} sessions.',
             extra={'group': self, 'subject': 'LoopGroup initialized.'}
         )
-
-
-    @property
-    def thread(self) -> Thread | None:
-        if self.thread_id:
-            for thread in threading.enumerate():
-                if thread.ident == self.thread_id:
-                    return thread
-        return None
+        set_loopgroup(self.group.pk, self)
 
 
     def is_alive(self):
-        return self.health == 'alive' and self.thread and self.thread.is_alive()
+        return self.health == 'alive' and bool(self.thread) and self.thread.is_alive()
 
 
     def precheck(self):
@@ -238,7 +230,7 @@ class LoopGroup:
             f'LoopGroup started with {source} as source.',
             extra={'group': self, 'subject': 'LoopGroup started.'}
         )
-        self.thread_id = thread.ident
+        self.thread = thread
         self.group.thread_id = thread.ident
         self.group.last_price = self.last_kline['close'] if self.last_kline else None
         self.group.last_kline_dt = self.last_kline_dt
@@ -268,8 +260,8 @@ class LoopGroup:
                 exc_info=True
             )
             self.fail()
-        self.group.status = SessionGroup.Status.COMPLETED
-        self.group.save()
+        #self.group.status = SessionGroup.Status.COMPLETED
+        #self.group.save()
         logger.info(
             f'LoopGroup completed.',
             extra={'group': self, 'subject': 'LoopGroup completed.'}
@@ -308,7 +300,6 @@ class LoopGroup:
             f'LoopGroup received a candle event.',
             extra={'group': self, 'subject': 'LoopGroup received event.'}
         )
-        cache.set(f'sessiongroup_{self.group.pk}', self)
         if self.group.status != SessionGroup.Status.ONGOING:
             logger.warning(
                 f'LoopGroup is not running, but received a candle event.',

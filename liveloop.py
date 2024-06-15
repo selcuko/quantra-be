@@ -1,6 +1,5 @@
 import django
 django.setup()
-from django.core.cache import cache
 from order import OrderManager
 import json
 import threading
@@ -14,9 +13,10 @@ import pytz
 from logger import logger
 from markets.errors import OrderPostProcessingError
 from models import OHLCVDataset, interval_to_minutes
-from quantapi.models import Market, MarketAccount, MarketSymbol, Order, Session, SessionGroup, Signal, ComplexOrder
+from quantapi.models import MarketAccount, MarketSymbol, Session, SessionGroup, Signal, ComplexOrder
 from quantapi.models import Strategy as StrategyModel
 from strategy import Strategy, get_strategy
+from cache import set_liveloop
 
 class LiveLoop:
     def __init__(self, symbol:str, account:MarketAccount, strategy:Strategy, capital_limit:float,
@@ -62,7 +62,7 @@ class LiveLoop:
             strategy_parameters=json.dumps(strategy.params),
             account=self.account,
         )
-        cache.set(f'session_{self.session.pk}', self, timeout=None)
+        set_liveloop(self.session.pk, self)
 
         logger.info(f'LiveLoop initialized.', extra={'loop': repr(self)})
 

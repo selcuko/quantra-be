@@ -15,6 +15,7 @@ from django.db import models
 
 from errors import SessionCannotContinue
 from logger import logger
+from cache import get_loopgroup
 from strategy import get_strategy
 
 if typing.TYPE_CHECKING:
@@ -462,6 +463,9 @@ class SessionGroup(models.Model):
 
     @property
     def thread(self):
+        loop = get_loopgroup(self.pk)
+        if loop:
+            return loop.thread
         threads = threading.enumerate()
         for thread in threads:
             if thread.ident == self.thread_id and thread.is_alive():

@@ -1,6 +1,7 @@
 import json
 import threading
 from datetime import datetime, timedelta
+import time
 import traceback
 
 import pytz
@@ -9,8 +10,7 @@ from django.db.models import Q, Count
 from django.http import HttpRequest, JsonResponse
 from django.shortcuts import redirect, render
 from django.views import View
-from django.core.cache import cache
-
+from cache import get_loopgroup, get_liveloop
 
 from backtest import async_analyze
 from liveloop import LiveLoop
@@ -263,7 +263,7 @@ class SessionUpdateView(View):
         session.status = Session.Status.PAUSED
         session.ended = datetime.now(pytz.UTC)
         session.save()
-        liveloop:LiveLoop = cache.get(f'session_{session.pk}')
+        liveloop = get_liveloop(session.pk)
         if liveloop:
             liveloop.stop()
         return redirect('session-detail', pk=session.pk)
@@ -280,7 +280,7 @@ class SessionUpdateView(View):
         session.ended = datetime.now(pytz.UTC)
         session.planned_shutdown = datetime.now(pytz.UTC)
         session.save()
-        liveloop:LiveLoop = cache.get(f'session_{session.pk}')
+        liveloop = get_liveloop(session.pk)
         if liveloop:
             liveloop.stop()
         return redirect('session-detail', pk=session.pk)
@@ -352,7 +352,7 @@ class SessionGroupDetailView(View):
         payload = request.POST
         if 'buy' in payload:
             buy_pct = int(payload['buy'])
-            lgroup: LoopGroup = cache.get(f'sessiongroup_{pk}')
+            lgroup = get_loopgroup(pk)
             if not lgroup:
                 messages.error(request, f'SessionGroup {pk} has no associated LoopGroup in the cache.')
                 return redirect('sessiongroup-detail', pk=pk)
@@ -364,7 +364,7 @@ class SessionGroupDetailView(View):
                 messages.success(request, f'SessionGroup {pk} bought {buy_pct}% of assets. (status={gorder.status})')
         if 'sell' in payload:
             sell_pct = int(payload['sell'])
-            lgroup: LoopGroup = cache.get(f'sessiongroup_{pk}')
+            lgroup = get_loopgroup(pk)
             if not lgroup:
                 messages.error(request, f'SessionGroup {pk} has no associated LoopGroup in the cache.')
                 return redirect('sessiongroup-detail', pk=pk)
@@ -439,21 +439,21 @@ class SessionGroupDetailView(View):
     @staticmethod
     def pause(request, pk):
         group = SessionGroup.objects.get(pk=pk)
-        loop:LoopGroup = cache.get(f'sessiongroup_{group.pk}')
+        loop = get_loopgroup(group.pk)
         if not loop:
-            group.status = SessionGroup.Status.PAUSED
-            group.save()
+            messages.error(request, f'SessionGroup {group} has no associated LoopGroup in the cache.')
+            return redirect('sessiongroup-detail', pk=group.pk)
         else:
             loop.stop()
         return redirect('sessiongroup-detail', pk=group.pk)
-    
+
     @staticmethod
     def resume(request, pk):
         group = SessionGroup.objects.get(pk=pk)
         if group.status in [SessionGroup.Status.ONGOING, SessionGroup.Status.PLANNED]:
             messages.error(request, f'SessionGroup is not suitable for resuming.')
             return redirect('sessiongroup-detail', pk=group.pk)
-        loop:LoopGroup = cache.get(f'sessiongroup_{group.pk}')
+        loop = get_loopgroup(group.pk)
         if not loop:
             group.status = SessionGroup.Status.ONGOING
             group.save()
@@ -466,9 +466,12 @@ class SessionGroupDetailView(View):
     @staticmethod
     def terminate(request, pk):
         group = SessionGroup.objects.get(pk=pk)
-        loop:LoopGroup = cache.get(f'sessiongroup_{group.pk}')
+        loop = get_loopgroup(group.pk)
         if loop:
             loop.stop()
+        else:
+            messages.error(request, f'SessionGroup {group} has no associated LoopGroup in the cache.')
+            return redirect('sessiongroup-detail', pk=group.pk)
         group.status = SessionGroup.Status.COMPLETED
         group.save()
         return redirect('sessiongroup-detail', pk=group.pk)
