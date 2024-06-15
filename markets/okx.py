@@ -206,18 +206,23 @@ class OKXMarket(IMarket):
 
     def get_match_engine_socket(self, symbol:str) -> ClientConnection:
         ws_uri = 'wss://ws.okx.com:8443/ws/v5/business'
-        ws = connect(ws_uri)
-        ws.send(json.dumps({
-            'op': 'subscribe',
-            'args': [{
-                'channel': 'trades-all',
-                'instId': self.format_symbol(symbol),
-            }]
-        }))
-        ack = json.loads(ws.recv())
-        if ack.get('event') == 'error':
-            raise MarketAPIError(f'Failed to subscribe to websocket: {ack}')
-        return ws
+        while True:
+            try:
+                ws = connect(ws_uri)
+                ws.send(json.dumps({
+                    'op': 'subscribe',
+                    'args': [{
+                        'channel': 'trades-all',
+                        'instId': self.format_symbol(symbol),
+                    }]
+                }))
+            except TimeoutError:
+                time.sleep(5)
+                continue
+            ack = json.loads(ws.recv())
+            if ack.get('event') == 'error':
+                raise MarketAPIError(f'Failed to subscribe to websocket: {ack}')
+            return ws
 
     def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable, liveloop:'LiveLoop|None'):
         ws = self.get_match_engine_socket(symbol)

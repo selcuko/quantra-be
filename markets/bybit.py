@@ -6,6 +6,7 @@ import json
 import time
 import requests
 from logger import logger
+from loopgroup import LoopGroup
 from markets.errors import InsufficientBalance, KlineFetchFailed, MarketAPIError, MarketAPIUnavailable, OrderPlacementError, OrderPostProcessingError, RejectedOrder
 from markets.interface import IMarket
 from logger import logger
@@ -91,7 +92,7 @@ class BybitMarket(IMarket):
             if save:
                 self.account.save()
 
-    def get_symbols(self):
+    def get_symbols(self) -> dict[str, 'MarketSymbol']:
         url = f'{self.url}/v5/market/instruments-info'
         payload = {
             'category': 'spot'
@@ -116,7 +117,7 @@ class BybitMarket(IMarket):
             ], unique_fields=['name', 'market'], batch_size=50)
         return self.symbols
 
-    def get_current_prices(self, save=True):
+    def get_current_prices(self, save=True) -> dict:
         url = f'{self.url}/v5/market/tickers'
         payload = {
             'category': 'spot'
@@ -137,7 +138,7 @@ class BybitMarket(IMarket):
                 self.market.save()
         return self.prices
 
-    def get_klines(self, symbol:'MarketSymbol|str', interval:str, start:datetime, end:typing.Optional[datetime]=None, limit=1000, retry=0):
+    def get_klines(self, symbol:'MarketSymbol|str', interval:str, start:datetime, end:typing.Optional[datetime]=None, limit:int=1000, retry:int=0) -> list[list]:
         symbol_object = self.get_symbol_from_name(symbol) if isinstance(symbol, str) else symbol
         if not symbol_object:
             raise ValueError(f'Symbol not found: {symbol}')
@@ -161,7 +162,7 @@ class BybitMarket(IMarket):
         data = data['result']['list']
         return self.standardize_klines(data)
 
-    def get_last_klines(self, symbol:str, interval:str, limit=100, retry=1, silent=True) -> list[list]:
+    def get_last_klines(self, symbol:'MarketSymbol | str', interval:str, limit:int=100, retry:int=1, silent=True) -> list[list]:
         minutes = interval_to_minutes(interval)
         now = timezone.now().replace(second=0, microsecond=0) + timedelta(minutes=1)
         start = now - timedelta(minutes=minutes*limit+1)
@@ -184,7 +185,7 @@ class BybitMarket(IMarket):
                 raise KlineFetchFailed(error)
         return klines
 
-    def init_websocket(self, symbol:str, interval:str, callback:typing.Callable, liveloop:'LiveLoop|None', retries:int=30):
+    def init_websocket(self, symbol:str, interval:str, callback:typing.Callable, liveloop:'LiveLoop|LoopGroup|None', retries:int=1):
         ws_uri = 'wss://stream.bybit.com/v5/public/spot'
         try:
             ws = connect(ws_uri)
@@ -230,7 +231,7 @@ class BybitMarket(IMarket):
             raise MarketAPIError(f'Failed to subscribe to websocket: {ack}')
         return ws
 
-    def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable, liveloop:'LiveLoop|None'):
+    def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable, liveloop:'LiveLoop|LoopGroup|None'):
         ws = self.get_match_engine_socket(symbol)
         last_ping = timezone.now()
         engine = MatchEngine(interval, callback)
@@ -260,7 +261,7 @@ class BybitMarket(IMarket):
             engine.on_match(trade)
         ws.close()
 
-    def place_market_order(self, symbol:'MarketSymbol|str', side:typing.Literal['buy', 'sell'], funds:typing.Optional[str]=None, quantity:typing.Optional[str]=None, validate=True):
+    def place_market_order(self, symbol:'MarketSymbol|str', side:typing.Literal['buy', 'sell'], funds:typing.Optional[str]=None, quantity:typing.Optional[str]=None, validate=True) -> 'Order':
         symbol_object = self.get_symbol_from_name(symbol) if isinstance(symbol, str) else symbol
         if not symbol_object:
             raise ValueError(f'Symbol not found: {symbol}')
@@ -288,7 +289,7 @@ class BybitMarket(IMarket):
         
         return self.get_order(symbol_object, data['result']['orderId'])
 
-    def get_order(self, symbol:'MarketSymbol|str|None', order:'Order|str|int', retries=0) -> 'Order':
+    def get_order(self, symbol:'MarketSymbol|str', order:'Order|int', retries:int=1) -> 'Order':
         if not isinstance(order, str) and not isinstance(order, int):
             order_id = order.oid
         else:
@@ -318,7 +319,7 @@ class BybitMarket(IMarket):
             raise OrderPostProcessingError(f'Failed to process order: {e}')
         return order
 
-    def get_full_orderbook(self, symbol:'MarketSymbol|str', limit=5000) -> dict:
+    def get_full_orderbook(self, symbol:'MarketSymbol|str', limit:int=5000) -> dict:
         symbol_object = self.get_symbol_from_name(symbol) if isinstance(symbol, str) else symbol
         if not symbol_object:
             raise ValueError(f'Symbol not found: {symbol}')
@@ -348,7 +349,7 @@ class BybitMarket(IMarket):
             'asks': [ { 'price': Decimal(ask[0]), 'size': Decimal(ask[1]), 'count': 1 } for ask in data['a'] ]
         }
 
-    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:typing.Callable, retries:int=30):
+    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:typing.Callable, liveloop:'LiveLoop|LoopGroup|None'=None, retries:int=0):
         ws_uri = 'wss://stream.bybit.com/v5/public/spot'
         symbol_object = self.get_symbol_from_name(symbol) if isinstance(symbol, str) else symbol
         if not symbol_object:
@@ -369,21 +370,20 @@ class BybitMarket(IMarket):
             except (ConnectionClosed, ConnectionClosedOK):
                 if retries < self.WS_MAX_RETRIES:
                     time.sleep(1)
-                    return self.init_orderbook_websocket(symbol, callback, retries+1)
+                    return self.init_orderbook_websocket(symbol, callback, liveloop, retries+1)
                 raise MarketAPIError('Failed to connect to websocket')
             except:
                 if retries < self.WS_MAX_RETRIES:
                     time.sleep(1)
-                    return self.init_orderbook_websocket(symbol, callback, retries+1)
+                    return self.init_orderbook_websocket(symbol, callback, liveloop, retries+1)
                 raise MarketAPIError('Failed to connect to websocket')
             update = self.format_orderbook(data['data'])
             if data['data']['seq']:
                 self.orderbook_seq = data['data']['seq']
             callback(update)
         ws.close()
-        print('Stopping websocket stream')
 
-    def get_equity(self, save=True):
+    def get_equity(self, save=True) -> float:
         prices = self.get_current_prices(save=False)
         if not prices:
             prices = json.loads(self.market.prices or '{}')
@@ -464,20 +464,20 @@ class BybitMarket(IMarket):
     def get_symbol_from_name(self, name:str) -> 'MarketSymbol|None':
         return self.symbols.get(name)
     
-    def format_ws_candle(self, data:dict):
+    def format_ws_candle(self, payload:dict) -> dict:
         return {
-            'time': self.standardize_timestamp(data['timestamp']),
-            'start': self.standardize_timestamp(data['start']),
-            'end': self.standardize_timestamp(data['end']),
-            'open': float(data['open']),
-            'high': float(data['high']),
-            'low': float(data['low']),
-            'close': float(data['close']),
-            'volume': float(data['volume']),
-            'closed': data['confirm'],
+            'time': self.standardize_timestamp(payload['timestamp']),
+            'start': self.standardize_timestamp(payload['start']),
+            'end': self.standardize_timestamp(payload['end']),
+            'open': float(payload['open']),
+            'high': float(payload['high']),
+            'low': float(payload['low']),
+            'close': float(payload['close']),
+            'volume': float(payload['volume']),
+            'closed': payload['confirm'],
         }
 
-    def format_match(self, data:dict):
+    def format_match(self, data:dict) -> dict:
         return {
             'time': self.standardize_timestamp(data['T']),
             'price': float(data['p']),

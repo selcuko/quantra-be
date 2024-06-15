@@ -27,10 +27,10 @@ class IMarket:
     market: 'Market'
     stop_websocket_stream:bool = False
 
-    def __init__(self, config:dict, market:'MarketAccount'):
+    def __init__(self, config:dict, account:'MarketAccount'):
         """Initialize a market instance with config if provided."""
         self.config = config
-        self.account = market
+        self.account = account
         self.market = self.account.market
         raise NotImplementedError
     
@@ -127,7 +127,7 @@ class IMarket:
         """
         raise NotImplementedError(f'{self.name} does not implement init_match_engine()')
 
-    def init_websocket(self, symbol:str, interval:str, callback:Callable, liveloop:'LiveLoop|None'):
+    def init_websocket(self, symbol:str, interval:str, callback:Callable, liveloop:'LiveLoop|LoopGroup|None', retries:int=1):
         """Blocking (sync) function to initialize a websocket for given symbol and interval. Run in a thread!
 
         Args:
@@ -151,7 +151,7 @@ class IMarket:
         """
         raise NotImplementedError(f'{self.name} does not implement format_ws_candle()')
 
-    def get_account(self):
+    def get_account(self, save=True):
         """Sets capital, assets etc. on market instance."""
         raise NotImplementedError(f'{self.name} does not implement get_account()')
 
@@ -193,7 +193,7 @@ class IMarket:
         """
         raise NotImplementedError
 
-    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:Callable, liveloop:'LiveLoop|None'=None):
+    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:Callable, liveloop:'LiveLoop|LoopGroup|None'=None, retries:int=0):
         """Initialize orderbook websocket for given symbol
 
         Args:
@@ -218,7 +218,7 @@ class IMarket:
         """
         raise NotImplementedError
 
-    def get_order(self, symbol:'MarketSymbol|str', order:'Order|int') -> 'Order':
+    def get_order(self, symbol:'MarketSymbol|str', order:'Order|int', retries:int=1) -> 'Order':
         """Get order from market
 
         Args:
@@ -275,7 +275,7 @@ class IMarket:
         """
         raise NotImplementedError
 
-    def get_klines(self, symbol:'MarketSymbol|str', interval:str, start:datetime, end:Optional[datetime]=None, limit:int=1000, retry=0) -> list[list]:
+    def get_klines(self, symbol:'MarketSymbol|str', interval:str, start:datetime, end:Optional[datetime]=None, limit:int=1000, retry:int=0) -> list[list]:
         """Get historical candle data.
 
         Args:
@@ -291,15 +291,15 @@ class IMarket:
         """
         raise NotImplementedError
 
-    def get_symbols(self) -> list['MarketSymbol']:
+    def get_symbols(self) -> dict[str, 'MarketSymbol']:
         """Get a list of symbols present in this market
 
         Returns:
-            list[ExchangeSymbol]: list of ExchangeSymbol object
+            dict[str, ExchangeSymbol]: list of ExchangeSymbol object
         """
         raise NotImplementedError
 
-    def get_last_klines(self, symbol:'MarketSymbol|str', interval:str, limit:int=100, retry=1, silent=True) -> list[list]:
+    def get_last_klines(self, symbol:'MarketSymbol | str', interval:str, limit:int=100, retry:int=1, silent=True) -> list[list]:
         """Get last n candles for given symbol
 
         Args:
