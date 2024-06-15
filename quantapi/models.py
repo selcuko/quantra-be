@@ -343,7 +343,7 @@ class Session(models.Model):
             last_price = self.last_price or self.group.last_price if (self.group and self.group.last_price) else 0
         except:
             last_price = 0
-        return self.capital + self.assets * last_price
+        return round(self.capital + self.assets * last_price, 2)
 
     def __str__(self):
         return f'{self.strategy} - {self.symbol} - {self.status}'
@@ -459,7 +459,7 @@ class SessionGroup(models.Model):
 
     @property
     def equity(self):
-        return sum([session.equity for session in self.sessions.all()])
+        return round(sum([session.equity for session in self.sessions.all()]), 2)
 
     @property
     def thread(self):

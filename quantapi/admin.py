@@ -14,7 +14,13 @@ class IssuesInline(GenericTabularInline):
 
 class IssueAdmin(admin.ModelAdmin):
     list_filter = ('level', 'status')
-    list_display = ('object', 'subject', 'level', 'status', 'created_at')
+    list_display = ('related_class', 'subject', 'level', 'status', 'created_at')
+
+    def get_queryset(self, request: HttpRequest) -> QuerySet[Issue]:
+        return super().get_queryset(request).prefetch_related('object')
+    
+    def related_class(self, obj):
+        return obj.object.__class__.__name__
 
 
 class BacktestAdmin(admin.ModelAdmin):
@@ -39,13 +45,20 @@ class MarketCredentialsAdmin(admin.ModelAdmin):
 
 
 class MarketAccountAdmin(admin.ModelAdmin):
-    list_display = ('market', 'owner', 'equity', 'capital', 'last_cache')
+    list_display = ('market', 'owner', '_equity', '_capital', 'last_cache')
     search_fields = ('owner', )
     list_filter = ('market__exchange_name', )
     inlines = [IssuesInline]
 
+    def _equity(self, obj):
+        return round(obj.equity, 2)
+
+    def _capital(self, obj):
+        return round(obj.capital, 2)
+
     def get_queryset(self, request: HttpRequest) -> QuerySet[MarketAccount]:
-        return MarketAccount.objects.select_related('market')
+        return MarketAccount.objects.select_related('market', 'credentials')
+
 
 class MarketSymbolAdmin(admin.ModelAdmin):
     list_display = ('name', 'market', 'base', 'quote', 'spot_trading_enabled', 'margin_trading_enabled')
@@ -54,48 +67,77 @@ class MarketSymbolAdmin(admin.ModelAdmin):
 
 
 class SessionAdmin(admin.ModelAdmin):
-    list_display = ('symbol', 'freq', 'status', 'started')
+    list_display = ('symbol_name', 'exchange', 'equity', 'status', 'started')
     search_fields = ('symbol__name', 'symbol__market__exchange_name')
     list_filter = ('freq', 'status', 'session_type', 'use_heikin_ashi', 'candle_source')
     readonly_fields = ('started', 'ended', 'last_heartbeat')
-    raw_id_fields = ('symbol', 'strategy')
+    raw_id_fields = ('symbol', 'group', 'account')
     inlines = [IssuesInline]
 
+    def symbol_name(self, obj):
+        return obj.symbol.name
+
+    def exchange(self, obj):
+        try:
+            return obj.symbol.market.exchange_name
+        except:
+            return None
+
     def get_queryset(self, request: HttpRequest) -> QuerySet[Session]:
-        return Session.objects.select_related('symbol', 'strategy', 'symbol__market')
+        return Session.objects.select_related('strategy', 'symbol__market', 'group')
 
 
 class SignalAdmin(admin.ModelAdmin):
-    list_display = ('__str__', 'side', 'symbol', 'price', 'timestamp')
+    list_display = ('symbol_name', 'exchange', 'side', 'price', 'strategy', 'timestamp')
     search_fields = ('session__symbol__name', 'session__symbol__market__exchange_name')
     list_filter = ('side',)
-    raw_id_fields = ('session',)
+    raw_id_fields = ('session', 'session', 'group')
     inlines = [IssuesInline]
+
     def get_queryset(self, request: HttpRequest) -> QuerySet[Signal]:
-        return super().get_queryset(request).prefetch_related('session__symbol', 'session__symbol__market')
+        return super().get_queryset(request).select_related(
+            'session__symbol__market', 
+            'session__strategy',
+            'group__symbol__market',
+            'group__strategy'
+    )
+
+    def parent(self, obj):
+        return obj.group or obj.session
+
+    def symbol_name(self, obj):
+        return self.parent(obj).symbol.name
+
+    def exchange(self, obj):
+        return self.parent(obj).symbol.market.exchange_name
+
+    def strategy(self, obj):
+        return f'{self.parent(obj).strategy.name} ({self.parent(obj).strategy.version})'
 
 
 class OrderAdmin(admin.ModelAdmin):
-    list_display = ('__str__', 'oid', 'status', 'order_type','deal_funds', 'force', 'created_at')
+    list_display = ('order_id', 'symbol_name', 'exchange', 'side', 'size', 'status', 'created_at')
     list_filter = ('status', 'order_type', 'force')
-    raw_id_fields = ('signal', 'session', 'symbol', 'account')
+    raw_id_fields = ('signal', 'session', 'symbol', 'account', 'group')
     inlines = [IssuesInline]
-    def get_queryset(self, request):
-        queryset = super().get_queryset(request)
-        return queryset.prefetch_related('signal__session__symbol', 'signal__session__symbol__market')
+    
+    def get_queryset(self, request: HttpRequest) -> QuerySet[Order]:
+        return super().get_queryset(request).select_related('symbol__market', 'session__symbol__market', 'session__symbol', 'account')
 
-    def signal_display(self, obj):
-        return obj.signal
+    def symbol_name(self, obj):
+        return obj.symbol.name
 
-    def session_display(self, obj):
-        return obj.signal.session
+    def exchange(self, obj):
+        try:
+            return obj.symbol.market.exchange_name
+        except:
+            return None
 
-    def symbol_display(self, obj):
-        return obj.signal.session.symbol
+    def size(self, obj):
+        return round(obj.deal_funds or 0, 2)
 
-    signal_display.short_description = 'Signal'
-    session_display.short_description = 'Session'
-    symbol_display.short_description = 'Symbol'
+    def order_id(self, obj):
+        return obj.oid or 'No ID'
 
 
 class NotificationAdmin(admin.ModelAdmin):
@@ -157,12 +199,25 @@ class ComplexOrderAdmin(admin.ModelAdmin):
 
 
 class SessionGroupAdmin(admin.ModelAdmin):
-    list_display = ('symbol', 'status', 'created_at', 'source')
+    list_display = ('symbol_name', 'exchange', 'equity', 'accounts', 'status', 'created_at')
     list_filter = ('status', 'source')
     inlines = [IssuesInline]
+    raw_id_fields = ('symbol', 'interface')
+
+    def symbol_name(self, obj):
+        return obj.symbol.name
+    
+    def exchange(self, obj):
+        try:
+            return obj.interface.market.exchange_name
+        except:
+            return None
+
+    def accounts(self, obj):
+        return obj.sessions.count()
 
     def get_queryset(self, request: HttpRequest) -> QuerySet[SessionGroup]:
-        return SessionGroup.objects.select_related('symbol', 'strategy')
+        return super().get_queryset(request).select_related('symbol__market', 'interface__market', 'strategy', 'market').prefetch_related('sessions')
 
 
 admin.site.register(SessionGroup, SessionGroupAdmin)
