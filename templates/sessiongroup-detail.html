@@ -332,7 +332,7 @@
                     [{{ session.account.exchange }}] {{ session.account.owner }}
                 </th>
                 <td class="px-6 py-4">
-                    $ {{ session.account.capital|floatformat:2|default:'N/A' }}
+                    $ {{ session.account.capital|floatformat:2|default:'0' }}
                 </td>
                 <td class="px-6 py-4">
                     <label for=""><!-- for ref --></label>
@@ -375,6 +375,9 @@
                     Assets
                 </th>
                 <th scope="col" class="px-6 py-3">
+                    Equity
+                </th>
+                <th scope="col" class="px-6 py-3">
                     Health
                 </th>
             </tr>
@@ -386,10 +389,13 @@
                     [{{ session.account.exchange }}] {{ session.account.owner }}
                 </th>
                 <td class="px-6 py-4">
-                    $ {{ session.capital|floatformat:2|default:'N/A' }}
+                    $ {{ session.capital|floatformat:2|default:'0' }}
                 </td>
                 <td class="px-6 py-4">
-                    {{ session.assets|default:'N/A' }} {{ group.symbol.base }}
+                    {{ session.assets|default:'0' }} {{ group.symbol.base }}
+                </td>
+                <td class="px-6 py-4">
+                    $ {{ session.equity|floatformat:2|default:'0' }}
                 </td>
                 <td class="px-6 py-4">
                     {% if session.account.active_issues %}
