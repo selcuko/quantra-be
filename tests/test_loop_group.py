@@ -2,31 +2,21 @@ from datetime import datetime
 from unittest import mock
 
 import pytz
-from django.test import TestCase
 
 from logger import logger
 from loopgroup import LoopGroup
-from quantapi.models import (GroupOrder, Market, MarketAccount, MarketCredentials,
-                             MarketSymbol, Order, SessionGroup, Signal, Strategy)
+from quantapi.models import (GroupOrder, MarketAccount, MarketCredentials,
+                             Order, SessionGroup, Signal)
+from tests.core import QuantTestCase
 from tests.mocks import mock_get_interface, mock_get_strategy
 
 
-class LoopGroupTests(TestCase):
+class LoopGroupTests(QuantTestCase):
     def setUp(self):
         logger.disabled = True
-        self.market = Market.objects.create(exchange_name='OKX')
-        self.symbol = MarketSymbol.objects.create(
-            market=self.market,
-            name='BTC-USDT',
-            base='BTC',
-            quote='USDT',
-        )
-        self.strategy = Strategy.objects.create(
-            name='Test Strategy',
-            technical_name='Technical Test Strategy',
-            code='tts',
-            version='2.1a',
-        )
+        self.setup_market('OKX')
+        self.setup_symbol('BTC-USDT')
+        self.setup_strategy()
         self.credentials1 = MarketCredentials.objects.create(
             market=self.market,
             encrypted='{"fake": "credendials"}',
@@ -124,7 +114,7 @@ class LoopGroupTests(TestCase):
         assert group_order is not None
         self.assertEqual(group_order.status, GroupOrder.Status.FILLED)
         self.assertEqual(group_order.deal_funds, 10)
-        self.assertEqual(group_order.deal_size, 1)
+        self.assertEqual(group_order.deal_size, 0.0002)
         self.assertEqual(group_order.side, Order.Side.BUY)
 
         signals = Signal.objects.filter(group=self.group)
@@ -146,6 +136,8 @@ class LoopGroupTests(TestCase):
     @mock.patch('loopgroup.get_strategy', mock_get_strategy)
     @mock.patch.object(MarketAccount, 'get_interface', mock_get_interface)
     def test_loop_can_handle_sell_signal(self):
+        self.account1.assets = '{ "BTC": 0.1 }'
+        self.account1.save()
         self.session1.assets = 0.1
         self.session1.save()
         loop = LoopGroup(self.group)
@@ -153,12 +145,12 @@ class LoopGroupTests(TestCase):
         loop.run(threaded=False)
         candle = {
             'time': datetime(2024, 1, 2, tzinfo=pytz.UTC).timestamp(),
-            'close': 38000.0,
+            'close': 50000.0,
         }
         group_order = loop.sell(candle)
         assert group_order is not None
         self.assertEqual(group_order.status, GroupOrder.Status.FILLED)
-        self.assertEqual(group_order.deal_funds, 1)
+        self.assertEqual(group_order.deal_funds, 5000.0)
         self.assertEqual(group_order.deal_size, 0.1)
         self.assertEqual(group_order.side, Order.Side.SELL)
 
@@ -166,7 +158,7 @@ class LoopGroupTests(TestCase):
         self.assertEqual(signals.count(), 1)
         signal = signals[0]
         self.assertEqual(signal.side, Signal.Side.SELL)
-        self.assertEqual(signal.price, 38000.0)
+        self.assertEqual(signal.price, 50000.0)
 
         orders = Order.objects.filter(signal=signal)
         self.assertEqual(orders.count(), 1)
@@ -174,9 +166,9 @@ class LoopGroupTests(TestCase):
         self.assertEqual(order.account, self.account1)
         self.assertEqual(order.status, Order.Status.FILLED)
         self.assertEqual(order.signal, signal)
-        self.assertEqual(order.signal.price, 38000.0)   # type: ignore
+        self.assertEqual(order.signal.price, 50000.0)   # type: ignore
         self.assertEqual(order.side, Order.Side.SELL)
-        self.assertEqual(order.deal_funds, 1)
+        self.assertEqual(order.deal_funds, 5000.0)
 
     @mock.patch('loopgroup.get_strategy', mock_get_strategy)
     @mock.patch.object(MarketAccount, 'get_interface', mock_get_interface)

@@ -1,4 +1,5 @@
 from datetime import datetime
+import json
 import time
 from typing import Callable, Literal
 from unittest.mock import Mock
@@ -21,6 +22,9 @@ class MockIMarket(Mock, IMarket):
         self.capital = 10
         self.assets = {
             'BTC': 0.1
+        }
+        self.prices = {
+            'BTC-USDT': 50000
         }
 
     def get_last_klines(self, symbol: MarketSymbol | str, interval: str, limit: int = 100, retry=1, silent=True) -> list[list]:
@@ -45,15 +49,31 @@ class MockIMarket(Mock, IMarket):
     def place_market_order(self, symbol: MarketSymbol | str, side: Literal['buy'] | Literal['sell'], funds: str | None = None, quantity: str | None = None, validate=True) -> Order:
         if isinstance(symbol, str):
             symbol = MarketSymbol.objects.get(name=symbol, market=self.market)
-        if side == 'buy' and self.capital < float(funds or 0):
+        if side == 'buy' and (self.account.capital or 0) < float(funds or 0):
             raise InsufficientBalance
-        if side == 'sell' and self.assets[symbol.base] < float(quantity or 0):
+        assets = json.loads(self.account.assets or '{}')
+        if side == 'sell' and assets.get(symbol.base, 0) < float(quantity or 0):
             raise InsufficientBalance
+        price = self.prices.get(symbol.name)
+        if not price:
+            raise ValueError(f'Price for {symbol.name} not found.')
+        funds_f = float(funds or 0)
+        quantity_f = float(quantity or 0)
+        if not funds_f:
+            funds_f = quantity_f * price
+        if not quantity_f:
+            quantity_f = funds_f / price
+        if side == 'buy':
+            self.capital -= funds_f
+            self.assets[symbol.base] += quantity_f
+        else:
+            self.capital += funds_f
+            self.assets[symbol.base] -= quantity_f
         return Order(
             symbol=symbol,
             side=side.upper(),
-            deal_funds=float(funds) if funds else 1,
-            deal_size=float(quantity) if quantity else 1,
+            deal_funds=funds_f,
+            deal_size=quantity_f,
             status='FILLED',
         )
 
