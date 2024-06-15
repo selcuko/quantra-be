@@ -464,7 +464,7 @@ class SessionGroup(models.Model):
     @property
     def thread(self):
         loop = get_loopgroup(self.pk)
-        if loop:
+        if loop and loop.is_alive():
             return loop.thread
         threads = threading.enumerate()
         for thread in threads:
