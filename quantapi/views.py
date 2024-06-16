@@ -1,9 +1,9 @@
 import json
 import threading
 from datetime import datetime, timedelta
-import time
 import traceback
 
+from django.urls import reverse
 import pytz
 from django.core.paginator import Paginator
 from django.db.models import Q, Count
@@ -19,8 +19,7 @@ from loopgroup import LoopGroup
 from markets.errors import (InsufficientBalance, MarketDisabledTrading,
                             SymbolNotInMarket)
 from order import OrderManager
-from quantapi.analytics import MarketAnalytics, TotalSessionAnalytics
-from quantapi.models import (Backtest, GlobalSymbol, GroupOrder, Issue, Market, MarketAccount, MarketSymbol, Notification,
+from quantapi.models import (Backtest, GlobalSymbol, GroupOrder, Issue, Market, MarketAccount, MarketCredentials, MarketSymbol, Notification,
                              Order, Session, SessionGroup, Signal, Strategy)
 from strategy import get_strategy
 from django.contrib import messages
@@ -530,6 +529,67 @@ class MarketListView(View):
     def get(self, request):
         markets = MarketAccount.objects.filter(credentials__active=True).select_related('market', 'credentials')
         return render(request, 'market-list.html', { 'markets': markets })
+
+    @staticmethod
+    def add(request):
+        if request.method == 'POST':
+            return MarketListView.add_new_market(request.POST)
+        markets = Market.objects.all()
+        return render(request, 'market-add.html', { 'markets': markets })
+
+    @staticmethod
+    def add_new_market(payload):
+        exchange = payload.get('exchange')
+        owner = payload.get('owner')
+        market = Market.objects.get(exchange_name=exchange)
+        if not market:
+            return JsonResponse({ 'message': f'Market {exchange} not found' }, status=404)
+        secrets = MarketListView.get_secrets(exchange.lower())
+        secret_names = [secret['name'] for secret in secrets]
+        config_payload = {}
+        for sn in secret_names:
+            config_payload[sn] = payload.get(sn)
+        credentials = MarketCredentials(
+            market=market,
+            encrypted=json.dumps(config_payload),
+            owner=owner
+        )
+        credentials.save()
+        account = MarketAccount.objects.get(credentials=credentials)
+        try:
+            interface = account.get_interface()
+            interface.cache_to_db(force=True)
+        except Exception as e:
+            account.delete()
+            credentials.delete()
+            return JsonResponse({ 'message': f'Credentials failed to authenticate.' }, status=406)
+        return JsonResponse({ 'message': f'Account {account} added successfully.', 'redirect': reverse('market-detail', kwargs={'pk': account.pk}) }, status=200)
+
+    @staticmethod
+    def get_secrets(exchange):
+        access_key = { 'name': 'ACCESS_KEY', 'display_name': 'Access Key' }
+        api_key = { 'name': 'API_KEY', 'display_name': 'API Key' }
+        api_secret = { 'name': 'API_SECRET', 'display_name': 'API Secret' }
+        api_passphrase = { 'name': 'API_PASSPHRASE', 'display_name': 'API Passphrase' }
+        fields = []
+        match exchange:
+            case 'binance' | 'bybit' | 'gateio':
+                fields = [api_key, api_secret]
+            case 'kucoin':
+                fields = [api_key, api_secret, api_passphrase]
+            case 'mexc':
+                fields = [api_secret, access_key]
+            case 'okx':
+                fields = [api_key, api_secret, api_passphrase]
+            case _:
+                fields = []
+        return fields
+
+    @staticmethod
+    def get_secrets_from_request(request):
+        payload = json.loads(request.body.decode('utf-8'))
+        exchange = payload.get('exchange').lower()
+        return JsonResponse(MarketListView.get_secrets(exchange), safe=False)
 
 
 class MarketDetailView(View):

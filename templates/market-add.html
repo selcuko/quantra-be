@@ -1,0 +1,117 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<section class="p-4 flex flex-col">
+    <h1 class="flex items-center text-4xl font-extrabold dark:text-white mb-4">
+        Add a new market
+    </h1>
+    <div id="message" class="hidden p-4 mb-4 text-sm text-blue-800 rounded-lg bg-blue-50" role="alert">
+        <!-- intended to be blank -->
+    </div>
+    <div id="error" class="hidden p-4 mb-4 text-sm text-red-800 rounded-lg bg-red-50" role="alert">
+        <!-- intended to be blank -->
+    </div>
+    <form method="POST" action="">
+        {% csrf_token %}
+        <label for="exchange">Exchange</label>
+        <select id="exchange" name="exchange"
+            class="mb-6 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
+            required>
+            <option value="" disabled selected>Select an exchange</option>
+            {% for market in markets %}
+            <option value="{{ market.exchange_name }}">{{ market.exchange_name }}</option>
+            {% endfor %}
+        </select>
+        <label for="owner">Owner</label>
+        <input type="text" id="owner" name="owner"
+          class="mb-6 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
+          required>
+
+        <div id="secrets-container">
+
+        </div>
+        <button id="submit"
+        type="submit"
+        class="hidden p-5 my-5 text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm w-full sm:w-auto px-5 py-2.5 text-center dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800">
+            Submit
+        </button>
+    </form>
+</section>
+
+<script>
+    function createSecretsForm(secrets) {
+        const container = document.getElementById('secrets-container');
+        container.innerHTML = '';
+        for (const secret of secrets) {
+            const label = document.createElement('label');
+            label.setAttribute('for', secret.name);
+            label.innerText = secret.display_name;
+            container.appendChild(label);
+
+            const input = document.createElement('input');
+            input.setAttribute('type', 'text');
+            input.setAttribute('id', secret.name);
+            input.setAttribute('name', secret.name);
+            input.setAttribute('class', 'mb-6 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500');
+            input.setAttribute('required', '');
+            container.appendChild(input);
+        }
+        submit.classList.remove('hidden');
+    }
+    function showMessage(text, color) {
+        message.innerText = text;
+        message.classList.remove('hidden');
+    }
+
+    const exchange = document.getElementById('exchange');
+    const container = document.getElementById('secrets-container');
+    const submit = document.getElementById('submit');
+    const message = document.getElementById('message');
+    const error = document.getElementById('error');
+
+    exchange.addEventListener('change', (event) => {
+        fetch('/market/secrets/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({
+                exchange: event.target.value
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            createSecretsForm(data);
+        });
+    });
+
+    submit.addEventListener('click', (event) => {
+        event.preventDefault();
+        error.classList.add('hidden');
+        showMessage('Verifying credentials...');
+        const form = event.target.form;
+        fetch('', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: new FormData(form)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.redirect) {
+                error.classList.add('hidden');
+                showMessage('Market added, redirecting.');
+                window.location.href = data.redirect;
+            } else {
+                error.innerText = data.message;
+                error.classList.remove('hidden');
+                message.classList.add('hidden');
+            }
+        });
+    });
+
+</script>
+
+{% endblock %}
