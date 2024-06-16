@@ -8,6 +8,10 @@ class MarketSignatureTests(QuantTestCase):
         self.ref_class = IMarket
         self.ref_methods = inspect.getmembers(self.ref_class, predicate=inspect.isfunction)
 
+    def write_to_file(self, market_name, mismatches, missing_methods):
+        with open(f"tests/{market_name}_signature_mismatches.txt", "w") as f:
+            f.write("\n".join(mismatches + missing_methods))
+
     def test_bybit_signature(self):
         # TODO: Add more markets
         markets = [BybitMarket]
@@ -27,4 +31,23 @@ class MarketSignatureTests(QuantTestCase):
         if mismatches or missing_methods:
             self.fail("\n".join(mismatches + missing_methods))
 
+    def test_binance_signature(self):
+        markets = [BinanceMarket]
+        mismatches = []
+        missing_methods = []
+        for cls in markets:
+            for name, method in self.ref_methods:
+                if hasattr(cls, name):
+                    cls_method = getattr(cls, name)
+                    ref_signature = inspect.signature(method)
+                    cls_signature = inspect.signature(cls_method)
+                    if ref_signature != cls_signature:
+                        mismatches.append(f"Signature mismatch in method {cls.__name__}.{name}:\n\texp {ref_signature}\n\tgot {cls_signature}")
+                else:
+                    missing_methods.append(f"Method {name} not found in class {cls}")
+
+        if mismatches or missing_methods:
+            self.write_to_file("binance", mismatches, missing_methods)
+            self.fail("\n".join(mismatches + missing_methods))
+            
 

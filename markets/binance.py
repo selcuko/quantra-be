@@ -9,13 +9,11 @@ from typing import Callable, Literal, Optional
 import pytz
 import requests
 from binance.client import Client
-from django.utils import timezone
 
 from logger import logger
 from markets.errors import (InsufficientBalance, KlineFetchFailed,
                             MarketAPIError, OrderPlacementError,
                             OrderPostProcessingError, RejectedOrder)
-from markets.helper import authentication_required, float_to_precision
 from markets.interface import IMarket
 from match import MatchEngine
 from models import interval_to_minutes
@@ -23,6 +21,7 @@ from models import interval_to_minutes
 if typing.TYPE_CHECKING:
     from quantapi.models import MarketSymbol, Order, MarketAccount
     from liveloop import LiveLoop
+    from loopgroup import LoopGroup
 
 
 from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
@@ -32,7 +31,7 @@ from websockets.sync.client import connect
 class BinanceMarket(IMarket):
     name = 'Binance'
 
-    def __init__(self, config, account:'MarketAccount'):
+    def __init__(self, config:dict, account:'MarketAccount'):
         if config is None:
             config = {}
         self.authenticated = bool(config.get('API_KEY') and config.get('API_SECRET'))
@@ -80,16 +79,15 @@ class BinanceMarket(IMarket):
             'taker_buy_quote_asset_volume': float(candle['Q']),
         }
 
-    @staticmethod
-    def format_match(payload:dict) -> dict:
+    def format_match(self, data:dict) -> dict:
         return {
-            'time': datetime.fromtimestamp(payload['E']/1000, tz=pytz.UTC).replace(second=0, microsecond=0),
-            'price': float(payload['p']),
-            'size': float(payload['q']),
-            'maker': payload['m'],
+            'time': datetime.fromtimestamp(data['E']/1000, tz=pytz.UTC).replace(second=0, microsecond=0),
+            'price': float(data['p']),
+            'size': float(data['q']),
+            'maker': data['m'],
         }
 
-    def init_match_engine(self, symbol:str, interval:str, callback:Callable, liveloop:'LiveLoop|None'):
+    def init_match_engine(self, symbol:str, interval:str, callback:Callable, liveloop:'LiveLoop|LoopGroup|None'):
         ws_uri = f'wss://stream.binance.com:9443/ws/{self._format_symbol(symbol).lower()}@trade'
         ws = connect(ws_uri)
         me = MatchEngine(interval, callback)
@@ -123,11 +121,13 @@ class BinanceMarket(IMarket):
                 ws = connect(ws_uri)
                 continue
 
-    def init_websocket(self, symbol:str, interval:str, callback:Callable, liveloop:'LiveLoop', retries=0):
+    def init_websocket(self, symbol:str, interval:str, callback:Callable, liveloop:'LiveLoop|LoopGroup|None', retries:int=1):
         ws_uri = self.get_websocket_uri(symbol, interval)
         try:
             ws = connect(ws_uri)
-            while not self.stop_websocket_stream and not liveloop.should_stop():
+            while not self.stop_websocket_stream:
+                if liveloop and liveloop.should_stop():
+                    break
                 ws.pong()
                 try:
                     data = json.loads(ws.recv(timeout=10))
@@ -193,10 +193,10 @@ class BinanceMarket(IMarket):
     def _format_datetime(dt) -> str:
         return str(int(dt.replace(second=0, microsecond=0).timestamp()*1000))
 
-    def has_symbol(self, symbol_name:str) -> bool:
+    def has_symbol(self, symbol:str) -> bool:
         if not self.symbols:
             self.symbols = self.get_symbols()
-        return symbol_name in self.symbols
+        return symbol in self.symbols
 
     def _get_symbol_from_name(self, symbol_name:str) -> 'MarketSymbol':
         try:
@@ -259,18 +259,19 @@ class BinanceMarket(IMarket):
             raise
         return self._standardize_klines(klines)
 
-    def get_klines(self, symbol:str, interval:str, start:datetime, end:Optional[datetime]=None, limit=1000, retry=0) -> list[list]:
-        if symbol not in self.symbols:
+    def get_klines(self, symbol:'MarketSymbol|str', interval:str, start:datetime, end:Optional[datetime]=None, limit:int=1000, retry:int=0) -> list[list]:
+        symbol_name = symbol if isinstance(symbol, str) else symbol.name
+        if symbol_name not in self.symbols:
             raise ValueError(f'Symbol {symbol} is not present on {self.name}')
         try:
-            return self._get_klines(symbol, interval, start, end, limit, retry=retry)
+            return self._get_klines(symbol_name, interval, start, end, limit, retry=retry)
         except requests.exceptions.ConnectionError:
             return []
 
     def get_earliest_valid_timestamp(self, symbol, interval):
         return self.client._get_earliest_valid_timestamp(symbol, interval)
 
-    def get_last_klines(self, symbol:str, interval:str, limit=100, retry=1, silent=True) -> list[list]:
+    def get_last_klines(self, symbol:'MarketSymbol | str', interval:str, limit:int=100, retry:int=1, silent=True) -> list[list]:
         minutes = interval_to_minutes(interval)
         now = datetime.now(tz=pytz.UTC) + timedelta(minutes=1)
         start = now - timedelta(minutes=minutes*limit+1)
@@ -302,7 +303,6 @@ class BinanceMarket(IMarket):
             ], unique_fields=['name', 'market'])
         return self.symbols
 
-    @authentication_required
     def place_market_order(self, symbol:'MarketSymbol|str', side:Literal['buy', 'sell'], funds:Optional[str]=None, quantity:Optional[str]=None, validate=True) -> 'Order':
         initial_quantity = quantity
         if isinstance(symbol, str):
@@ -327,35 +327,7 @@ class BinanceMarket(IMarket):
             raise OrderPostProcessingError(e, oid=_order_payload.get('orderId'))
         return order
 
-    @authentication_required
-    def place_limit_order(self, symbol:'MarketSymbol|str', side:Literal['buy', 'sell'], price:float, quantity:float, validate=True) -> 'Order':
-        if isinstance(symbol, str):
-            symbol = self._get_symbol_from_name(symbol)
-        client_oid = uuid.uuid4().hex
-        if symbol.base_precision:
-            float_to_precision(Decimal(quantity), Decimal(symbol.base_precision))
-        if symbol.quote_precision:
-            price = float_to_precision(Decimal(price), Decimal(symbol.quote_precision))
-        try:
-            order = self.client.order_limit(
-                side=side,
-                symbol=self._format_symbol(symbol.name),
-                price=price,
-                quantity=quantity,
-                newClientOrderId=client_oid)
-            logger.info(f'Limit order placed on {self.name} for {symbol} with side {side} and price {price} and quantity {quantity} with order id {order["orderId"]}')
-            order = self._prep_order(order)
-            if not order.oid:
-                raise ValueError(f'Error while placing market order on {self.name}')
-            if validate:
-                order = self.get_order(symbol, order.oid)
-            return order
-        except:
-            logger.error(f'Error placing limit order on {self.name}', exc_info=True)
-            raise
-
-    @authentication_required
-    def get_order(self, symbol:'MarketSymbol|str', order:'Order|str') -> 'Order':
+    def get_order(self, symbol:'MarketSymbol|str', order:'Order|int', retries:int=1) -> 'Order':
         from quantapi.models import Order
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
@@ -370,63 +342,7 @@ class BinanceMarket(IMarket):
             logger.error(f'Error while getting order on {self.name}', exc_info=True)
             raise
 
-    @authentication_required
-    def get_orders(self, symbol:'MarketSymbol|str') -> list['Order']:
-        if isinstance(symbol, str):
-            symbol = self._get_symbol_from_name(symbol)
-        try:
-            orders = self.client.get_all_orders(symbol=self._format_symbol(symbol.name))
-            return [self._prep_order(order) for order in orders]
-        except:
-            logger.error(f'Error while getting order list on {self.name}', exc_info=True)
-            raise
-
-    @authentication_required
-    def get_open_orders(self, symbol:'MarketSymbol|str') -> list['Order']:
-        if isinstance(symbol, str):
-            symbol = self._get_symbol_from_name(symbol)
-        try:
-            orders = self.client.get_open_orders(symbol=self._format_symbol(symbol.name))
-            return [self._prep_order(order) for order in orders]
-        except:
-            logger.error(f'Error while getting open orders on {self.name}', exc_info=True)
-            raise
-
-    @authentication_required
-    def cancel_order(self, symbol:'MarketSymbol|str', order:'Order|int') -> 'Order':
-        from quantapi.models import Order
-        if isinstance(symbol, str):
-            symbol = self._get_symbol_from_name(symbol)
-        if isinstance(order, Order):
-            _order_oid = order.oid
-        else:
-            _order_oid = order
-        try:
-            _order_payload = self.client.cancel_order(symbol=self._format_symbol(symbol.name), orderId=_order_oid)
-            return self._prep_order(_order_payload)
-        except Exception as e:
-            if 'Unknown order sent' in str(e):
-                logger.error(f'Order {_order_oid} not found on {self.name}')
-            logger.error(f'Error while canceling order on {self.name}', exc_info=True)
-            raise
-
-    @authentication_required
-    def cancel_all_orders(self, symbol:'MarketSymbol|str') -> list['Order']:
-        if isinstance(symbol, str):
-            symbol = self._get_symbol_from_name(symbol)
-        try:
-            if not self.client:
-                raise ValueError('You must provide an API config to use this method')
-            if symbol:
-                orders = self.client._delete('openOrders', True, data={'symbol': self._format_symbol(symbol.name)})
-            else:
-                orders = self.client._delete('openOrders', True)
-            return [self._prep_order(order) for order in orders]
-        except:
-            logger.error(f'Error while canceling all orders on {self.name}', exc_info=True)
-            raise
-
-    def get_full_orderbook(self, symbol:'MarketSymbol|str', limit=5000) -> dict:
+    def get_full_orderbook(self, symbol:'MarketSymbol|str', limit:int=5000) -> dict:
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         try:
@@ -439,7 +355,7 @@ class BinanceMarket(IMarket):
             logger.error(f'Error while fetching orderbook for {symbol} on {self.name}', exc_info=True)
             return {}
 
-    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:Callable, liveloop:'LiveLoop|None'=None, retries=30):
+    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:Callable, liveloop:'LiveLoop|LoopGroup|None'=None, retries: int = 0):
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         ws_uri = f'wss://stream.binance.com:9443/ws/{self._format_symbol(symbol.name).lower()}@depth@100ms'
@@ -465,8 +381,7 @@ class BinanceMarket(IMarket):
             logger.error(msg, exc_info=True)
             raise MarketAPIError(msg)
 
-    @authentication_required
-    def get_account(self):
+    def get_account(self, save=True):
         account = self.client.get_account()
         self.spot_trading_enabled = 'SPOT' in account.get('permissions', []) and account.get('canTrade')
         self.assets = { str(asset['asset']): float(asset['free']) for asset in account.get('balances', []) }
@@ -482,7 +397,11 @@ class BinanceMarket(IMarket):
         if not self.spot_trading_enabled:
             logger.error('Spot trading is not enabled on Binance account')
 
-    @authentication_required
+        if save and self.account:
+            self.account.capital = self.capital
+            self.account.assets = json.dumps(self.assets)
+            self.account.save()
+
     def get_current_prices(self, save=True) -> dict:
         try:
             prices = { self._standardize_symbol(ticker['symbol']): float(ticker['price']) for ticker in self.client.get_all_tickers() if ticker['symbol'].endswith('USDT') and ticker['price'] }
@@ -495,7 +414,6 @@ class BinanceMarket(IMarket):
             logger.error(f'Error while fetching current prices from {self.name}', exc_info=True)
             return {}
 
-    @authentication_required
     def get_equity(self, save=True) -> float:
         prices = self.get_current_prices(save=False)
         if not prices:

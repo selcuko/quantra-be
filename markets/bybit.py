@@ -6,7 +6,6 @@ import json
 import time
 import requests
 from logger import logger
-from loopgroup import LoopGroup
 from markets.errors import InsufficientBalance, KlineFetchFailed, MarketAPIError, MarketAPIUnavailable, OrderPlacementError, OrderPostProcessingError, RejectedOrder
 from markets.interface import IMarket
 from logger import logger
@@ -19,6 +18,7 @@ from models import interval_to_minutes
 if typing.TYPE_CHECKING:
     from quantapi.models import MarketSymbol, Order, MarketAccount
     from liveloop import LiveLoop
+    from loopgroup import LoopGroup
 
 
 class BybitMarket(IMarket):
