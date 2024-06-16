@@ -130,9 +130,21 @@ class OrderManager:
                 if side == 'buy':
                     self.session.capital -= order.deal_funds
                     self.session.assets += order.deal_size
+                    if (account := self.session.account):
+                        account.capital = (account.capital or 0) - order.deal_funds
+                        assets = json.loads(account.assets or '{}')
+                        assets[symbol.base] = (assets.get(symbol.base, 0) + order.deal_size)
+                        account.assets = json.dumps(assets)
+                        account.save()
                 elif side == 'sell':
                     self.session.capital += order.deal_funds
                     self.session.assets -= order.deal_size
+                    if (account := self.session.account):
+                        account.capital = (account.capital or 0) + order.deal_funds
+                        assets = json.loads(account.assets or '{}')
+                        assets[symbol.base] = (assets.get(symbol.base, 0) - order.deal_size)
+                        account.assets = json.dumps(assets)
+                        account.save()
                 self.session.save()
         if manual:
             order.force = True
@@ -183,17 +195,18 @@ class GroupOrderManager:
                 continue
             order.group = group_order # type: ignore
             order.save()
-            group_order.deal_funds += order.deal_funds if order.deal_funds else 0
-            group_order.deal_size  += order.deal_size if order.deal_size else 0
-            if order.status == Order.Status.FILLED and group_order.status != GroupOrder.Status.PARTIAL:
-                group_order.status = GroupOrder.Status.FILLED
-            elif group_order.status == GroupOrder.Status.FILLED:
-                group_order.status = GroupOrder.Status.PARTIAL
+            if order.status == Order.Status.FILLED:
+                group_order.deal_funds += order.deal_funds if order.deal_funds else 0
+                group_order.deal_size  += order.deal_size if order.deal_size else 0
             orders[session] = order
         if not orders:
             group_order.delete()
             return
-        if group_order.status == GroupOrder.Status.PENDING:
+        if all(order.status == Order.Status.FILLED for order in orders.values()):
+            group_order.status = GroupOrder.Status.FILLED
+        elif any(order.status == Order.Status.FILLED for order in orders.values()):
+            group_order.status = GroupOrder.Status.PARTIAL
+        else:
             group_order.status = GroupOrder.Status.EXPIRED
         group_order.save()
         return group_order

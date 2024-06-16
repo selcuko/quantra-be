@@ -78,7 +78,8 @@ class BybitMarket(IMarket):
         query = self.sign(payload)
         uri = f'{url}?{query}'
         response = self.session.get(uri)
-        response.raise_for_status()
+        if not response.ok:
+            raise ValueError(response.text)
         data = response.json()
         if data.get('retMsg') not in ['OK', 'success']:
             raise ValueError(data)

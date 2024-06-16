@@ -79,7 +79,7 @@ class SessionAdmin(admin.ModelAdmin):
 
     def exchange(self, obj):
         try:
-            return obj.symbol.market.exchange_name
+            return obj.account.market.exchange_name
         except:
             return None
 

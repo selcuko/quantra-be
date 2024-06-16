@@ -144,7 +144,6 @@ class LiveLoop:
     def stop(self):
         """Stops the live loop"""
         self.will_stop = True
-        self.session.planned_shutdown = datetime.now(tz=pytz.UTC)
         logger.info(f'LiveLoop planned to shutdown after the next candle.', extra={'loop': repr(self)})
 
     def run_ticker_until_next_candle(self):

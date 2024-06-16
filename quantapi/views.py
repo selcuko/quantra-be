@@ -235,7 +235,6 @@ class SessionUpdateView(View):
         if 'asset_update' in request.POST:
             session.assets = float(request.POST.get('asset_update', 0))
 
-
         session.save()
         return redirect('session-detail', pk=session.pk)
 
@@ -243,10 +242,8 @@ class SessionUpdateView(View):
     def resume(request, pk):
         session = Session.objects.get(pk=pk)
         if not session.status == Session.Status.PAUSED:
-            return render(request, 'session-detail.html', {'session': session, 'error': {
-                'type': 'error',
-                'text': 'Session is not paused.'
-            }})
+            messages.error(request, f'Session is not suitable to resume.')
+            return redirect('session-detail', pk=session.pk)
         session.status = Session.Status.ONGOING
         session.save()
         session.resume()
@@ -254,16 +251,18 @@ class SessionUpdateView(View):
 
     @staticmethod
     def pause(request, pk):
-        session = Session.objects.get(pk=pk)
+        liveloop = get_liveloop(pk)
+        if not liveloop:
+            session = Session.objects.get(pk=pk)
+            messages.error(request, f'Session {session} has no associated LiveLoop in the cache.')
+            return redirect('session-detail', pk=pk)
+        session = liveloop.session
         if not session.status == Session.Status.ONGOING:
-            return render(request, 'session-detail.html', {'session': session, 'error': {
-                'type': 'error',
-                'text': 'Session is not ongoing.'
-            }})
+            messages.error(request, f'Session is not ongoing.')
+            return redirect('session-detail', pk=session.pk)
         session.status = Session.Status.PAUSED
         session.ended = datetime.now(pytz.UTC)
         session.save()
-        liveloop = get_liveloop(session.pk)
         if liveloop:
             liveloop.stop()
         return redirect('session-detail', pk=session.pk)
@@ -272,10 +271,8 @@ class SessionUpdateView(View):
     def terminate(request, pk):
         session = Session.objects.get(pk=pk)
         if session.status not in [Session.Status.ONGOING, Session.Status.PAUSED]:
-            return render(request, 'session-detail.html', {'session': session, 'error': {
-                'type': 'error',
-                'text': 'Session is not ongoing.'
-            }})
+            messages.error(request, f'Session is not suitable for termination.')
+            return redirect('session-detail', pk=session.pk)
         session.status = Session.Status.COMPLETED
         session.ended = datetime.now(pytz.UTC)
         session.planned_shutdown = datetime.now(pytz.UTC)

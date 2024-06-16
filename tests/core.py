@@ -28,8 +28,8 @@ class QuantTestCase(TestCase):
             internal=True,
         )
         self.account = MarketAccount.objects.get(market=market, credentials=self.credentials)
-        self.account.capital = 0
-        self.account.assets = '{}'
+        self.account.capital = 1000
+        self.account.assets = '{ "BTC": 1 }'
         self.account.save()
         return self.account
 

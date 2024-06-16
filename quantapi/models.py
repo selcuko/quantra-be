@@ -346,7 +346,7 @@ class Session(models.Model):
         return round(self.capital + self.assets * last_price, 2)
 
     def __str__(self):
-        return f'{self.strategy} - {self.symbol} - {self.status}'
+        return f'{self.strategy} - {self.symbol.base} - {self.account.market.exchange_name} - {self.status}'
 
     @property
     def analytics(self):
@@ -391,14 +391,6 @@ class Session(models.Model):
             raise ValueError(f'Invalid candle source: {self.candle_source}')
         return ll
 
-    def stop(self):
-        """Stop an ongoing session."""
-        if self.status == Session.Status.ONGOING:
-            self.status = Session.Status.COMPLETED
-            self.planned_shutdown = datetime.now(pytz.utc)
-        else:
-            raise ValueError(f'Session status should be ONGOING to stop, not {self.status}')
-
     def recent_order_error(self):
         # return True if if there is an order with status ERROR in the last 5 orders
         orders = Order.objects.filter(signal__session=self).order_by('-created_at')[:5]
@@ -406,6 +398,7 @@ class Session(models.Model):
         return orders.exists()
 
     def update(self, interface, save=True):
+        # Update session capital and assets to ensure they are not higher than the interface's
         interface = interface or self.account.get_interface()
         new_capital = min(self.capital, interface.capital)
         new_assets  = min(self.assets, interface.assets.get(self.symbol.base, 0))
@@ -416,6 +409,15 @@ class Session(models.Model):
         self.capital = new_capital
         self.assets = new_assets
         if save: self.save()
+
+    def save(self, **kwargs):
+        if self.account:
+            if self.capital > (self.account.capital or 0):
+                raise ValueError(f'Session capital ({self.capital}) cannot be higher than account capital ({self.account.capital}).')
+            account_assets = json.loads(self.account.assets or '{}')
+            if self.assets > account_assets.get(self.symbol.base, 0):
+                raise ValueError(f'Session assets ({self.assets}) cannot be higher than account assets ({account_assets.get(self.symbol.base)}).')
+        super().save(**kwargs)
 
 
 class SessionGroup(models.Model):
