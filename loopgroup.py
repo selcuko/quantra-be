@@ -18,6 +18,7 @@ from quantapi.models import Issue, MarketAccount, Session, SessionGroup, Signal
 from quantapi.models import Strategy as StrategyModel
 from strategy import Strategy, get_strategy
 from cache import set_loopgroup
+from utils import can_group_buy, can_group_sell
 
 MINIMUM_INITIAL_CAPITAL = 0
 MINIMUM_BUY_AMOUNT = 5
@@ -357,6 +358,8 @@ class LoopGroup:
                 price=last_kline['close'],
                 raw=json.dumps(last_kline)
             )
+        if not can_group_buy(self.group):
+            return
         group_order_manager = GroupOrderManager(self.group)
         group_order = group_order_manager.place('buy', pct=pct)
         if not group_order:
@@ -380,6 +383,8 @@ class LoopGroup:
                 price=last_kline['close'],
                 raw=json.dumps(last_kline)
             )
+        if not can_group_sell(self.group):
+            return
         group_order_manager = GroupOrderManager(self.group)
         group_order = group_order_manager.place('sell', pct=pct)
         if not group_order:

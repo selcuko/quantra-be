@@ -90,12 +90,12 @@
             <form action="update/" method="POST" style="display: inline;">
                 {% csrf_token %}
                 {% if group.buy_enabled %}
-                <input type="hidden" name="session_buy_enabled" value="0">
+                <input type="hidden" name="enable-buy" value="0">
                 <button type="submit" class="text-white bg-amber-700 hover:bg-amber-500 focus:ring-4 focus:ring-amber-300 font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2 dark:bg-amber-600 dark:hover:bg-amber-700 focus:outline-none dark:focus:ring-amber-800">
                     Disable BUY
                 </button>
                 {% else %}
-                <input type="hidden" name="session_buy_enabled" value="1">
+                <input type="hidden" name="enable-buy" value="1">
                 <button type="submit" class="text-white bg-green-700 hover:bg-green-800 focus:ring-4 focus:ring-green-300 font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2 dark:bg-green-600 dark:hover:bg-green-700 focus:outline-none dark:focus:ring-green-800">
                     Enable BUY
                 </button>
@@ -104,12 +104,12 @@
             <form action="update/" method="POST" style="display: inline;">
                 {% csrf_token %}
                 {% if group.sell_enabled %}
-                <input type="hidden" name="session_sell_enabled" value="0">
+                <input type="hidden" name="enable-sell" value="0">
                 <button type="submit" class="text-white bg-amber-700 hover:bg-amber-800 focus:ring-4 focus:ring-amber-300 font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2 dark:bg-amber-600 dark:hover:bg-amber-700 focus:outline-none dark:focus:ring-amber-800">
                     Disable SELL
                 </button>
                 {% else %}
-                <input type="hidden" name="session_sell_enabled" value="1">
+                <input type="hidden" name="enable-sell" value="1">
                 <button type="submit" class="text-white bg-green-700 hover:bg-green-800 focus:ring-4 focus:ring-green-300 font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2 dark:bg-green-600 dark:hover:bg-green-700 focus:outline-none dark:focus:ring-green-800">
                     Enable SELL
                 </button>
@@ -362,11 +362,18 @@
     <table class="w-full text-sm text-left rtl:text-right text-gray-500 dark:text-gray-400">
         <caption class="p-5 text-lg font-semibold text-left rtl:text-right text-gray-900 bg-white dark:text-white dark:bg-gray-800">
             Capitals and assets
+            <br>
+            {% if not group.buy_enabled or not group.sell_enabled %}
+            <span class="bg-red-100 text-red-800 text-xs font-medium me-2 px-2.5 py-0.5 rounded border border-red-400">Permissions are being overriden by group permissions</span>
+            {% endif %}
         </caption>
         <thead class="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
             <tr>
                 <th scope="col" class="px-6 py-3">
                     Owner
+                </th>
+                <th scope="col" class="px-6 py-3">
+                    Permissions
                 </th>
                 <th scope="col" class="px-6 py-3">
                     Capital
@@ -386,8 +393,22 @@
             {% for session in sessions %}
             <tr class="bg-white border-b dark:bg-gray-800 dark:border-gray-700">
                 <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap dark:text-white">
-                    [{{ session.account.exchange }}] {{ session.account.owner }}
+                    <a href="{% url 'session-detail' pk=session.pk %}" class="hover:underline fond-bold">
+                        [{{ session.account.exchange }}] {{ session.account.owner }}
+                    </a>
                 </th>
+                <td class="px-6 py-4">
+                    {% if session.buy_enabled %}
+                    <span class="bg-green-100 text-green-800 text-xs font-medium me-2 px-2.5 py-0.5 rounded border border-blue-400">Can buy</span>
+                    {% else %}
+                    <span class="bg-red-100 text-red-800 text-xs font-medium me-2 px-2.5 py-0.5 rounded border border-red-400">Cannot buy</span>
+                    {% endif %}
+                    {% if session.sell_enabled %}
+                    <span class="bg-green-100 text-green-800 text-xs font-medium me-2 px-2.5 py-0.5 rounded border border-blue-400">Can sell</span>
+                    {% else %}
+                    <span class="bg-red-100 text-red-800 text-xs font-medium me-2 px-2.5 py-0.5 rounded border border-red-400">Cannot sell</span>
+                    {% endif %}
+                </td>
                 <td class="px-6 py-4">
                     $ {{ session.capital|floatformat:2|default:'0' }}
                 </td>

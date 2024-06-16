@@ -416,6 +416,12 @@ class SessionGroupDetailView(View):
                 messages.error(request, f'Cannot remove the last session from a SessionGroup.')
                 return redirect('sessiongroup-detail', pk=group.pk)
             session.delete()
+        if (enable_buy := payload.get('enable-buy')) is not None:
+            group.buy_enabled = bool(int(enable_buy))
+            group.save()
+        if (enable_sell := payload.get('enable-sell')) is not None:
+            group.sell_enabled = bool(int(enable_sell))
+            group.save()
         return redirect('sessiongroup-detail', pk=group.pk)
 
     @staticmethod

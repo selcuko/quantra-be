@@ -33,6 +33,7 @@
 
     <div class="flex rounded-md w-full pt-4 items-center justify-between">
         <div>
+            {% if not session.group %}
             {% if session.status == 'ONGOING' %}
             <form action="pause/" style="display: inline;" method="post">
                 {% csrf_token %}
@@ -55,6 +56,36 @@
                     Terminate
                 </button>
             </form>
+            <form action="update/" method="POST" style="display: inline;">
+                {% csrf_token %}
+                {% if session.buy_enabled %}
+                <input type="hidden" name="session_buy_enabled" value="0">
+                <button type="submit" class="text-white bg-amber-700 hover:bg-amber-500 focus:ring-4 focus:ring-amber-300 font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2 dark:bg-amber-600 dark:hover:bg-amber-700 focus:outline-none dark:focus:ring-amber-800">
+                    Disable BUY
+                </button>
+                {% else %}
+                <input type="hidden" name="session_buy_enabled" value="1">
+                <button type="submit" class="text-white bg-green-700 hover:bg-green-800 focus:ring-4 focus:ring-green-300 font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2 dark:bg-green-600 dark:hover:bg-green-700 focus:outline-none dark:focus:ring-green-800">
+                    Enable BUY
+                </button>
+                {% endif %}
+            </form>
+            <form action="update/" method="POST" style="display: inline;">
+                {% csrf_token %}
+                {% if session.sell_enabled %}
+                <input type="hidden" name="session_sell_enabled" value="0">
+                <button type="submit" class="text-white bg-amber-700 hover:bg-amber-800 focus:ring-4 focus:ring-amber-300 font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2 dark:bg-amber-600 dark:hover:bg-amber-700 focus:outline-none dark:focus:ring-amber-800">
+                    Disable SELL
+                </button>
+                {% else %}
+                <input type="hidden" name="session_sell_enabled" value="1">
+                <button type="submit" class="text-white bg-green-700 hover:bg-green-800 focus:ring-4 focus:ring-green-300 font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2 dark:bg-green-600 dark:hover:bg-green-700 focus:outline-none dark:focus:ring-green-800">
+                    Enable SELL
+                </button>
+                {% endif %}
+            </form>
+            {% endif %}
+            {% else %}
             <form action="update/" method="POST" style="display: inline;">
                 {% csrf_token %}
                 {% if session.buy_enabled %}

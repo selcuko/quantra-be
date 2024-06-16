@@ -268,7 +268,7 @@ class MEXCMarket(IMarket):
             '12 hour': '12h',
             '1 day': '1d',
             '3 day': '3d',
-            '1 week': '1w',
+            '1 week': '1W',
             '1 month': '1M',
         }[interval]
 
@@ -332,7 +332,8 @@ class MEXCMarket(IMarket):
         try:
             uri = f'{self.url}/api/v3/klines?symbol={self._format_symbol(symbol)}&interval={self._format_interval(interval)}&limit={limit}&startTime={self._format_datetime(start)}&endTime={self._format_datetime(end)}'
             response = requests.get(uri)
-            response.raise_for_status()
+            if not response.ok:
+                raise ValueError(f'Error while fetching klines for {self.name}: {response.text}')
             kline_data = response.json()
         except:
             logger.error(f'Error while fetching klines for {self.name}', exc_info=True)
