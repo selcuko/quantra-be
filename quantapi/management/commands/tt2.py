@@ -29,12 +29,8 @@ class Command(BaseCommand):
             print(f'{category}: {len(symbols)}')
 
     def handle(self, *args, **options):
-        symbols = GlobalSymbol.objects.all()
-        for symbol in symbols:
-            tags = json.loads(symbol.tags_flat or '[]')
-            for tag_name in tags:
-                tag = Tag.objects.get_or_create(name=tag_name)[0]
-                symbol.tags.add(tag)
-                print('.', end='', flush=True)
+        gs = GlobalSymbol.objects.filter(tags__name='stablecoin')
+        print(gs)
+
 
 

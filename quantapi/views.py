@@ -20,7 +20,7 @@ from markets.errors import (InsufficientBalance, MarketDisabledTrading,
                             SymbolNotInMarket)
 from order import OrderManager
 from quantapi.models import (Backtest, GlobalSymbol, GroupOrder, Issue, Market, MarketAccount, MarketCredentials, MarketSymbol, Notification,
-                             Order, Session, SessionGroup, Signal, Strategy)
+                             Order, Session, SessionGroup, Signal, Strategy, Tag)
 from strategy import get_strategy
 from django.contrib import messages
 
@@ -738,7 +738,8 @@ class PriceView(View):
 
 class CoinScanView(View):
     def get(self, request):
-        return render(request, 'symbol-scan.html')
+        tags = Tag.objects.all()
+        return render(request, 'symbol-scan.html', {'tags': tags})
 
     def post(self, request):
         payload = json.loads(request.body.decode('utf-8'))
@@ -775,6 +776,8 @@ class CoinScanView(View):
             sort = '-volume'
         if payload.get('search'):
             query['base__icontains'] = payload['search'].replace(' ', '')
+
+
         market_query = Q()
         if payload.get('markets'):
             markets = payload['markets']
@@ -783,6 +786,10 @@ class CoinScanView(View):
                     market_query &= Q(available_markets__isnull=False) & ~Q(available_markets='') & ~Q(available_markets='[]')
                 else:
                     market_query &= Q(available_markets__icontains=market)
+        if (tags := payload.get('tags')):
+            for tag in tags:
+                market_query &= Q(tags__name=tag)
+            print('TAGS INCLUDED', market_query)
         start = 0
         end = 50
         if payload.get('start'):

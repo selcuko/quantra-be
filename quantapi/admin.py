@@ -220,6 +220,18 @@ class SessionGroupAdmin(admin.ModelAdmin):
         return super().get_queryset(request).select_related('symbol__market', 'interface__market', 'strategy', 'market').prefetch_related('sessions')
 
 
+class TagAdmin(admin.ModelAdmin):
+    list_display = ('name', 'symbol_count', 'is_chain', 'is_portfolio', 'is_ecosystem')
+    search_fields = ('name', )
+    list_filter = ('is_chain', 'is_portfolio', 'is_ecosystem')
+
+    def symbol_count(self, obj):
+        return obj.symbols.count()
+
+    def get_queryset(self, request: HttpRequest) -> QuerySet[Tag]:
+        return super().get_queryset(request).prefetch_related('symbols')
+
+
 admin.site.register(SessionGroup, SessionGroupAdmin)
 admin.site.register(GlobalSymbol, GlobalSymbolAdmin)
 admin.site.register(Market, MarketAdmin)
@@ -237,4 +249,4 @@ admin.site.register(Strategy)
 admin.site.register(Notification, NotificationAdmin)
 admin.site.register(ComplexOrder, ComplexOrderAdmin)
 admin.site.register(Issue, IssueAdmin)
-admin.site.register(Tag)
+admin.site.register(Tag, TagAdmin)

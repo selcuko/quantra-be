@@ -1050,9 +1050,21 @@ class Tag(models.Model):
     '''M:M relationship with GlobalSymbol'''
     name = models.CharField(max_length=100, unique=True)
     description = models.TextField(null=True, blank=True)
+    is_ecosystem = models.BooleanField(default=False)
+    is_chain = models.BooleanField(default=False)
+    is_portfolio = models.BooleanField(default=False)
 
     def __str__(self):
         return self.name
-    
+
+    def save(self, *args, **kwargs):
+        if self.name.endswith('-ecosystem'):
+            self.is_ecosystem = True
+        if self.name.endswith('-chain'):
+            self.is_chain = True
+        if self.name.endswith('-portfolio'):
+            self.is_portfolio = True
+        super().save(*args, **kwargs)
+
     class Meta:
         verbose_name_plural = 'Tags'

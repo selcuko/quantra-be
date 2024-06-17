@@ -90,6 +90,16 @@
                         </div>
                     </dd>
                 </div>
+                <div class="grid grid-cols-1 gap-1 p-3">
+                    <label for="category">Categories</label>
+                    <select id="category" name="category"
+                      class="mb-6 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
+                      multiple required>
+                      {% for tag in tags %}
+                      <option value="{{ tag.name }}">{{ tag.name }}</option>
+                      {% endfor %}
+                    </select>
+                </div>
                 <div class="grid grid-cols-1 gap-1 p-3 sm:grid-cols-3 sm:gap-4">
                     <dt class="font-medium text-gray-900">ATH proximity</dt>
                     <dd class="text-gray-700 sm:col-span-2">
@@ -229,7 +239,8 @@
     const volToMcapMin = document.getElementById('vol-to-mcap-min');
     const marketSelectors = document.querySelectorAll('.market-selector');
     const search = document.getElementById('search');
-    const inputs = [volumeMax, volumeMin, supplyMax, supplyMin, marketcapMax, marketcapMin, athProxMax, athProxMin, volToMcapMax, volToMcapMin, search].concat(Array.from(marketSelectors));
+    const category = document.getElementById('category');
+    const inputs = [volumeMax, volumeMin, supplyMax, supplyMin, marketcapMax, marketcapMin, athProxMax, athProxMin, volToMcapMax, volToMcapMin, search].concat(Array.from(marketSelectors), category);
     const csrf_token = document.getElementsByName('csrfmiddlewaretoken')[0].value;
 
     const tableHeaders = document.querySelectorAll('th');
@@ -315,6 +326,7 @@
                 sortBy: sortBy,
                 markets: marketFilter,
                 search: search.value,
+                tags: Array.from(category.selectedOptions).map(option => option.value),
             }),
         }).then(response => {
             if (response.ok) {

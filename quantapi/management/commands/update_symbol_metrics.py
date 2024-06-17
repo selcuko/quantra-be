@@ -1,7 +1,7 @@
 import json
 from django.core.management.base import BaseCommand
 from coinmcap import CoinMarketCap
-from quantapi.models import MarketSymbol, GlobalSymbol
+from quantapi.models import MarketSymbol, GlobalSymbol, Tag
 from coingecko import CoinGecko
 
 STABLES = ['USDT', 'BUSD', 'USDC', 'DAI', 'FDUSD', 'TUSD', 'USDD', 'USDe',
@@ -124,4 +124,10 @@ class Command(BaseCommand):
 
         GlobalSymbol.objects.bulk_update(gs_update, ['tags_flat', 'coinmarketcap_response', 'is_stablecoin'])
         print('Done.')
+
+        for gs in GlobalSymbol.objects.all():
+            gs.assign_tags()
+        
+        for tag in Tag.objects.all():
+            tag.save()
 
