@@ -913,9 +913,9 @@ class GlobalSymbol(models.Model):
     image = models.URLField(null=True, blank=True, max_length=1024, help_text='URL to image of this symbol')
     is_favorite = models.BooleanField(default=False)
     available_markets = models.TextField(default='[]', help_text='JSON string of available markets for this symbol')
-    tags = models.TextField(null=True, blank=True, help_text='JSON string of tags for this symbol')
+    tags_flat = models.TextField(null=True, blank=True, help_text='JSON string of tags for this symbol')
     is_stablecoin = models.BooleanField(null=True, blank=True)
-
+    tags = models.ManyToManyField('Tag', related_name='symbols')
     ath = models.FloatField(null=True, blank=True, help_text='ATH')
     atl = models.FloatField(null=True, blank=True, help_text='ATL')
     ath_date = models.DateTimeField(null=True, blank=True)
@@ -965,9 +965,9 @@ class GlobalSymbol(models.Model):
 
     @property
     def tags_display(self):
-        self.tags = self.tags or '[]'
-        self.tags = self.tags.replace("'", '"')
-        tags = json.loads(self.tags or '[]')
+        self.tags_flat = self.tags_flat or '[]'
+        self.tags_flat = self.tags_flat.replace("'", '"')
+        tags = json.loads(self.tags_flat or '[]')
         tags = [t.replace('-', ' ') for t in tags]
         return ', '.join(tags)
 
@@ -994,15 +994,22 @@ class GlobalSymbol(models.Model):
 
     def save(self, *args, **kwargs):
         self.calculate()
+        self.assign_tags()
         super().save(*args, **kwargs)
+
+    def assign_tags(self):
+        tags = json.loads(self.tags_flat or '[]')
+        for tag in tags:
+            tag_obj, created = Tag.objects.get_or_create(name=tag)
+            self.tags.add(tag_obj)
 
     def __str__(self):
         return f'{self.name} {self.data_source}'
-    
+
     @staticmethod
     def batch_to_json(symbols):
         return [s.to_json() for s in symbols]
-    
+
     def to_json(self):
         return {
             'cid': self.cid,
@@ -1037,3 +1044,15 @@ class GlobalSymbol(models.Model):
             'markets': self.markets,
             'price': self.price,
         }
+
+
+class Tag(models.Model):
+    '''M:M relationship with GlobalSymbol'''
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(null=True, blank=True)
+
+    def __str__(self):
+        return self.name
+    
+    class Meta:
+        verbose_name_plural = 'Tags'

@@ -117,11 +117,11 @@ class Command(BaseCommand):
             gs = global_coins.get(cmc_symbol['slug']) or global_names.get(cmc_symbol['symbol'].upper())
             if not gs:
                 continue
-            gs.tags = json.dumps(cmc_symbol['tags']) if cmc_symbol.get('tags') else gs.tags
+            gs.tags_flat = json.dumps(cmc_symbol['tags']) if cmc_symbol.get('tags') else gs.tags_flat
             gs.is_stablecoin = 'stablecoin' in cmc_symbol.get('tags') or gs.base in STABLES
             gs.coinmarketcap_response = json.dumps(cmc_symbol)
             gs_update.append(gs)
 
-        GlobalSymbol.objects.bulk_update(gs_update, ['tags', 'coinmarketcap_response', 'is_stablecoin'])
+        GlobalSymbol.objects.bulk_update(gs_update, ['tags_flat', 'coinmarketcap_response', 'is_stablecoin'])
         print('Done.')
 
