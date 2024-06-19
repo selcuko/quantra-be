@@ -16,3 +16,6 @@ urllib3==2.0.4
 logtail-python==0.2.6
 psycopg2-binary==2.9.9
 django-silk
+djangorestframework
+django-filter
+whitenoise
