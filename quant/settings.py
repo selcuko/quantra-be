@@ -34,6 +34,7 @@ TESTING = sys.argv[1:2] == ['test']
 ALLOWED_HOSTS = ['*']
 CSRF_TRUSTED_ORIGINS = ['https://example.org', 'https://example.com', 'https://dev.example.com', 'https://api.example.com', 'https://api-dev.example.com']
 WHITELISTED_DEFAULT_EMAILS = ['user@example.com', 'user2@example.com']
+CORS_ALLOW_ALL_ORIGINS = True
 
 # Application definition
 
@@ -55,12 +56,14 @@ INSTALLED_APPS = [
     'silk',
     'rest_framework',
     'django_filters',
+    'corsheaders',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
