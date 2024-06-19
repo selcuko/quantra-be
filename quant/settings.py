@@ -27,12 +27,12 @@ SYMKEY = b'REDACTED'
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
-ENVIRONMENT = os.environ.get('ENVIRONMENT', 'local')
+ENVIRONMENT = os.environ.get('ENVIRONMENT', 'dev')
 TESTING = sys.argv[1:2] == ['test']
 
 
 ALLOWED_HOSTS = ['*']
-CSRF_TRUSTED_ORIGINS = ['https://example.org', 'https://example.com', 'https://dev.example.com']
+CSRF_TRUSTED_ORIGINS = ['https://example.org', 'https://example.com', 'https://dev.example.com', 'https://api.example.com', 'https://api-dev.example.com']
 WHITELISTED_DEFAULT_EMAILS = ['user@example.com', 'user2@example.com']
 
 # Application definition

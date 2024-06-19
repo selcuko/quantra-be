@@ -60,6 +60,9 @@ class SessionViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_class = SessionFilter
 
+    def get_queryset(self):
+        return Session.objects.select_related('symbol', 'account').all()
+
     @action(detail=True, methods=['get'])
     def orders(self, request, pk=None):
         session = self.get_object()
