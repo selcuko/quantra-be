@@ -1,5 +1,6 @@
 import json
 from rest_framework import serializers
+from rest_framework.response import Response
 from quantapi.models import Endpoint, GlobalSymbol, GroupOrder, Market, MarketAccount, MarketSymbol, Notification, Order, Session, SessionGroup, Signal, Strategy, Subscription
 
 
@@ -52,9 +53,12 @@ class StrategySerializer(serializers.HyperlinkedModelSerializer):
 class SessionSerializer(serializers.HyperlinkedModelSerializer):
     symbol = serializers.CharField(source='symbol.name')
     market = serializers.CharField(source='account.market.exchange_name')
-    account = MarketAccountSerializer()
+    account = MarketAccountSerializer(required=False)
     orders = serializers.HyperlinkedIdentityField(view_name='session-orders')
     signals = serializers.HyperlinkedIdentityField(view_name='session-signals')
+    capital = serializers.FloatField(required=False)
+    assets = serializers.FloatField(required=False)
+    status = serializers.CharField(required=False)
 
     class Meta:
         model = Session
@@ -64,11 +68,26 @@ class SessionSerializer(serializers.HyperlinkedModelSerializer):
                   'initial_assets', 'buy_enabled', 'sell_enabled', 'account', 
                   'equity', 'orders', 'signals']
 
+    def validate(self, data):
+        print('DATA:', data)
+        return data
+
+    def create(self, validated_data):
+        print('VALIDATED DATA:', validated_data)
+        return Response(validated_data)
+
 
 class SessionGroupSerializer(serializers.HyperlinkedModelSerializer):
+    # set to null if not found
+    symbol = serializers.CharField(source='symbol.name')
+    market = serializers.CharField(source='interface.market.exchange_name', allow_null=True)
+    last_timestamp = serializers.DateTimeField(source='last_kline_dt')
+    strategy = StrategySerializer() 
     class Meta:
         model = SessionGroup
-        fields = '__all__'
+        fields = ['id', 'symbol', 'market', 'interface', 'freq', 'created_at', 'updated_at', 
+                  'started_at', 'stopped_at', 'strategy', 'status', 'last_price', 'last_timestamp',
+                  'buy_enabled', 'sell_enabled', 'capital', 'assets', 'equity', 'source']
 
 
 class OrderSerializer(serializers.ModelSerializer):
@@ -111,3 +130,18 @@ class IssueSerializer(serializers.ModelSerializer):
     class Meta:
         model = Notification
         fields = '__all__'
+
+
+class ThreadSerializer(serializers.Serializer):
+    ident = serializers.CharField()
+    alive = serializers.BooleanField()
+    name = serializers.CharField()
+
+
+class LiveLoopSerializer(serializers.Serializer):
+    symbol = serializers.CharField()
+    market = serializers.CharField()
+    account = MarketAccountSerializer()
+    group = serializers.HyperlinkedRelatedField(view_name='sessiongroup-detail', read_only=True)
+    session = serializers.HyperlinkedRelatedField(view_name='session-detail', read_only=True)
+    thread = ThreadSerializer()

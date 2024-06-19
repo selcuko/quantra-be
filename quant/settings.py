@@ -27,7 +27,7 @@ SYMKEY = b'REDACTED'
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
-ENVIRONMENT = os.environ.get('ENVIRONMENT', 'dev')
+ENVIRONMENT = os.environ.get('ENVIRONMENT', 'local')
 TESTING = sys.argv[1:2] == ['test']
 
 
@@ -70,8 +70,6 @@ MIDDLEWARE = [
     'quantapi.middleware.WhitelistedUserMiddleware',
     'silk.middleware.SilkyMiddleware'
 ]
-if ENVIRONMENT == 'dev':
-    MIDDLEWARE.remove('login_required.middleware.LoginRequiredMiddleware')
 
 LOGIN_REQUIRED_IGNORE_PATHS = [
     r'/accounts/*',

@@ -1,5 +1,5 @@
 import django_filters as filters
-from .models import MarketAccount, Session
+from .models import MarketAccount, Session, SessionGroup
 
 
 class MarketAccountFilter(filters.FilterSet):
@@ -18,3 +18,12 @@ class SessionFilter(filters.FilterSet):
     class Meta:
         model = Session
         fields = ['status', 'source']
+
+
+class SessionGroupFilter(filters.FilterSet):
+    status = filters.MultipleChoiceFilter(choices=SessionGroup.Status.choices)
+    source = filters.MultipleChoiceFilter(choices=Session.CandleSource.choices, field_name='candle_source')
+
+    class Meta:
+        model = SessionGroup
+        fields = ['status']

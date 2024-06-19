@@ -6,7 +6,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from quantapi.models import Endpoint, GlobalSymbol, GroupOrder, Issue, Market, MarketAccount, MarketSymbol, Notification, Order, Session, SessionGroup, Signal, Strategy, Subscription
 from quantapi.serializers import (EndpointSerializer, GlobalSymbolSerializer, GroupOrderSerializer, IssueSerializer, MarketAccountSerializer, MarketSerializer, MarketSymbolSerializer, NotificationSerializer, OrderSerializer,
                                   SessionGroupSerializer, SessionSerializer, SignalSerializer, StrategySerializer, SubscriptionSerializer)
-from quantapi.filters import SessionFilter, MarketAccountFilter
+from quantapi.filters import SessionFilter, MarketAccountFilter, SessionGroupFilter
 
 
 class MarketViewSet(viewsets.ModelViewSet):
@@ -81,6 +81,11 @@ class SessionViewSet(viewsets.ModelViewSet):
 class SessionGroupViewSet(viewsets.ModelViewSet):
     queryset = SessionGroup.objects.all()
     serializer_class = SessionGroupSerializer
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = SessionGroupFilter
+
+    def get_queryset(self):
+        return SessionGroup.objects.select_related('symbol', 'interface').all()
 
 
 class OrderViewSet(viewsets.ModelViewSet):
