@@ -1,8 +1,8 @@
 from django.urls import include, path
 from rest_framework import routers
 
-from quantapi.viewsets import (GlobalSymbolViewSet, GroupOrderViewSet, IssueViewSet, MarketAccountViewSet, MarketSymbolViewSet,
-                               MarketViewSet, NotificationViewSet, OrderViewSet, SessionGroupViewSet, SessionViewSet, SignalViewSet, StrategyViewSet)
+from quantapi.viewsets import (GlobalSymbolViewSet, GroupOrderViewSet, HealthViewSet, IssueViewSet, LiveLoopViewSet, LoopGroupViewSet, MarketAccountViewSet, MarketSymbolViewSet,
+                               MarketViewSet, NotificationViewSet, OrderViewSet, SessionGroupViewSet, SessionViewSet, SignalViewSet, StrategyViewSet, ThreadViewSet)
 
 
 router = routers.DefaultRouter()
@@ -18,7 +18,10 @@ router.register(r'grouporders', GroupOrderViewSet)
 router.register(r'signals', SignalViewSet)
 router.register(r'notifications', NotificationViewSet)
 router.register(r'issues', IssueViewSet)
-
+router.register(r'liveloops', LiveLoopViewSet, basename='liveloops')
+router.register(r'loopgroups', LoopGroupViewSet, basename='loopgroups')
+router.register(r'threads', ThreadViewSet, basename='threads')
+router.register(r'health', HealthViewSet, basename='health')
 
 urlpatterns = [
     path('', include(router.urls))

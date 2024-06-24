@@ -1,12 +1,17 @@
 import json
+import threading
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
+from cache import LIVELOOPS, LOOPGROUPS
 from liveloop import LiveLoop
-from quantapi.models import Endpoint, GlobalSymbol, GroupOrder, Issue, Market, MarketAccount, MarketSymbol, Notification, Order, Session, SessionGroup, Signal, Strategy, Subscription
-from quantapi.serializers import (EndpointSerializer, GlobalSymbolSerializer, GroupOrderSerializer, IssueSerializer, MarketAccountSerializer, MarketSerializer, MarketSymbolSerializer, NotificationSerializer, OrderSerializer,
-                                  SessionGroupSerializer, SessionSerializer, SignalSerializer, StrategySerializer, SubscriptionSerializer)
+from quantapi.models import (Endpoint, GlobalSymbol, GroupOrder, Issue, Market, MarketAccount, MarketSymbol, 
+                             Notification, Order, Session, SessionGroup, Signal, Strategy, Subscription)
+from quantapi.serializers import (EndpointSerializer, GlobalSymbolSerializer, GroupOrderSerializer, IssueSerializer, 
+                                  LiveLoopSerializer, LoopGroupSerializer, MarketAccountSerializer, MarketSerializer, 
+                                  MarketSymbolSerializer, NotificationSerializer, OrderSerializer, SessionGroupSerializer, 
+                                  SessionSerializer, SignalSerializer, StrategySerializer, SubscriptionSerializer, ThreadSerializer)
 from quantapi.filters import MarketSymbolFilter, SessionFilter, MarketAccountFilter, SessionGroupFilter
 
 
@@ -88,8 +93,47 @@ class SessionViewSet(viewsets.ModelViewSet):
             return Response({'detail': 'Session must be in PLANNED state to start.'}, status=400)
         ll = LiveLoop.from_session(session)
         ll.run()
+        session.status = Session.Status.ONGOING
+        session.save()
         return Response({'detail': 'Session will start in a few seconds.'})
 
+    @action(detail=True, methods=['post'])
+    def pause(self, request, pk=None):
+        session = self.get_object()
+        if session.status != Session.Status.ONGOING:
+            return Response({'detail': 'Session must be in ONGOING state to pause.'}, status=400)
+        ll = LIVELOOPS.get(session.id)
+        if not ll:
+            return Response({'detail': 'Session not found in the cache.'}, status=503)
+        ll.stop()
+        session.status = Session.Status.PAUSED
+        session.save()
+        return Response({'detail': 'Session will pause in a few seconds.'})
+
+    @action(detail=True, methods=['post'])
+    def resume(self, request, pk=None):
+        force = request.data.get('force', False)
+        session = self.get_object()
+        if not force and session.status != Session.Status.PAUSED:
+            return Response({'detail': 'Session must be in PAUSED state to resume.'}, status=400)
+        ll = LiveLoop.from_session(session)
+        ll.run()
+        session.status = Session.Status.ONGOING
+        session.save()
+        return Response({'detail': 'Session will resume in a few seconds.'})
+
+    @action(detail=True, methods=['post'])
+    def terminate(self, request, pk=None):
+        session = self.get_object()
+        if session.status not in [Session.Status.ONGOING, Session.Status.PAUSED]:
+            return Response({'detail': 'Session must be in ONGOING or PAUSED state to terminate.'}, status=400)
+        ll = LIVELOOPS.get(session.id)
+        if not ll:
+            return Response({'detail': 'Session not found in the cache.'}, status=503)
+        ll.stop()
+        session.status = Session.Status.TERMINATED
+        session.save()
+        return Response({'detail': 'Session will terminate in a few seconds.'})
 
 class SessionGroupViewSet(viewsets.ModelViewSet):
     queryset = SessionGroup.objects.all()
@@ -99,6 +143,13 @@ class SessionGroupViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return SessionGroup.objects.select_related('symbol', 'interface').all()
+
+    @action(detail=True, methods=['get'])
+    def sessions(self, request, pk=None):
+        group = self.get_object()
+        sessions = group.sessions.all()
+        serializer = SessionSerializer(sessions, many=True, context={'request': request})
+        return Response(serializer.data)
 
 
 class OrderViewSet(viewsets.ModelViewSet):
@@ -141,3 +192,33 @@ class IssueViewSet(viewsets.ModelViewSet):
     queryset = Issue.objects.all()
     serializer_class = IssueSerializer
     filter_backends = [DjangoFilterBackend]
+
+
+class LiveLoopViewSet(viewsets.ViewSet):
+    def list(self, request):
+        return Response(LiveLoopSerializer(LIVELOOPS.values(), many=True).data)
+
+
+class LoopGroupViewSet(viewsets.ViewSet):
+    def list(self, request):
+        return Response(LoopGroupSerializer(LOOPGROUPS.values(), many=True).data)
+
+
+class HealthViewSet(viewsets.ViewSet):
+    def list(self, request):
+        return Response({'status': 'ok'})
+
+
+class ThreadViewSet(viewsets.ViewSet):
+    def list(self, request):
+        threads = threading.enumerate()
+        serializer = ThreadSerializer(threads, many=True)
+        return Response(serializer.data)
+
+    def retrieve(self, request, pk):
+        try:
+            thread = next(t for t in threading.enumerate() if t.ident == int(pk))
+        except StopIteration:
+            return Response({'detail': 'Thread not found, ensure it\'s an alive thread.'}, status=404)
+        serializer = ThreadSerializer(thread)
+        return Response(serializer.data)

@@ -73,10 +73,10 @@ class LiveLoop:
         return f'{self.symbol.base}@{self.market.exchange_name}:{self.freq}'
 
     @classmethod
-    def from_session(cls, session:Session):
+    def from_session(cls, session:Session) -> 'LiveLoop':
         """Creates a LiveLoop object from a session object."""
         strategy = get_strategy(session.strategy.name or 'v1')()
-        return cls(
+        ll = cls(
             symbol=session.symbol.name,
             account=session.account,
             strategy=strategy,
@@ -88,6 +88,7 @@ class LiveLoop:
             session_type=session.session_type,
             session=session,
         )
+        return ll
 
     def precheck(self):
         """Prechecks before starting the live loop"""
@@ -140,14 +141,15 @@ class LiveLoop:
             return
         self.will_stop = False
         self.running = True
-        if kwargs.get('match_engine'):
-            self.thread = threading.Thread(target=self.__run_match_engine, name=f'LLME:{self.symbol.base}:{self.freq.replace(" ", "")}@{self.market.exchange_name}')
+        session_source = self.session.candle_source
+        if session_source == Session.CandleSource.TRADE or kwargs.get('match_engine'):
+            self.thread = threading.Thread(target=self.__run_match_engine, name=f'LiveLoop-{session_source}:{self.symbol.base}:{self.freq.replace(" ", "")}@{self.market.exchange_name}')
             self.session.candle_source = Session.CandleSource.TRADE
-        elif kwargs.get('websocket'):
-            self.thread = threading.Thread(target=self.__run_websocket, name=f'LLWS:{self.symbol.base}:{self.freq.replace(" ", "")}@{self.market.exchange_name}')
+        elif session_source == Session.CandleSource.WEBSOCKET or kwargs.get('websocket'):
+            self.thread = threading.Thread(target=self.__run_websocket, name=f'LiveLoop-{session_source}:{self.symbol.base}:{self.freq.replace(" ", "")}@{self.market.exchange_name}')
             self.session.candle_source = Session.CandleSource.WEBSOCKET
         else:
-            self.thread = threading.Thread(target=self.__run_polling, name=f'LLAPI:{self.symbol.base}:{self.freq.replace(" ", "")}@{self.market.exchange_name}')
+            self.thread = threading.Thread(target=self.__run_polling, name=f'LiveLoop-{session_source}:{self.symbol.base}:{self.freq.replace(" ", "")}@{self.market.exchange_name}')
             self.session.candle_source = Session.CandleSource.REST
         self.thread.start()
         logger.info(f'LiveLoop started in thread {self.thread.name}, id={self.thread.ident}.', extra={'loop': repr(self)})
@@ -214,8 +216,6 @@ class LiveLoop:
                 continue
         self.running = False
         self.session.ended = datetime.now(tz=pytz.UTC)
-        if self.session.status == Session.Status.ONGOING:
-            self.session.status = Session.Status.COMPLETED
         self.session.save()
         self.imarket.cache_to_db()
 
@@ -228,7 +228,6 @@ class LiveLoop:
             self.session.details = repr(e)
         self.running = False
         self.session.ended = datetime.now(tz=pytz.UTC)
-        self.session.status = Session.Status.COMPLETED if self.session.status == Session.Status.ONGOING else self.session.status
         self.session.save()
 
     def __run_match_engine(self):
@@ -240,7 +239,6 @@ class LiveLoop:
             self.session.details = repr(e)
         self.running = False
         self.session.ended = datetime.now(tz=pytz.UTC)
-        self.session.status = Session.Status.COMPLETED if self.session.status == Session.Status.ONGOING else self.session.status
         self.session.save()
 
     def on_candle(self, candle):
@@ -410,19 +408,10 @@ class LiveLoop:
 
 if __name__ == '__main__':
     """Example usage of LiveLoop class."""
-    market = MarketAccount.objects.get(market__exchange_name='MEXC')
-    if not market:
-        raise Exception('No market account found.')
-    ll = LiveLoop(
-        'BNB-USDT', 
-        market,
-        get_strategy('bb')(
-            # place optional strategy parameters here
-        ),
-        capital_limit=10,
-        asset_limit=0,
-        freq='1 min')
+    session = Session.objects.get(pk=2)
+    ll = LiveLoop.from_session(session)
     ll.run()
+    print('src:', ll.session.candle_source)
     started = datetime.now()
     while datetime.now() - started < timedelta(minutes=10):
         time.sleep(1)

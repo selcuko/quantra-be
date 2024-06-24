@@ -68,7 +68,7 @@ class GlobalSymbolSerializer(serializers.HyperlinkedModelSerializer):
         fields = ['id', 'cid', 'name', 'display', 'base', 'quote', 'tags', 'symbols', 'data_source', 
                   'is_stablecoin', 'ath', 'atl', 'ath_date', 'atl_date', 'volume', 'market_cap', 
                   'circulating_supply', 'max_supply', 'total_supply', 'last_updated', 'price', 
-                  'supply_ratio', 'ath_prox', 'atl_prox', 'volume24h_to_mcap']
+                  'supply_ratio', 'ath_prox', 'atl_prox', 'volume24h_to_mcap', 'image']
     tags = serializers.StringRelatedField(many=True)
     symbols = serializers.HyperlinkedRelatedField(many=True, read_only=True, view_name='marketsymbol-detail')
 
@@ -79,7 +79,7 @@ class StrategySerializer(serializers.HyperlinkedModelSerializer):
         fields = ['id', 'name', 'technical_name', 'code', 'version', 'description']
 
 
-class SessionSerializer(serializers.ModelSerializer):
+class SessionSerializer(serializers.HyperlinkedModelSerializer):
     symbol = MarketSymbolSerializer()
     symbol_id = serializers.PrimaryKeyRelatedField(queryset=MarketSymbol.objects.all(), source='symbol', write_only=True)
     market = serializers.CharField(source='account.market.exchange_name', required=False)
@@ -90,6 +90,7 @@ class SessionSerializer(serializers.ModelSerializer):
     capital = serializers.FloatField(required=False)
     assets = serializers.FloatField(required=False)
     status = serializers.CharField(required=False)
+    thread = serializers.SerializerMethodField()
 
     class Meta:
         model = Session
@@ -97,27 +98,28 @@ class SessionSerializer(serializers.ModelSerializer):
                   'strategy', 'status', 'last_price', 'last_kline_timestamp', 
                   'last_heartbeat', 'capital', 'assets', 'initial_capital', 
                   'initial_assets', 'buy_enabled', 'sell_enabled', 'account', 
-                  'equity', 'orders', 'signals', 'account_id', 'symbol_id']
+                  'equity', 'orders', 'signals', 'account_id', 'symbol_id', 'thread', 'health']
 
-    def validate(self, attrs):
-        print('RAW DATA', attrs)
-        return super().validate(attrs)
-
-    def create(self, validated_data):
-        print(validated_data)
-        return Session.objects.create(**validated_data)
+    def get_thread(self, obj):
+        if not obj.thread:
+            return {}
+        return {
+            'ident': obj.thread.ident,
+            'is_alive': obj.thread.is_alive(),
+            'name': obj.thread.name
+        }
 
 class SessionGroupSerializer(serializers.HyperlinkedModelSerializer):
-    # set to null if not found
-    symbol = serializers.CharField(source='symbol.name')
+    symbol = MarketSymbolSerializer()
     market = serializers.CharField(source='interface.market.exchange_name', allow_null=True)
     last_timestamp = serializers.DateTimeField(source='last_kline_dt')
-    strategy = StrategySerializer() 
+    strategy = StrategySerializer()
+    sessions = serializers.HyperlinkedIdentityField(view_name='sessiongroup-sessions')
     class Meta:
         model = SessionGroup
-        fields = ['id', 'symbol', 'market', 'interface', 'freq', 'created_at', 'updated_at', 
+        fields = ['id', 'symbol', 'market', 'interface', 'freq', 'created_at', 'updated_at',
                   'started_at', 'stopped_at', 'strategy', 'status', 'last_price', 'last_timestamp',
-                  'buy_enabled', 'sell_enabled', 'capital', 'assets', 'equity', 'source']
+                  'buy_enabled', 'sell_enabled', 'capital', 'assets', 'equity', 'source', 'sessions']
 
 
 class OrderSerializer(serializers.ModelSerializer):
@@ -164,11 +166,28 @@ class IssueSerializer(serializers.ModelSerializer):
 
 class ThreadSerializer(serializers.Serializer):
     ident = serializers.CharField()
-    alive = serializers.BooleanField()
+    is_alive = serializers.BooleanField()
     name = serializers.CharField()
+    source = serializers.SerializerMethodField()
+
+    def get_source(self, obj):
+        if obj.name.startswith('LiveLoop-'):
+            return 'LiveLoop'
+        if obj.name.startswith('LoopGroup-'):
+            return 'LoopGroup'
+        return None
 
 
 class LiveLoopSerializer(serializers.Serializer):
+    symbol = serializers.CharField()
+    market = serializers.CharField()
+    account = MarketAccountSerializer()
+    #group = serializers.IntegerField()
+    session = serializers.IntegerField(source='session.pk')
+    thread = ThreadSerializer()
+
+
+class LoopGroupSerializer(serializers.Serializer):
     symbol = serializers.CharField()
     market = serializers.CharField()
     account = MarketAccountSerializer()

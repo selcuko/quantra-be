@@ -304,6 +304,9 @@ class Session(models.Model):
         HOUR8 = '8 hour', '8 hours'
         HOUR12 = '12 hour', '12 hours'
         DAY1  = '1 day',  '1 day'
+        WEEK1 = '1 week', '1 week'
+        MONTH1 = '1 month', '1 month'
+
 
     session_type = models.CharField(max_length=30, choices=Type.choices, default=Type.LIVE_MAINNET)
     freq = models.CharField(max_length=30, default=Freq.MIN15, choices=Freq.choices)
@@ -371,31 +374,9 @@ class Session(models.Model):
         if not self.strategy:
             raise ValueError('Session must have a strategy to resume')
         from liveloop import LiveLoop
-        strategy = get_strategy(self.strategy.name)
-        ll = LiveLoop(
-            symbol=self.symbol.name,
-            account=self.account,
-            strategy=strategy(params=json.loads(self.strategy_parameters or '{}')),
-            capital_limit=self.capital,
-            asset_limit=self.assets,
-            freq=self.freq,
-            end=self.planned_shutdown,
-            session=self)
-        if self.candle_source == Session.CandleSource.WEBSOCKET:
-            ll.run(websocket=True)
-        elif self.candle_source == Session.CandleSource.REST:
-            ll.run(polling=True)
-        elif self.candle_source == Session.CandleSource.TRADE:
-            ll.run(match_engine=True)
-        else:
-            raise ValueError(f'Invalid candle source: {self.candle_source}')
+        ll = LiveLoop.from_session(self)
+        ll.run()
         return ll
-
-    def recent_order_error(self):
-        # return True if if there is an order with status ERROR in the last 5 orders
-        orders = Order.objects.filter(signal__session=self).order_by('-created_at')[:5]
-        orders = orders.filter(status=Order.Status.ERROR)
-        return orders.exists()
 
     def update(self, interface, save=True):
         # Update session capital and assets to ensure they are not higher than the interface's
@@ -418,6 +399,16 @@ class Session(models.Model):
             if self.assets > account_assets.get(self.symbol.base, 0):
                 raise ValueError(f'Session assets ({self.assets}) cannot be higher than account assets ({account_assets.get(self.symbol.base)}).')
         super().save(**kwargs)
+
+    def health(self):
+        if not self.last_heartbeat:
+            return 'No heartbeat'
+        if self.last_heartbeat < datetime.now(pytz.utc) - timedelta(minutes=5):
+            return 'No heartbeat for 5 minutes'
+        thread = self.thread
+        if not thread or not thread.is_alive():
+            return 'Thread not alive'
+        return 'Healthy'
 
 
 class SessionGroup(models.Model):
