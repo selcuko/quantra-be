@@ -18,28 +18,57 @@ class MarketAccountSerializer(serializers.HyperlinkedModelSerializer):
     owner = serializers.CharField(source='credentials.owner')
     active = serializers.BooleanField(source='credentials.active')
     internal = serializers.BooleanField(source='credentials.internal')
+    prices_updated = serializers.DateTimeField(source='market.prices_updated', allow_null=True)
 
     class Meta:
         model = MarketAccount
         fields = ['id', 'market', 'equity', 'capital', 'assets', 'last_cache', 
-                  'owner', 'active', 'internal']
+                  'owner', 'active', 'internal', 'prices_updated']
 
     def get_assets(self, obj):
+        # XXX: this serializer method is hacky. come back here to optimize.
         assets = json.loads(obj.assets or '{}')
-        return {k: v for k, v in assets.items() if v > 0}
+        prices = json.loads(obj.market.prices or '{}')
+        payload = {}
+        for k, v in assets.items():
+            price = prices.get(f'{k}-USDT', 0)
+            if k == 'USDT' or v <= 0:
+                continue
+            try:
+                ms = MarketSymbol.objects.get(market=obj.market, base=k, symbol__isnull=False)
+            except MarketSymbol.DoesNotExist:
+                ms = None
+            payload[k] = {
+                'amount': v,
+                'price': price,
+                'value': (v * price) or None,
+                'icon': ms.symbol.image if ms and ms.symbol else None
+            }
+        return payload
 
 
 class MarketSymbolSerializer(serializers.HyperlinkedModelSerializer):
     market = serializers.CharField(source='market.exchange_name')
+    icon = serializers.URLField(source='symbol.image', allow_null=True)
+    price = serializers.SerializerMethodField()
+    price_updated = serializers.DateTimeField(source='market.prices_updated', allow_null=True)
     class Meta:
         model = MarketSymbol
-        fields = ['symbol', 'market', 'name', 'base', 'quote', 'base_precision', 'quote_precision', 'spot_trading_enabled']
+        fields = ['symbol', 'market', 'name', 'base', 'quote', 'base_precision', 'quote_precision', 
+                  'spot_trading_enabled', 'icon', 'price', 'price_updated', 'id']
+
+    def get_price(self, obj):
+        prices = json.loads(obj.market.prices or '{}')
+        return prices.get(obj.name)
 
 
 class GlobalSymbolSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = GlobalSymbol
-        fields = ['id', 'cid', 'name', 'display', 'base', 'quote', 'tags', 'symbols', 'data_source', 'is_stablecoin', 'ath', 'atl', 'ath_date', 'atl_date', 'volume', 'market_cap', 'circulating_supply', 'max_supply', 'total_supply', 'last_updated', 'price', 'supply_ratio', 'ath_prox', 'atl_prox', 'volume24h_to_mcap']
+        fields = ['id', 'cid', 'name', 'display', 'base', 'quote', 'tags', 'symbols', 'data_source', 
+                  'is_stablecoin', 'ath', 'atl', 'ath_date', 'atl_date', 'volume', 'market_cap', 
+                  'circulating_supply', 'max_supply', 'total_supply', 'last_updated', 'price', 
+                  'supply_ratio', 'ath_prox', 'atl_prox', 'volume24h_to_mcap']
     tags = serializers.StringRelatedField(many=True)
     symbols = serializers.HyperlinkedRelatedField(many=True, read_only=True, view_name='marketsymbol-detail')
 
@@ -47,13 +76,15 @@ class GlobalSymbolSerializer(serializers.HyperlinkedModelSerializer):
 class StrategySerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = Strategy
-        fields = '__all__'
+        fields = ['id', 'name', 'technical_name', 'code', 'version', 'description']
 
 
-class SessionSerializer(serializers.HyperlinkedModelSerializer):
-    symbol = serializers.CharField(source='symbol.name')
-    market = serializers.CharField(source='account.market.exchange_name')
+class SessionSerializer(serializers.ModelSerializer):
+    symbol = MarketSymbolSerializer()
+    symbol_id = serializers.PrimaryKeyRelatedField(queryset=MarketSymbol.objects.all(), source='symbol', write_only=True)
+    market = serializers.CharField(source='account.market.exchange_name', required=False)
     account = MarketAccountSerializer(required=False)
+    account_id = serializers.PrimaryKeyRelatedField(queryset=MarketAccount.objects.all(), source='account', write_only=True)
     orders = serializers.HyperlinkedIdentityField(view_name='session-orders')
     signals = serializers.HyperlinkedIdentityField(view_name='session-signals')
     capital = serializers.FloatField(required=False)
@@ -66,16 +97,15 @@ class SessionSerializer(serializers.HyperlinkedModelSerializer):
                   'strategy', 'status', 'last_price', 'last_kline_timestamp', 
                   'last_heartbeat', 'capital', 'assets', 'initial_capital', 
                   'initial_assets', 'buy_enabled', 'sell_enabled', 'account', 
-                  'equity', 'orders', 'signals']
+                  'equity', 'orders', 'signals', 'account_id', 'symbol_id']
 
-    def validate(self, data):
-        print('DATA:', data)
-        return data
+    def validate(self, attrs):
+        print('RAW DATA', attrs)
+        return super().validate(attrs)
 
     def create(self, validated_data):
-        print('VALIDATED DATA:', validated_data)
-        return Response(validated_data)
-
+        print(validated_data)
+        return Session.objects.create(**validated_data)
 
 class SessionGroupSerializer(serializers.HyperlinkedModelSerializer):
     # set to null if not found

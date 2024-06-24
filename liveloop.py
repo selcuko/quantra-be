@@ -72,6 +72,23 @@ class LiveLoop:
     def __repr__(self):
         return f'{self.symbol.base}@{self.market.exchange_name}:{self.freq}'
 
+    @classmethod
+    def from_session(cls, session:Session):
+        """Creates a LiveLoop object from a session object."""
+        strategy = get_strategy(session.strategy.name or 'v1')()
+        return cls(
+            symbol=session.symbol.name,
+            account=session.account,
+            strategy=strategy,
+            capital_limit=session.capital,
+            asset_limit=session.assets,
+            freq=session.freq,
+            end=session.planned_shutdown,
+            group=session.group,
+            session_type=session.session_type,
+            session=session,
+        )
+
     def precheck(self):
         """Prechecks before starting the live loop"""
         self.imarket.get_account()
@@ -140,7 +157,6 @@ class LiveLoop:
         self.session.last_kline_timestamp = self.last_kline_dt
         self.session.save()
 
-
     def stop(self):
         """Stops the live loop"""
         self.will_stop = True
@@ -203,7 +219,6 @@ class LiveLoop:
         self.session.save()
         self.imarket.cache_to_db()
 
-
     def __run_websocket(self):
         try:
             self.imarket.init_websocket(self.symbol.name, self.freq, self.on_candle, self)
@@ -216,7 +231,6 @@ class LiveLoop:
         self.session.status = Session.Status.COMPLETED if self.session.status == Session.Status.ONGOING else self.session.status
         self.session.save()
 
-
     def __run_match_engine(self):
         try:
             self.imarket.init_match_engine(self.symbol.name, self.freq, self.on_candle, self)
@@ -228,7 +242,6 @@ class LiveLoop:
         self.session.ended = datetime.now(tz=pytz.UTC)
         self.session.status = Session.Status.COMPLETED if self.session.status == Session.Status.ONGOING else self.session.status
         self.session.save()
-
 
     def on_candle(self, candle):
         if self.session.status != Session.Status.ONGOING:
@@ -279,16 +292,13 @@ class LiveLoop:
         self.run_complex_orders()
         return True
 
-
     def can_buy(self):
         """Returns whether the session can buy or not based on available capital and buy permission."""
         return self.session.capital >= 5 and self.session.buy_enabled
 
-
     def can_sell(self):
         """Returns whether the session can sell or not based on available assets and sell permission."""
         return self.session.assets * (self.session.last_price or 0) >= 5 and self.session.sell_enabled
-
 
     def buy(self, last_kline:dict):
         """Buys the asset if possible. Returns the order object if successful, None otherwise. Meant to be called from on_candle method."""
@@ -318,7 +328,6 @@ class LiveLoop:
         order.save()
         return order
 
-
     def sell(self, last_kline:dict):
         """Sells the asset if possible. Returns the order object if successful, None otherwise. Meant to be called from on_candle method."""
         signal = Signal.objects.create(
@@ -347,7 +356,6 @@ class LiveLoop:
         order.save()
         return order
 
-
     def run_complex_orders(self):
         if self.session.status != Session.Status.ONGOING:
             return
@@ -356,7 +364,6 @@ class LiveLoop:
             if co.is_ready(self):
                 co.execute(self)
                 co.save()
-
 
     def should_stop(self):
         """Returns whether the loop should stop or not"""
@@ -367,7 +374,6 @@ class LiveLoop:
         if self.session.planned_shutdown:
             before_end = datetime.now(tz=pytz.UTC) < self.session.planned_shutdown
         return self.will_stop or not before_end or self.session.status != Session.Status.ONGOING
-
 
     def wait_next_candle(self):
         """Waits until the next candle should be available"""
@@ -386,7 +392,6 @@ class LiveLoop:
             print('neg res', residue)
             time.sleep(1)
         return True
-
 
     def idle(self):
         """Idle indefinitely (for development purposes)"""

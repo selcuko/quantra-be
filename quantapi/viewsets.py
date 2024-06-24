@@ -3,10 +3,11 @@ from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
+from liveloop import LiveLoop
 from quantapi.models import Endpoint, GlobalSymbol, GroupOrder, Issue, Market, MarketAccount, MarketSymbol, Notification, Order, Session, SessionGroup, Signal, Strategy, Subscription
 from quantapi.serializers import (EndpointSerializer, GlobalSymbolSerializer, GroupOrderSerializer, IssueSerializer, MarketAccountSerializer, MarketSerializer, MarketSymbolSerializer, NotificationSerializer, OrderSerializer,
                                   SessionGroupSerializer, SessionSerializer, SignalSerializer, StrategySerializer, SubscriptionSerializer)
-from quantapi.filters import SessionFilter, MarketAccountFilter, SessionGroupFilter
+from quantapi.filters import MarketSymbolFilter, SessionFilter, MarketAccountFilter, SessionGroupFilter
 
 
 class MarketViewSet(viewsets.ModelViewSet):
@@ -30,12 +31,15 @@ class MarketAccountViewSet(viewsets.ModelViewSet):
 class MarketSymbolViewSet(viewsets.ModelViewSet):
     queryset = MarketSymbol.objects.all()
     serializer_class = MarketSymbolSerializer
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = MarketSymbolFilter
 
     def get_queryset(self):
         return MarketSymbol.objects.select_related('market', 'symbol').all()
 
     @action(detail=False, methods=['get'], url_path='(?P<market>[^/.]+)', url_name='market')
     def market(self, request, market):
+        """Return all symbols for a given market."""
         symbols = MarketSymbol.objects.filter(market__exchange_name=market.upper())
         serializer = MarketSymbolSerializer(symbols, many=True, context={'request': request})
         return Response(serializer.data)
@@ -76,6 +80,15 @@ class SessionViewSet(viewsets.ModelViewSet):
         signals = session.signals.all()
         serializer = SignalSerializer(signals, many=True)
         return Response(serializer.data)
+
+    @action(detail=True, methods=['post'])
+    def start(self, request, pk=None):
+        session = self.get_object()
+        if session.status != Session.Status.PLANNED:
+            return Response({'detail': 'Session must be in PLANNED state to start.'}, status=400)
+        ll = LiveLoop.from_session(session)
+        ll.run()
+        return Response({'detail': 'Session will start in a few seconds.'})
 
 
 class SessionGroupViewSet(viewsets.ModelViewSet):
