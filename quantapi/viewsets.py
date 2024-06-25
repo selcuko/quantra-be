@@ -1,5 +1,7 @@
 import json
 import threading
+from xml.dom import ValidationErr
+from jsonschema import ValidationError
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -13,6 +15,7 @@ from quantapi.serializers import (EndpointSerializer, GlobalSymbolSerializer, Gr
                                   MarketSymbolSerializer, NotificationSerializer, OrderSerializer, SessionGroupSerializer, 
                                   SessionSerializer, SignalSerializer, StrategySerializer, SubscriptionSerializer, ThreadSerializer)
 from quantapi.filters import MarketSymbolFilter, SessionFilter, MarketAccountFilter, SessionGroupFilter
+from quantapi.validations import validate_session_can_start
 
 
 class MarketViewSet(viewsets.ModelViewSet):
@@ -89,8 +92,7 @@ class SessionViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def start(self, request, pk=None):
         session = self.get_object()
-        if session.status != Session.Status.PLANNED:
-            return Response({'detail': 'Session must be in PLANNED state to start.'}, status=400)
+        validate_session_can_start(session)
         ll = LiveLoop.from_session(session)
         ll.run()
         session.status = Session.Status.ONGOING
@@ -112,10 +114,8 @@ class SessionViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def resume(self, request, pk=None):
-        force = request.data.get('force', False)
         session = self.get_object()
-        if not force and session.status != Session.Status.PAUSED:
-            return Response({'detail': 'Session must be in PAUSED state to resume.'}, status=400)
+        validate_session_can_start(session)
         ll = LiveLoop.from_session(session)
         ll.run()
         session.status = Session.Status.ONGOING

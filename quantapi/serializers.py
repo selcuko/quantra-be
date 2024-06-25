@@ -2,6 +2,7 @@ import json
 from rest_framework import serializers
 from rest_framework.response import Response
 from quantapi.models import Endpoint, GlobalSymbol, GroupOrder, Market, MarketAccount, MarketSymbol, Notification, Order, Session, SessionGroup, Signal, Strategy, Subscription
+from quantapi.validations import validate_symbol_against_market
 
 
 class MarketSerializer(serializers.HyperlinkedModelSerializer):
@@ -80,7 +81,7 @@ class StrategySerializer(serializers.HyperlinkedModelSerializer):
 
 
 class SessionSerializer(serializers.HyperlinkedModelSerializer):
-    symbol = MarketSymbolSerializer()
+    symbol = MarketSymbolSerializer(required=False)
     symbol_id = serializers.PrimaryKeyRelatedField(queryset=MarketSymbol.objects.all(), source='symbol', write_only=True)
     market = serializers.CharField(source='account.market.exchange_name', required=False)
     account = MarketAccountSerializer(required=False)
@@ -91,11 +92,13 @@ class SessionSerializer(serializers.HyperlinkedModelSerializer):
     assets = serializers.FloatField(required=False)
     status = serializers.CharField(required=False)
     thread = serializers.SerializerMethodField()
+    strategy = StrategySerializer(required=False)
+    strategy_id = serializers.PrimaryKeyRelatedField(queryset=Strategy.objects.all(), source='strategy', write_only=True)
 
     class Meta:
         model = Session
         fields = ['id', 'symbol', 'market', 'freq', 'group', 'started', 'ended', 
-                  'strategy', 'status', 'last_price', 'last_kline_timestamp', 
+                  'strategy', 'strategy_id', 'status', 'last_price', 'last_kline_timestamp', 
                   'last_heartbeat', 'capital', 'assets', 'initial_capital', 
                   'initial_assets', 'buy_enabled', 'sell_enabled', 'account', 
                   'equity', 'orders', 'signals', 'account_id', 'symbol_id', 'thread', 'health']
@@ -108,6 +111,14 @@ class SessionSerializer(serializers.HyperlinkedModelSerializer):
             'is_alive': obj.thread.is_alive(),
             'name': obj.thread.name
         }
+
+    def validate(self, data):
+        symbol = data.get('symbol')
+        account = data.get('account')
+        market = account.market
+        validate_symbol_against_market(symbol, market)
+        return data
+
 
 class SessionGroupSerializer(serializers.HyperlinkedModelSerializer):
     symbol = MarketSymbolSerializer()

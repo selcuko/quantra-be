@@ -195,5 +195,6 @@ SOCIALACCOUNT_PROVIDERS = {
 
 REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.LimitOffsetPagination',
-    'PAGE_SIZE': 100
+    'PAGE_SIZE': 100,
+    'EXCEPTION_HANDLER': 'quantapi.exceptions.ValidationErrorHandler',
 }
