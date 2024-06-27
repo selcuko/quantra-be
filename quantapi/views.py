@@ -581,8 +581,6 @@ class MarketListView(View):
                 fields = [api_secret, access_key]
             case 'okx':
                 fields = [api_key, api_secret, api_passphrase]
-            case _:
-                fields = []
         return fields
 
     @staticmethod

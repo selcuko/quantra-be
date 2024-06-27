@@ -82,6 +82,7 @@ class Market(models.Model):
     symbols: models.QuerySet['MarketSymbol']
     prices = models.TextField(null=True, blank=True, help_text='Prices of symbols in this market')
     prices_updated = models.DateTimeField(null=True, blank=True, help_text='Last time prices were updated')
+    icon = models.URLField(null=True, blank=True, help_text='URL of the exchange icon')
 
     def filters(self, symbol):
         details = json.loads(symbol.details or '{}', )
@@ -121,6 +122,25 @@ class Market(models.Model):
                 'lot_step': None,
                 'price_step': None,
             }
+
+    def fields(self):
+        access_key = { 'name': 'ACCESS_KEY', 'display_name': 'Access Key' }
+        api_key = { 'name': 'API_KEY', 'display_name': 'API Key' }
+        api_secret = { 'name': 'API_SECRET', 'display_name': 'API Secret' }
+        api_passphrase = { 'name': 'API_PASSPHRASE', 'display_name': 'API Passphrase' }
+        fields = []
+        match self.exchange_name.lower():
+            case 'binance' | 'bybit' | 'gateio':
+                fields = [api_key, api_secret]
+            case 'kucoin':
+                fields = [api_key, api_secret, api_passphrase]
+            case 'mexc':
+                fields = [api_secret, access_key]
+            case 'okx':
+                fields = [api_key, api_secret, api_passphrase]
+            case _:
+                fields = []
+        return fields
 
     def __str__(self):
         return self.exchange_name

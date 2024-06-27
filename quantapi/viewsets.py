@@ -1,23 +1,36 @@
 import json
 import threading
+
+from django.db.models import Prefetch
+from django_filters.rest_framework import DjangoFilterBackend
+from pytest import mark
 from rest_framework import viewsets
 from rest_framework.decorators import action
-from rest_framework.response import Response
-from django.db.models import Prefetch
 from rest_framework.exceptions import MethodNotAllowed
-from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.response import Response
+
 from cache import LIVELOOPS, LOOPGROUPS
 from liveloop import LiveLoop
 from markets.errors import OrderPlacementError
 from order import OrderManager
-from quantapi.models import (Endpoint, GlobalSymbol, GroupOrder, Issue, Market, MarketAccount, MarketSymbol, 
-                             Notification, Order, Session, SessionGroup, Signal, Strategy, Subscription)
-from quantapi.serializers import (DraftSessionSerializer, EndpointSerializer, GlobalSymbolSerializer, GroupOrderSerializer, 
-                                  IssueSerializer, LiveLoopSerializer, LoopGroupSerializer, MarketAccountSerializer, 
-                                  MarketSerializer, MarketSymbolSerializer, NotificationSerializer, OrderPlacementSerializer, 
-                                  OrderSerializer, SessionGroupSerializer, SessionOrderPlacementSerializer, SessionSerializer, 
-                                  SessionUpdateSerializer, SignalSerializer, StrategySerializer, SubscriptionSerializer, ThreadSerializer)
-from quantapi.filters import MarketSymbolFilter, SessionFilter, MarketAccountFilter, SessionGroupFilter
+from quantapi.filters import (GlobalSymbolFilter, MarketAccountFilter, MarketSymbolFilter,
+                              SessionFilter, SessionGroupFilter)
+from quantapi.models import (Endpoint, GlobalSymbol, GroupOrder, Issue, Market,
+                             MarketAccount, MarketSymbol, Notification, Order,
+                             Session, SessionGroup, Signal, Strategy,
+                             Subscription)
+from quantapi.serializers import (DraftSessionSerializer, EndpointSerializer,
+                                  GlobalSymbolSerializer, GroupOrderSerializer,
+                                  IssueSerializer, LiveLoopSerializer,
+                                  LoopGroupSerializer, MarketAccountSerializer,
+                                  MarketSerializer, MarketSymbolSerializer,
+                                  NotificationSerializer,
+                                  OrderPlacementSerializer, OrderSerializer,
+                                  SessionGroupSerializer,
+                                  SessionOrderPlacementSerializer,
+                                  SessionSerializer, SessionUpdateSerializer,
+                                  SignalSerializer, StrategySerializer,
+                                  SubscriptionSerializer, ThreadSerializer)
 from quantapi.validations import validate_session_can_start
 
 
@@ -26,10 +39,16 @@ class MarketViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = MarketSerializer
 
     @action(detail=True, methods=['get'])
-    def prices(self, request, pk=None):
+    def prices(self, request, pk):
         market = self.get_object()
         prices = json.loads(market.prices or '{}')
         return Response(prices)
+
+    @action(detail=True, methods=['get'])
+    def fields(self, request, pk):
+        market: Market = self.get_object()
+        fields = market.fields()
+        return Response(fields)
 
 
 class MarketAccountViewSet(viewsets.ReadOnlyModelViewSet):
@@ -72,6 +91,8 @@ class MarketSymbolViewSet(viewsets.ReadOnlyModelViewSet):
 class GlobalSymbolViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = GlobalSymbol.objects.all()
     serializer_class = GlobalSymbolSerializer
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = GlobalSymbolFilter
 
     def get_queryset(self):
         return GlobalSymbol.objects.prefetch_related('tags', 'symbols').all()
@@ -282,7 +303,7 @@ class SignalViewSet(viewsets.ReadOnlyModelViewSet):
     def orders(self, request, pk):
         signal = self.get_object()
         orders = signal.orders.all()
-        serializer = OrderSerializer(orders, many=True)
+        serializer = OrderSerializer(orders, many=True, context={'request': request})
         return Response(serializer.data)
 
 
