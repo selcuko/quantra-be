@@ -97,9 +97,10 @@ class SessionViewSet(viewsets.ModelViewSet):
             'symbol__symbol', 
             'symbol__market', 
             'strategy', 
-            'group'
+            'group',
         ).prefetch_related(
-            Prefetch('account__market__symbols', queryset=MarketSymbol.objects.select_related('symbol', 'market'))
+            Prefetch('account__market__symbols', queryset=MarketSymbol.objects.select_related('symbol', 'market')),
+            'issues'
         ).exclude(group__isnull=False)
 
     def get_serializer_class(self):

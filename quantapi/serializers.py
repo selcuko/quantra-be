@@ -33,7 +33,7 @@ class MarketAccountSerializer(serializers.HyperlinkedModelSerializer):
         prices = json.loads(obj.market.prices or '{}')
         payload = {}
         symbols_map = {
-            symbol.base: symbol.symbol.image if symbol.symbol else None for symbol in obj.market.symbols.select_related('symbol')
+            symbol.base: symbol.symbol.image if symbol.symbol else None for symbol in obj.market.symbols.all()
         }
         for k, v in assets.items():
             price = prices.get(f'{k}-USDT', 0)
