@@ -1,10 +1,10 @@
 import json
-from re import T
 import threading
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.db.models import Prefetch
+from rest_framework.exceptions import MethodNotAllowed
 from django_filters.rest_framework import DjangoFilterBackend
 from cache import LIVELOOPS, LOOPGROUPS
 from liveloop import LiveLoop
@@ -12,10 +12,11 @@ from markets.errors import OrderPlacementError
 from order import OrderManager
 from quantapi.models import (Endpoint, GlobalSymbol, GroupOrder, Issue, Market, MarketAccount, MarketSymbol, 
                              Notification, Order, Session, SessionGroup, Signal, Strategy, Subscription)
-from quantapi.serializers import (EndpointSerializer, GlobalSymbolSerializer, GroupOrderSerializer, IssueSerializer, 
-                                  LiveLoopSerializer, LoopGroupSerializer, MarketAccountSerializer, MarketSerializer, 
-                                  MarketSymbolSerializer, NotificationSerializer, OrderPlacementSerializer, OrderSerializer, SessionGroupSerializer, SessionOrderPlacementSerializer, 
-                                  SessionSerializer, SignalSerializer, StrategySerializer, SubscriptionSerializer, ThreadSerializer)
+from quantapi.serializers import (DraftSessionSerializer, EndpointSerializer, GlobalSymbolSerializer, GroupOrderSerializer, 
+                                  IssueSerializer, LiveLoopSerializer, LoopGroupSerializer, MarketAccountSerializer, 
+                                  MarketSerializer, MarketSymbolSerializer, NotificationSerializer, OrderPlacementSerializer, 
+                                  OrderSerializer, SessionGroupSerializer, SessionOrderPlacementSerializer, SessionSerializer, 
+                                  SessionUpdateSerializer, SignalSerializer, StrategySerializer, SubscriptionSerializer, ThreadSerializer)
 from quantapi.filters import MarketSymbolFilter, SessionFilter, MarketAccountFilter, SessionGroupFilter
 from quantapi.validations import validate_session_can_start
 
@@ -49,7 +50,6 @@ class MarketAccountViewSet(viewsets.ModelViewSet):
         account: MarketAccount = self.get_object()
         account.refresh(force=True)
         return Response(MarketAccountSerializer(account, context={'request': request}).data)
-
 
 
 class MarketSymbolViewSet(viewsets.ModelViewSet):
@@ -101,6 +101,35 @@ class SessionViewSet(viewsets.ModelViewSet):
         ).prefetch_related(
             Prefetch('account__market__symbols', queryset=MarketSymbol.objects.select_related('symbol', 'market'))
         ).exclude(group__isnull=False)
+
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return DraftSessionSerializer
+        if self.request.method == 'PATCH':
+            return SessionUpdateSerializer
+        if self.request.method == 'GET':
+            return SessionSerializer
+        else:
+            raise MethodNotAllowed(self.request.method)
+
+    def create(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        
+        get_serializer = SessionSerializer(instance=serializer.instance, context=self.get_serializer_context())
+        headers = self.get_success_headers(get_serializer.data)
+        return Response(get_serializer.data, status=201, headers=headers)
+
+    def update(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data, instance=self.get_object())
+        serializer.is_valid(raise_exception=True)
+        print('performing update')
+        self.perform_update(serializer)
+
+        get_serializer = SessionSerializer(instance=serializer.instance, context=self.get_serializer_context())
+        headers = self.get_success_headers(get_serializer.data)
+        return Response(get_serializer.data, status=200, headers=headers)
 
     @action(detail=True, methods=['get'])
     def orders(self, request, pk):

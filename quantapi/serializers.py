@@ -102,10 +102,8 @@ class StrategySerializer(serializers.HyperlinkedModelSerializer):
 
 class SessionSerializer(serializers.HyperlinkedModelSerializer):
     symbol = MarketSymbolSerializer(required=False)
-    symbol_id = serializers.PrimaryKeyRelatedField(queryset=MarketSymbol.objects.all(), source='symbol', write_only=True)
     market = serializers.CharField(source='account.market.exchange_name', required=False)
     account = MarketAccountSerializer(required=False)
-    account_id = serializers.PrimaryKeyRelatedField(queryset=MarketAccount.objects.all(), source='account', write_only=True)
     orders = serializers.HyperlinkedIdentityField(view_name='session-orders')
     signals = serializers.HyperlinkedIdentityField(view_name='session-signals')
     capital = serializers.FloatField(required=False)
@@ -113,16 +111,15 @@ class SessionSerializer(serializers.HyperlinkedModelSerializer):
     status = serializers.CharField(required=False)
     thread = serializers.SerializerMethodField()
     strategy = StrategySerializer(required=False)
-    strategy_id = serializers.PrimaryKeyRelatedField(queryset=Strategy.objects.all(), source='strategy', write_only=True)
     issues = serializers.HyperlinkedRelatedField(many=True, read_only=True, view_name='issue-detail')
 
     class Meta:
         model = Session
         fields = ['id', 'symbol', 'market', 'freq', 'group', 'started', 'ended', 
-                  'strategy', 'strategy_id', 'status', 'last_price', 'last_kline_timestamp', 
+                  'strategy', 'status', 'last_price', 'last_kline_timestamp', 
                   'last_heartbeat', 'capital', 'assets', 'initial_capital', 
                   'initial_assets', 'buy_enabled', 'sell_enabled', 'account', 
-                  'equity', 'orders', 'signals', 'account_id', 'symbol_id', 'thread', 'health', 'url', 'issues']
+                  'equity', 'orders', 'signals', 'thread', 'health', 'url', 'issues']
 
 
     def get_thread(self, obj):
@@ -137,6 +134,35 @@ class SessionSerializer(serializers.HyperlinkedModelSerializer):
         market = account.market
         validate_symbol_against_market(symbol, market)
         return data
+
+
+class DraftSessionSerializer(serializers.HyperlinkedModelSerializer):
+    freq = serializers.ChoiceField(choices=Session.Freq.choices, default=Session.Freq.MIN15)
+    symbol = serializers.PrimaryKeyRelatedField(queryset=MarketSymbol.objects.all())
+    account = serializers.PrimaryKeyRelatedField(queryset=MarketAccount.objects.all())
+    strategy = serializers.PrimaryKeyRelatedField(queryset=Strategy.objects.all())
+
+    class Meta:
+        model = Session
+        fields = ['id', 'url', 'freq', 'symbol', 'account', 'strategy']
+    
+    def validate(self, attrs):
+        data = super().validate(attrs)
+        symbol = data['symbol']
+        account = data['account']
+        if symbol.market != account.market:
+            raise serializers.ValidationError('Symbol and account must belong to the same market')
+        if not symbol.spot_trading_enabled:
+            raise serializers.ValidationError('Spot trading is not enabled for this symbol')
+        if not account.credentials.active:
+            raise serializers.ValidationError('Account is not active')
+        return data
+
+
+class SessionUpdateSerializer(serializers.HyperlinkedModelSerializer):
+    class Meta:
+        model = Session
+        fields = ['id', 'url', 'capital', 'assets', 'buy_enabled', 'sell_enabled']
 
 
 class SessionGroupSerializer(serializers.HyperlinkedModelSerializer):
