@@ -1,6 +1,6 @@
 import json
 from rest_framework import serializers
-from quantapi.models import (Endpoint, GlobalSymbol, GroupOrder, Market, MarketAccount, 
+from quantapi.models import (Endpoint, GlobalSymbol, GroupOrder, Market, MarketAccount, MarketCredentials, 
                              MarketSymbol, Notification, Order, Session, SessionGroup, 
                              Signal, Strategy, Subscription)
 from quantapi.validations import validate_order_payload, validate_symbol_against_market
@@ -46,6 +46,39 @@ class MarketAccountSerializer(serializers.HyperlinkedModelSerializer):
                 'icon': symbols_map.get(k),
             }
         return payload
+
+
+class NewAccountSerializer(serializers.Serializer):
+    access_key = serializers.CharField(required=False)
+    api_key = serializers.CharField(required=False)
+    api_secret = serializers.CharField(required=False)
+    api_passphrase = serializers.CharField(required=False)
+    owner = serializers.CharField()
+    internal = serializers.BooleanField(default=False)
+    active = serializers.BooleanField(default=True)
+    market = serializers.PrimaryKeyRelatedField(queryset=Market.objects.all())
+
+    def validate(self, data):
+        super().validate(data)
+        market: Market = data['market']
+        fields = market.fields()
+        secrets = {}
+        for field in fields:
+            if not data.get(field['name']):
+                raise serializers.ValidationError(f'{field["name"]} is required for {market.exchange_name}')
+            secrets[field['name'].upper()] = data.pop(field['name'])
+        encrypted = json.dumps(secrets)
+        creds = MarketCredentials.objects.create(encrypted=encrypted, **data)
+        acct = MarketAccount.objects.get(credentials=creds)
+        try:
+            acct.get_interface()
+        except Exception as e:
+            acct.delete()
+            creds.delete()
+            raise serializers.ValidationError(detail='Failed to authenticate with the provided credentials.')
+        data['account'] = acct
+        data['credentials'] = creds
+        return data
 
 
 class InlineMarketAccountSerializer(serializers.HyperlinkedModelSerializer):

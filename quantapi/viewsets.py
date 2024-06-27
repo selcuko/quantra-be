@@ -23,7 +23,7 @@ from quantapi.serializers import (DraftSessionSerializer, EndpointSerializer,
                                   GlobalSymbolSerializer, GroupOrderSerializer,
                                   IssueSerializer, LiveLoopSerializer,
                                   LoopGroupSerializer, MarketAccountSerializer,
-                                  MarketSerializer, MarketSymbolSerializer,
+                                  MarketSerializer, MarketSymbolSerializer, NewAccountSerializer,
                                   NotificationSerializer,
                                   OrderPlacementSerializer, OrderSerializer,
                                   SessionGroupSerializer,
@@ -69,6 +69,15 @@ class MarketAccountViewSet(viewsets.ReadOnlyModelViewSet):
         account: MarketAccount = self.get_object()
         account.refresh(force=True)
         return Response(MarketAccountSerializer(account, context={'request': request}).data)
+
+    def create(self, request):
+        serializer = NewAccountSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        if not serializer.data or not isinstance(serializer.data, dict):
+            return Response({'detail': 'No data provided.'}, status=400)
+        account = serializer.data.get('account')
+        get_serializer = MarketAccountSerializer(instance=account, context=self.get_serializer_context())
+        return Response(get_serializer.data, status=201)
 
 
 class MarketSymbolViewSet(viewsets.ReadOnlyModelViewSet):

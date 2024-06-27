@@ -124,10 +124,10 @@ class Market(models.Model):
             }
 
     def fields(self):
-        access_key = { 'name': 'ACCESS_KEY', 'display_name': 'Access Key' }
-        api_key = { 'name': 'API_KEY', 'display_name': 'API Key' }
-        api_secret = { 'name': 'API_SECRET', 'display_name': 'API Secret' }
-        api_passphrase = { 'name': 'API_PASSPHRASE', 'display_name': 'API Passphrase' }
+        access_key = { 'name': 'access_key', 'display_name': 'Access Key' }
+        api_key = { 'name': 'api_key', 'display_name': 'API Key' }
+        api_secret = { 'name': 'api_secret', 'display_name': 'API Secret' }
+        api_passphrase = { 'name': 'api_passphrase', 'display_name': 'API Passphrase' }
         fields = []
         match self.exchange_name.lower():
             case 'binance' | 'bybit' | 'gateio':
