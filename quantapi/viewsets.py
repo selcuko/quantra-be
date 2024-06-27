@@ -21,7 +21,7 @@ from quantapi.filters import MarketSymbolFilter, SessionFilter, MarketAccountFil
 from quantapi.validations import validate_session_can_start
 
 
-class MarketViewSet(viewsets.ModelViewSet):
+class MarketViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Market.objects.all()
     serializer_class = MarketSerializer
 
@@ -32,7 +32,7 @@ class MarketViewSet(viewsets.ModelViewSet):
         return Response(prices)
 
 
-class MarketAccountViewSet(viewsets.ModelViewSet):
+class MarketAccountViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = MarketAccount.objects.all()
     serializer_class = MarketAccountSerializer
     filter_backends = [DjangoFilterBackend]
@@ -52,7 +52,7 @@ class MarketAccountViewSet(viewsets.ModelViewSet):
         return Response(MarketAccountSerializer(account, context={'request': request}).data)
 
 
-class MarketSymbolViewSet(viewsets.ModelViewSet):
+class MarketSymbolViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = MarketSymbol.objects.all()
     serializer_class = MarketSymbolSerializer
     filter_backends = [DjangoFilterBackend]
@@ -69,7 +69,7 @@ class MarketSymbolViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
-class GlobalSymbolViewSet(viewsets.ModelViewSet):
+class GlobalSymbolViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = GlobalSymbol.objects.all()
     serializer_class = GlobalSymbolSerializer
 
@@ -77,13 +77,13 @@ class GlobalSymbolViewSet(viewsets.ModelViewSet):
         return GlobalSymbol.objects.prefetch_related('tags', 'symbols').all()
 
 
-class StrategyViewSet(viewsets.ModelViewSet):
+class StrategyViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Strategy.objects.all()
     serializer_class = StrategySerializer
 
 
 class SessionViewSet(viewsets.ModelViewSet):
-    queryset = Session.objects.all()
+    queryset = Session.objects.none()
     serializer_class = SessionSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_class = SessionFilter
@@ -116,7 +116,7 @@ class SessionViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
-        
+
         get_serializer = SessionSerializer(instance=serializer.instance, context=self.get_serializer_context())
         headers = self.get_success_headers(get_serializer.data)
         return Response(get_serializer.data, status=201, headers=headers)
@@ -124,7 +124,6 @@ class SessionViewSet(viewsets.ModelViewSet):
     def update(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data, instance=self.get_object())
         serializer.is_valid(raise_exception=True)
-        print('performing update')
         self.perform_update(serializer)
 
         get_serializer = SessionSerializer(instance=serializer.instance, context=self.get_serializer_context())
@@ -237,6 +236,14 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = OrderSerializer
     filter_backends = [DjangoFilterBackend]
 
+    def get_queryset(self):
+        return Order.objects.select_related('account', 'symbol', 'session').prefetch_related(
+            'symbol__symbol',
+            'symbol__market',
+            'account__market',
+            'account__credentials'
+        )
+
     @action(detail=False, methods=['post'])
     def place(self, request):
         serializer = OrderPlacementSerializer(data=request.data)
@@ -258,38 +265,44 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
         return Response(OrderSerializer(order, context={'request': request}).data)
 
 
-
-class GroupOrderViewSet(viewsets.ModelViewSet):
+class GroupOrderViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = GroupOrder.objects.all()
     serializer_class = GroupOrderSerializer
     filter_backends = [DjangoFilterBackend]
 
 
-class SignalViewSet(viewsets.ModelViewSet):
+class SignalViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Signal.objects.all()
     serializer_class = SignalSerializer
     filter_backends = [DjangoFilterBackend]
 
+    @action(detail=True, methods=['get'])
+    def orders(self, request, pk):
+        signal = self.get_object()
+        orders = signal.orders.all()
+        serializer = OrderSerializer(orders, many=True)
+        return Response(serializer.data)
 
-class SubscriptionViewSet(viewsets.ModelViewSet):
+
+class SubscriptionViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Subscription.objects.all()
     serializer_class = SubscriptionSerializer
     filter_backends = [DjangoFilterBackend]
 
 
-class EndpointViewSet(viewsets.ModelViewSet):
+class EndpointViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Endpoint.objects.all()
     serializer_class = EndpointSerializer
     filter_backends = [DjangoFilterBackend]
 
 
-class NotificationViewSet(viewsets.ModelViewSet):
+class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Notification.objects.all()
     serializer_class = NotificationSerializer
     filter_backends = [DjangoFilterBackend]
 
 
-class IssueViewSet(viewsets.ModelViewSet):
+class IssueViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Issue.objects.all()
     serializer_class = IssueSerializer
     filter_backends = [DjangoFilterBackend]

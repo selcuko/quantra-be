@@ -33,7 +33,7 @@ class MarketAccountSerializer(serializers.HyperlinkedModelSerializer):
         prices = json.loads(obj.market.prices or '{}')
         payload = {}
         symbols_map = {
-            symbol.base: symbol.symbol.image if symbol.symbol else None for symbol in obj.market.symbols.all()
+            symbol.base: symbol.symbol.image if symbol.symbol else None for symbol in obj.market.symbols.select_related('symbol')
         }
         for k, v in assets.items():
             price = prices.get(f'{k}-USDT', 0)
@@ -46,7 +46,6 @@ class MarketAccountSerializer(serializers.HyperlinkedModelSerializer):
                 'icon': symbols_map.get(k),
             }
         return payload
-
 
 
 class InlineMarketAccountSerializer(serializers.HyperlinkedModelSerializer):
@@ -145,7 +144,7 @@ class DraftSessionSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = Session
         fields = ['id', 'url', 'freq', 'symbol', 'account', 'strategy']
-    
+
     def validate(self, attrs):
         data = super().validate(attrs)
         symbol = data['symbol']
@@ -228,10 +227,12 @@ class GroupOrderSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-class SignalSerializer(serializers.ModelSerializer):
+class SignalSerializer(serializers.HyperlinkedModelSerializer):
+    symbol = InlineMarketSymbolSerializer()
+    orders = serializers.HyperlinkedIdentityField(view_name='signal-orders')
     class Meta:
         model = Signal
-        fields = '__all__'
+        fields = ['id', 'url', 'session', 'group', 'symbol', 'timestamp', 'orders']
 
 
 class SubscriptionSerializer(serializers.ModelSerializer):
