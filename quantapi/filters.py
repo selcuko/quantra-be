@@ -6,10 +6,18 @@ from .models import GlobalSymbol, MarketAccount, MarketSymbol, Session, SessionG
 class MarketAccountFilter(filters.FilterSet):
     active = filters.BooleanFilter(field_name='credentials__active')
     internal = filters.BooleanFilter(field_name='credentials__internal')
+    owner = filters.CharFilter(field_name='credentials__owner', lookup_expr='icontains')
+    market = filters.CharFilter(method='filter_market')
+
+    def filter_market(self, queryset, name, value):
+        query = Q()
+        for market in value.split(","):
+            query |= Q(market__exchange_name__iexact=market)
+        return queryset.filter(query)
 
     class Meta:
         model = MarketAccount
-        fields = ['active', 'internal']
+        fields = ['active', 'internal', 'owner']
 
 
 class MarketSymbolFilter(filters.FilterSet):
@@ -27,16 +35,17 @@ class MarketSymbolFilter(filters.FilterSet):
 class SessionFilter(filters.FilterSet):
     status = filters.MultipleChoiceFilter(choices=Session.Status.choices)
     source = filters.MultipleChoiceFilter(choices=Session.CandleSource.choices, field_name='candle_source')
+    account = filters.CharFilter(field_name='account__credentials__owner', label='account owner', lookup_expr='icontains')
     strategy = filters.CharFilter(field_name='strategy__pk', label='strategy')
     market = filters.CharFilter(field_name='market_account__market__pk', lookup_expr='iexact', label='market ID')
     market_name = filters.CharFilter(field_name='market_account__market__exchange_name', lookup_expr='icontains', label='market name')
-    account = filters.CharFilter(field_name='account__pk', label='account ID')
     symbol = filters.CharFilter(field_name='symbol__pk', label='symbol ID')
     symbol_name = filters.CharFilter(field_name='symbol__name', lookup_expr='icontains', label='symbol name')
+    created_after = filters.DateTimeFilter(field_name='started', lookup_expr='gte')
 
     class Meta:
         model = Session
-        fields = ['status', 'source', 'strategy', 'market', 'account']
+        fields = ['status', 'source', 'strategy', 'market', 'account', 'symbol', 'created_after']
 
 
 class SessionGroupFilter(filters.FilterSet):
@@ -83,6 +92,8 @@ class GlobalSymbolFilter(filters.FilterSet):
 
     def filter_market(self, queryset, name, value):
         query = Q()
+        if value.lower() == 'notnull':
+            return queryset.exclude(available_markets='[]')
         for market in value.split(","):
             query &= Q(available_markets__icontains=market)
         return queryset.filter(query)
