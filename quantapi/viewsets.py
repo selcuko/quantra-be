@@ -87,6 +87,7 @@ class SessionViewSet(viewsets.ModelViewSet):
     serializer_class = SessionSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_class = SessionFilter
+    http_method_names = ['get', 'post', 'patch']
 
     def get_queryset(self):
         return Session.objects.select_related(
