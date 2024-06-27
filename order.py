@@ -74,7 +74,6 @@ class OrderManager:
                 deal_size_str = f'{deal_size:f}'
                 request['deal_size'] = deal_size
         else:
-            print('deal_size:', deal_size, 'deal_funds:', deal_funds, 'side:', side)
             raise ValueError('deal_size for sell or deal_funds for buy must be provided.')
         try:
             order = self.market.place_market_order(symbol, side, deal_funds_str, deal_size_str)
@@ -123,29 +122,17 @@ class OrderManager:
         if not order.status == Order.Status.FILLED and not silent:
             order.save()
             raise OrderNotFilledError(f'Order not filled, status is {order.status} ({order.oid=}).', order=order)
-
         if self.session:
             order.session = self.session
             if order.status == Order.Status.FILLED and order.deal_funds and order.deal_size:
                 if side == 'buy':
                     self.session.capital -= order.deal_funds
                     self.session.assets += order.deal_size
-                    if (account := self.session.account):
-                        account.capital = (account.capital or 0) - order.deal_funds
-                        assets = json.loads(account.assets or '{}')
-                        assets[symbol.base] = (assets.get(symbol.base, 0) + order.deal_size)
-                        account.assets = json.dumps(assets)
-                        account.save()
                 elif side == 'sell':
                     self.session.capital += order.deal_funds
                     self.session.assets -= order.deal_size
-                    if (account := self.session.account):
-                        account.capital = (account.capital or 0) + order.deal_funds
-                        assets = json.loads(account.assets or '{}')
-                        assets[symbol.base] = (assets.get(symbol.base, 0) - order.deal_size)
-                        account.assets = json.dumps(assets)
-                        account.save()
                 self.session.save()
+        self.account.refresh(self.market, force=True)
         if manual:
             order.force = True
         if not order.side:

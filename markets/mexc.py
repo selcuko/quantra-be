@@ -299,7 +299,7 @@ class MEXCMarket(IMarket):
     def get_klines(self, symbol, interval, start=None, end=None, limit=1000, retry=1):
         return self._get_klines(symbol, interval, start, end, limit, retry=retry)
 
-    def get_account(self):
+    def get_account(self, save=True):
         uri = f'{self.url}/api/v3/account'
         try:
             request_query = self._prep_payload()
@@ -309,7 +309,7 @@ class MEXCMarket(IMarket):
             account_payload = response.json()
             self.spot_trading_enabled = 'SPOT' in account_payload.get('permissions', [])
             self.margin_trading_enabled = 'MARGIN' in account_payload.get('permissions', [])
-            
+
             for asset in account_payload['balances']:
                 self.assets[asset['asset']] = float(asset['free'])
             self.capital = self.assets.get('USDT', 0)
@@ -317,6 +317,10 @@ class MEXCMarket(IMarket):
         except:
             logger.error(f'Error while fetching account data for {self.name}', exc_info=True)
             raise
+        self.account.capital = self.capital
+        self.account.assets = json.dumps(self.assets)
+        if save:
+            self.account.save()
 
     def _get_klines(self, symbol, interval, start=None, end=None, limit=1000, retry=3):
         if not end and not start:

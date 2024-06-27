@@ -26,10 +26,16 @@ class MarketSymbolFilter(filters.FilterSet):
 class SessionFilter(filters.FilterSet):
     status = filters.MultipleChoiceFilter(choices=Session.Status.choices)
     source = filters.MultipleChoiceFilter(choices=Session.CandleSource.choices, field_name='candle_source')
+    strategy = filters.CharFilter(field_name='strategy__pk', label='strategy')
+    market = filters.CharFilter(field_name='market_account__market__pk', lookup_expr='iexact', label='market ID')
+    market_name = filters.CharFilter(field_name='market_account__market__exchange_name', lookup_expr='icontains', label='market name')
+    account = filters.CharFilter(field_name='account__pk', label='account ID')
+    symbol = filters.CharFilter(field_name='symbol__pk', label='symbol ID')
+    symbol_name = filters.CharFilter(field_name='symbol__name', lookup_expr='icontains', label='symbol name')
 
     class Meta:
         model = Session
-        fields = ['status', 'source']
+        fields = ['status', 'source', 'strategy', 'market', 'account']
 
 
 class SessionGroupFilter(filters.FilterSet):

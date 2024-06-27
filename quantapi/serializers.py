@@ -1,8 +1,10 @@
 import json
 from rest_framework import serializers
-from rest_framework.response import Response
-from quantapi.models import Endpoint, GlobalSymbol, GroupOrder, Market, MarketAccount, MarketSymbol, Notification, Order, Session, SessionGroup, Signal, Strategy, Subscription
-from quantapi.validations import validate_symbol_against_market
+from markets.errors import InsufficientBalance
+from quantapi.models import (Endpoint, GlobalSymbol, GroupOrder, Market, MarketAccount, 
+                             MarketSymbol, Notification, Order, Session, SessionGroup, 
+                             Signal, Strategy, Subscription)
+from quantapi.validations import InvalidRequestError, validate_symbol_against_market
 
 
 class MarketSerializer(serializers.HyperlinkedModelSerializer):
@@ -24,28 +26,39 @@ class MarketAccountSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = MarketAccount
         fields = ['id', 'market', 'equity', 'capital', 'assets', 'last_cache', 
-                  'owner', 'active', 'internal', 'prices_updated']
+                  'owner', 'active', 'internal', 'prices_updated', 'url']
 
     def get_assets(self, obj):
         # XXX: this serializer method is hacky. come back here to optimize.
         assets = json.loads(obj.assets or '{}')
         prices = json.loads(obj.market.prices or '{}')
         payload = {}
+        symbols_map = {
+            symbol.base: symbol.symbol.image if symbol.symbol else None for symbol in obj.market.symbols.all()
+        }
         for k, v in assets.items():
             price = prices.get(f'{k}-USDT', 0)
             if k == 'USDT' or v <= 0:
                 continue
-            try:
-                ms = MarketSymbol.objects.get(market=obj.market, base=k, symbol__isnull=False)
-            except MarketSymbol.DoesNotExist:
-                ms = None
             payload[k] = {
                 'amount': v,
                 'price': price,
                 'value': (v * price) or None,
-                'icon': ms.symbol.image if ms and ms.symbol else None
+                'icon': symbols_map.get(k),
             }
         return payload
+
+
+
+class InlineMarketAccountSerializer(serializers.HyperlinkedModelSerializer):
+    market = serializers.CharField(source='market.exchange_name')
+    owner = serializers.CharField(source='credentials.owner')
+    active = serializers.BooleanField(source='credentials.active')
+    internal = serializers.BooleanField(source='credentials.internal')
+
+    class Meta:
+        model = MarketAccount
+        fields = ['id', 'market', 'owner', 'active', 'internal', 'url']
 
 
 class MarketSymbolSerializer(serializers.HyperlinkedModelSerializer):
@@ -56,11 +69,19 @@ class MarketSymbolSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = MarketSymbol
         fields = ['symbol', 'market', 'name', 'base', 'quote', 'base_precision', 'quote_precision', 
-                  'spot_trading_enabled', 'icon', 'price', 'price_updated', 'id']
+                  'spot_trading_enabled', 'icon', 'price', 'price_updated', 'id', 'url']
 
     def get_price(self, obj):
         prices = json.loads(obj.market.prices or '{}')
         return prices.get(obj.name)
+
+
+class InlineMarketSymbolSerializer(serializers.HyperlinkedModelSerializer):
+    icon = serializers.URLField(source='symbol.image', allow_null=True)
+    market = serializers.CharField(source='market.exchange_name')
+    class Meta:
+        model = MarketSymbol
+        fields = ['id', 'url', 'icon', 'name', 'base', 'quote', 'market']
 
 
 class GlobalSymbolSerializer(serializers.HyperlinkedModelSerializer):
@@ -69,7 +90,7 @@ class GlobalSymbolSerializer(serializers.HyperlinkedModelSerializer):
         fields = ['id', 'cid', 'name', 'display', 'base', 'quote', 'tags', 'symbols', 'data_source', 
                   'is_stablecoin', 'ath', 'atl', 'ath_date', 'atl_date', 'volume', 'market_cap', 
                   'circulating_supply', 'max_supply', 'total_supply', 'last_updated', 'price', 
-                  'supply_ratio', 'ath_prox', 'atl_prox', 'volume24h_to_mcap', 'image']
+                  'supply_ratio', 'ath_prox', 'atl_prox', 'volume24h_to_mcap', 'image', 'url']
     tags = serializers.StringRelatedField(many=True)
     symbols = serializers.HyperlinkedRelatedField(many=True, read_only=True, view_name='marketsymbol-detail')
 
@@ -94,6 +115,7 @@ class SessionSerializer(serializers.HyperlinkedModelSerializer):
     thread = serializers.SerializerMethodField()
     strategy = StrategySerializer(required=False)
     strategy_id = serializers.PrimaryKeyRelatedField(queryset=Strategy.objects.all(), source='strategy', write_only=True)
+    issues = serializers.HyperlinkedRelatedField(many=True, read_only=True, view_name='issue-detail')
 
     class Meta:
         model = Session
@@ -101,20 +123,18 @@ class SessionSerializer(serializers.HyperlinkedModelSerializer):
                   'strategy', 'strategy_id', 'status', 'last_price', 'last_kline_timestamp', 
                   'last_heartbeat', 'capital', 'assets', 'initial_capital', 
                   'initial_assets', 'buy_enabled', 'sell_enabled', 'account', 
-                  'equity', 'orders', 'signals', 'account_id', 'symbol_id', 'thread', 'health']
+                  'equity', 'orders', 'signals', 'account_id', 'symbol_id', 'thread', 'health', 'url', 'issues']
+
 
     def get_thread(self, obj):
         if not obj.thread:
             return {}
-        return {
-            'ident': obj.thread.ident,
-            'is_alive': obj.thread.is_alive(),
-            'name': obj.thread.name
-        }
+        return ThreadSerializer(obj.thread).data
 
     def validate(self, data):
-        symbol = data.get('symbol')
-        account = data.get('account')
+        instance = self.instance
+        symbol = data.get('symbol', instance.symbol if instance else None)
+        account = data.get('account', instance.account if instance else None)
         market = account.market
         validate_symbol_against_market(symbol, market)
         return data
@@ -133,10 +153,57 @@ class SessionGroupSerializer(serializers.HyperlinkedModelSerializer):
                   'buy_enabled', 'sell_enabled', 'capital', 'assets', 'equity', 'source', 'sessions']
 
 
-class OrderSerializer(serializers.ModelSerializer):
+class OrderSerializer(serializers.HyperlinkedModelSerializer):
+    symbol = InlineMarketSymbolSerializer()
+    account = InlineMarketAccountSerializer()
     class Meta:
         model = Order
-        fields = '__all__'
+        fields = ['id', 'url', 'oid', 'deal_size', 'deal_funds', 'funds', 'price', 'order_type', 'market_timestamp',
+                  'status', 'side', 'force', 'created_at', 'placed_at', 'symbol', 'account', 'session',
+                  'group']
+
+
+class OrderPlacementSerializer(serializers.Serializer):
+    account = serializers.PrimaryKeyRelatedField(queryset=MarketAccount.objects.all())
+    symbol = serializers.PrimaryKeyRelatedField(queryset=MarketSymbol.objects.all())
+    side = serializers.ChoiceField(choices=Order.Side.choices)
+    deal_size = serializers.FloatField(required=False)
+    funds = serializers.FloatField(required=False)
+
+    def validate(self, data):
+        super().validate(data)
+        symbol = data['symbol']
+        account = data['account']
+        side = data['side']
+        funds = data.get('funds')
+        deal_size = data.get('deal_size')
+        account_assets = json.loads(account.assets or '{}').get(symbol.base, 0)
+        price = json.loads(account.market.prices or '{}').get(f'{symbol.base}-USDT', 0)
+        if not symbol.market == account.market:
+            raise serializers.ValidationError('symbol.market should be the same as account.market')
+        if not symbol.spot_trading_enabled:
+            raise serializers.ValidationError('Spot trading is not enabled for this symbol')
+        if side == Order.Side.BUY:
+            if not funds:
+                raise serializers.ValidationError('funds is required for BUY orders')
+            if funds > account.capital:
+                raise InsufficientBalance(f'You tried to buy with ${funds} but you only have ${account.capital:.2f} in your account.')
+            if funds < 5:
+                raise InvalidRequestError(f'You tried to buy with ${funds} but minimum amount is $5.')
+        if side == Order.Side.SELL:
+            if not deal_size:
+                raise serializers.ValidationError('deal_size is required for SELL orders')
+            elif deal_size > account_assets:
+                raise InsufficientBalance(f'You tried to sell {deal_size} {symbol.base} but you only have {account_assets} {symbol.base} in your account.')
+            elif deal_size * price < 5:
+                raise InvalidRequestError(f'You tried to sell {deal_size} {symbol.base} (${deal_size * price}) but the value is less than $5.')
+        if funds and deal_size:
+            raise serializers.ValidationError('funds and deal_size are mutually exclusive')
+        if funds and funds < 0:
+            raise serializers.ValidationError('funds should be greater than 0')
+        if deal_size and deal_size < 0:
+            raise serializers.ValidationError('deal_size should be greater than 0')
+        return data
 
 
 class GroupOrderSerializer(serializers.ModelSerializer):

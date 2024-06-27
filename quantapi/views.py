@@ -173,7 +173,7 @@ class SessionUpdateView(View):
 
         if 'session_buy' in request.POST and float(request.POST.get('session_buy', 0)) > 0:
             iface = session.account.get_interface()
-            session.update(iface)
+            session.refresh(iface)
             amt = float(request.POST.get('session_buy'))
             corrected_amt = min(amt, session.capital)
             msg = None
@@ -202,7 +202,7 @@ class SessionUpdateView(View):
 
         if 'session_sell' in request.POST and float(request.POST.get('session_sell', 0)) > 0:
             iface = session.account.get_interface()
-            session.update(iface)
+            session.refresh(iface)
             amt = float(request.POST.get('session_sell'))
             corrected_amt = min(amt, session.assets)
             msg = None

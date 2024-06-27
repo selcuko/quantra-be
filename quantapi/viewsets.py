@@ -1,18 +1,20 @@
 import json
+from re import T
 import threading
-from xml.dom import ValidationErr
-from jsonschema import ValidationError
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from django.db.models import Prefetch
 from django_filters.rest_framework import DjangoFilterBackend
 from cache import LIVELOOPS, LOOPGROUPS
 from liveloop import LiveLoop
+from markets.errors import OrderPlacementError
+from order import OrderManager
 from quantapi.models import (Endpoint, GlobalSymbol, GroupOrder, Issue, Market, MarketAccount, MarketSymbol, 
                              Notification, Order, Session, SessionGroup, Signal, Strategy, Subscription)
 from quantapi.serializers import (EndpointSerializer, GlobalSymbolSerializer, GroupOrderSerializer, IssueSerializer, 
                                   LiveLoopSerializer, LoopGroupSerializer, MarketAccountSerializer, MarketSerializer, 
-                                  MarketSymbolSerializer, NotificationSerializer, OrderSerializer, SessionGroupSerializer, 
+                                  MarketSymbolSerializer, NotificationSerializer, OrderPlacementSerializer, OrderSerializer, SessionGroupSerializer, 
                                   SessionSerializer, SignalSerializer, StrategySerializer, SubscriptionSerializer, ThreadSerializer)
 from quantapi.filters import MarketSymbolFilter, SessionFilter, MarketAccountFilter, SessionGroupFilter
 from quantapi.validations import validate_session_can_start
@@ -34,6 +36,20 @@ class MarketAccountViewSet(viewsets.ModelViewSet):
     serializer_class = MarketAccountSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_class = MarketAccountFilter
+
+    def get_queryset(self):
+        return MarketAccount.objects.select_related(
+            'market', 'credentials'
+        ).prefetch_related(
+            Prefetch('market__symbols', queryset=MarketSymbol.objects.select_related('symbol'))
+        )
+
+    @action(detail=True, methods=['get', 'post'])
+    def refresh(self, request, pk):
+        account: MarketAccount = self.get_object()
+        account.refresh(force=True)
+        return Response(MarketAccountSerializer(account, context={'request': request}).data)
+
 
 
 class MarketSymbolViewSet(viewsets.ModelViewSet):
@@ -73,7 +89,18 @@ class SessionViewSet(viewsets.ModelViewSet):
     filterset_class = SessionFilter
 
     def get_queryset(self):
-        return Session.objects.select_related('symbol', 'account').all()
+        return Session.objects.select_related(
+            'account', 
+            'account__market', 
+            'account__credentials', 
+            'symbol', 
+            'symbol__symbol', 
+            'symbol__market', 
+            'strategy', 
+            'group'
+        ).prefetch_related(
+            Prefetch('account__market__symbols', queryset=MarketSymbol.objects.select_related('symbol', 'market'))
+        ).exclude(group__isnull=False)
 
     @action(detail=True, methods=['get'])
     def orders(self, request, pk=None):
@@ -152,10 +179,31 @@ class SessionGroupViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
-class OrderViewSet(viewsets.ModelViewSet):
+class OrderViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Order.objects.all()
     serializer_class = OrderSerializer
     filter_backends = [DjangoFilterBackend]
+
+    @action(detail=False, methods=['post'])
+    def place(self, request):
+        serializer = OrderPlacementSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=400)
+        data = serializer.validated_data
+        if not isinstance(data, dict) or not data:
+            return Response({'detail': 'No data provided.'}, status=400)
+        account: MarketAccount = data['account']
+        symbol = data['symbol']
+        side = data['side']
+        funds = data.get('funds', 0)
+        deal_size = data.get('deal_size', 0)
+        oman = OrderManager(account.get_interface())
+        try:
+            order = oman.place(symbol, side.lower(), deal_size, funds)
+        except OrderPlacementError as e:
+            return Response({'detail': f'Order placement error: {e!s}'}, status=400)
+        return Response(OrderSerializer(order, context={'request': request}).data)
+
 
 
 class GroupOrderViewSet(viewsets.ModelViewSet):
@@ -193,6 +241,12 @@ class IssueViewSet(viewsets.ModelViewSet):
     serializer_class = IssueSerializer
     filter_backends = [DjangoFilterBackend]
 
+    @action(detail=False, methods=['get', 'post'], url_path='(?P<class_name>[^/.]+)/(?P<id>[^/.]+)', url_name='for-model')
+    def for_model(self, request, class_name, id):
+        issues = Issue.objects.filter(content_type__model=class_name, object_id=id)
+        serializer = IssueSerializer(issues, many=True)
+        return Response(serializer.data)
+
 
 class LiveLoopViewSet(viewsets.ViewSet):
     def list(self, request):
@@ -206,7 +260,17 @@ class LoopGroupViewSet(viewsets.ViewSet):
 
 class HealthViewSet(viewsets.ViewSet):
     def list(self, request):
-        return Response({'status': 'ok'})
+        sessions = Session.objects.filter(status=Session.Status.ONGOING, group__isnull=True)
+        groups = SessionGroup.objects.filter(status=SessionGroup.Status.ONGOING)
+        died_threads = []
+        died_threads.extend([session.pk for session in sessions if not session.thread])
+        died_threads.extend([group.pk for group in groups if not group.thread])
+        return Response({
+            'sessions': sessions.count(),
+            'groups': groups.count(),
+            'health': 'OK' if not died_threads else 'DEGRADED',
+            'died_threads': died_threads
+        })
 
 
 class ThreadViewSet(viewsets.ViewSet):

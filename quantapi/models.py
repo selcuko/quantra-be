@@ -8,6 +8,7 @@ from decimal import Decimal
 import pytz
 from cryptography.fernet import Fernet
 from django.conf import settings
+from django.utils import timezone
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
@@ -16,10 +17,11 @@ from django.db import models
 from errors import SessionCannotContinue
 from logger import logger
 from cache import get_loopgroup
-from strategy import get_strategy
+from models import interval_to_minutes
 
 if typing.TYPE_CHECKING:
     from liveloop import LiveLoop
+    from markets import IMarket
 
 
 class Issue(models.Model):
@@ -176,7 +178,7 @@ class MarketAccount(models.Model):
     issues     = GenericRelation(Issue)
 
     def __str__(self):
-        return f'{self.market.exchange_name} {self.credentials.owner} (${round(self.equity, 2) if self.equity else 0})'
+        return f'MarketAccount <{self.pk}>'
 
     def save(self, *args, **kwargs):
         if self.market != self.credentials.market:
@@ -189,9 +191,6 @@ class MarketAccount(models.Model):
 
     @property
     def available_capital(self):
-        assets = json.loads(self.assets or '{}')
-        if not self.capital:
-            return None
         return self.capital
 
     @property
@@ -218,6 +217,13 @@ class MarketAccount(models.Model):
 
     def active_issues(self):
         return self.issues.filter(status=Issue.Status.ACTIVE)
+    
+    def refresh(self, interface:'IMarket|None'=None, force=False):
+        interface = interface or self.get_interface()
+        if self.last_cache and timezone.now() - self.last_cache < timedelta(minutes=1) and not force:
+            return
+        interface.get_account()
+        return
 
 
 class MarketSymbol(models.Model):
@@ -264,10 +270,7 @@ class MarketSymbol(models.Model):
         }
 
     def __str__(self):
-        try:
-            return f'{self.name}@{self.market.exchange_name}'
-        except:
-            return f'{self.name}@NOMARKET'
+        return self.name
 
     def filters(self):
         return self.market.filters(self)
@@ -338,7 +341,7 @@ class Session(models.Model):
     sell_enabled = models.BooleanField(default=True)
     initiated_at = models.DateTimeField(auto_now_add=True)
     orders: models.QuerySet['Order']
-    issues     = GenericRelation(Issue)
+    issues = GenericRelation(Issue)
 
     @property
     def equity(self):
@@ -349,7 +352,7 @@ class Session(models.Model):
         return round(self.capital + self.assets * last_price, 2)
 
     def __str__(self):
-        return f'{self.strategy} - {self.symbol.base} - {self.account.market.exchange_name} - {self.status}'
+        return f'Session <{self.pk}>'
 
     @property
     def analytics(self):
@@ -358,27 +361,20 @@ class Session(models.Model):
 
     @property
     def thread(self):
-        threads = threading.enumerate()
-        for thread in threads:
-            if thread.ident == self.thread_id and thread.is_alive():
+        for thread in threading.enumerate():
+            if thread.ident == self.thread_id:
                 return thread
 
     def resume(self):
         """Resume an interrupted session."""
-        if self.group:
-            raise ValueError('Cannot resume a session that belongs to a group, try resuming the SessionGroup instead')
-        if not self.status == Session.Status.ONGOING:
-            raise ValueError(f'Session status should be ONGOING to resume, not {self.status}')
-        if not self.pk:
-            raise ValueError('Session must be saved before resuming')
-        if not self.strategy:
-            raise ValueError('Session must have a strategy to resume')
+        from quantapi.validations import validate_session_can_start
+        validate_session_can_start(self)
         from liveloop import LiveLoop
         ll = LiveLoop.from_session(self)
         ll.run()
         return ll
 
-    def update(self, interface, save=True):
+    def refresh(self, interface, save=True):
         # Update session capital and assets to ensure they are not higher than the interface's
         interface = interface or self.account.get_interface()
         new_capital = min(self.capital, interface.capital)
@@ -392,19 +388,18 @@ class Session(models.Model):
         if save: self.save()
 
     def save(self, **kwargs):
-        if self.account:
-            if self.capital > (self.account.capital or 0):
-                raise ValueError(f'Session capital ({self.capital}) cannot be higher than account capital ({self.account.capital}).')
-            account_assets = json.loads(self.account.assets or '{}')
-            if self.assets > account_assets.get(self.symbol.base, 0):
-                raise ValueError(f'Session assets ({self.assets}) cannot be higher than account assets ({account_assets.get(self.symbol.base)}).')
+        from quantapi.validations import validate_session_can_save
+        validate_session_can_save(self)
         super().save(**kwargs)
 
     def health(self):
-        if not self.last_heartbeat:
+        if self.status != Session.Status.ONGOING:
+            return 'Not ongoing'
+        if not self.last_kline_timestamp:
             return 'No heartbeat'
-        if self.last_heartbeat < datetime.now(pytz.utc) - timedelta(minutes=5):
-            return 'No heartbeat for 5 minutes'
+        candle_mins = interval_to_minutes(self.freq)
+        if self.last_kline_timestamp < datetime.now(pytz.utc) - timedelta(minutes=candle_mins*3):
+            return 'No heartbeat for 3 candles'
         thread = self.thread
         if not thread or not thread.is_alive():
             return 'Thread not alive'
@@ -440,7 +435,7 @@ class SessionGroup(models.Model):
     issues     = GenericRelation(Issue)
 
     def __str__(self):
-        return f'{self.status} SessionGroup for {self.symbol.base}@{self.market.exchange_name}'
+        return f'SessionGroup <{self.pk}>'
 
     @property
     def capital(self):
@@ -553,7 +548,7 @@ class Signal(models.Model):
         return super().save(*args, **kwargs)
 
     def __str__(self) -> str:
-        return f'{self.side} {self.symbol} {self.price}'
+        return f'{self.side} {self.price}'
     
     @property
     def symbol(self):
@@ -655,11 +650,7 @@ class Order(models.Model):
         self.messages = messages
 
     def __str__(self) -> str:
-        if self.side == Order.Side.BUY:
-            return f'{self.status} {self.order_type.title()} {self.side} Order: ${self.deal_funds} worth of {self.symbol.name}'
-        elif self.side == Order.Side.SELL:
-            return f'{self.status} {self.order_type.title()} {self.side} Order: {self.deal_size} {self.symbol.base}'
-        return f'{self.status} {self.order_type.title()} Order: {self.symbol.name}'
+        return f'Order <{self.pk}> {self.side} {self.status}'
 
     def refresh_from_market(self, market_interface):
         if not self.oid:
@@ -753,7 +744,7 @@ class ComplexOrder(models.Model):
     market_order = models.OneToOneField(Order, on_delete=models.PROTECT, related_name='complex_order', null=True, blank=True)
 
     def __str__(self) -> str:
-        return f'{self.status} {self.type} @ {self.session.symbol.base}'
+        return f'{self.status} {self.type}'
 
     def is_ready(self, ll:'LiveLoop') -> bool:
         if self.type == ComplexOrder.Type.TARGET_PRICE and self.target_price:
