@@ -122,6 +122,7 @@ class OrderManager:
         if not order.status == Order.Status.FILLED and not silent:
             order.save()
             raise OrderNotFilledError(f'Order not filled, status is {order.status} ({order.oid=}).', order=order)
+        self.account.refresh(self.market, force=True)
         if self.session:
             order.session = self.session
             if order.status == Order.Status.FILLED and order.deal_funds and order.deal_size:
@@ -131,8 +132,10 @@ class OrderManager:
                 elif side == 'sell':
                     self.session.capital += order.deal_funds
                     self.session.assets -= order.deal_size
+                account_assets = json.loads(self.account.assets or '{}').get(symbol.base, 0)
+                self.session.capital = min(self.session.capital, self.account.capital)
+                self.session.assets  = min(self.session.assets, account_assets)
                 self.session.save()
-        self.account.refresh(self.market, force=True)
         if manual:
             order.force = True
         if not order.side:

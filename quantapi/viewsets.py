@@ -14,7 +14,7 @@ from quantapi.models import (Endpoint, GlobalSymbol, GroupOrder, Issue, Market, 
                              Notification, Order, Session, SessionGroup, Signal, Strategy, Subscription)
 from quantapi.serializers import (EndpointSerializer, GlobalSymbolSerializer, GroupOrderSerializer, IssueSerializer, 
                                   LiveLoopSerializer, LoopGroupSerializer, MarketAccountSerializer, MarketSerializer, 
-                                  MarketSymbolSerializer, NotificationSerializer, OrderPlacementSerializer, OrderSerializer, SessionGroupSerializer, 
+                                  MarketSymbolSerializer, NotificationSerializer, OrderPlacementSerializer, OrderSerializer, SessionGroupSerializer, SessionOrderPlacementSerializer, 
                                   SessionSerializer, SignalSerializer, StrategySerializer, SubscriptionSerializer, ThreadSerializer)
 from quantapi.filters import MarketSymbolFilter, SessionFilter, MarketAccountFilter, SessionGroupFilter
 from quantapi.validations import validate_session_can_start
@@ -103,21 +103,21 @@ class SessionViewSet(viewsets.ModelViewSet):
         ).exclude(group__isnull=False)
 
     @action(detail=True, methods=['get'])
-    def orders(self, request, pk=None):
+    def orders(self, request, pk):
         session = self.get_object()
         orders = session.orders.all()
         serializer = OrderSerializer(orders, many=True)
         return Response(serializer.data)
 
     @action(detail=True, methods=['get'])
-    def signals(self, request, pk=None):
+    def signals(self, request, pk):
         session = self.get_object()
         signals = session.signals.all()
         serializer = SignalSerializer(signals, many=True)
         return Response(serializer.data)
 
     @action(detail=True, methods=['post'])
-    def start(self, request, pk=None):
+    def start(self, request, pk):
         session = self.get_object()
         validate_session_can_start(session)
         ll = LiveLoop.from_session(session)
@@ -127,7 +127,7 @@ class SessionViewSet(viewsets.ModelViewSet):
         return Response({'detail': 'Session will start in a few seconds.'})
 
     @action(detail=True, methods=['post'])
-    def pause(self, request, pk=None):
+    def pause(self, request, pk):
         session = self.get_object()
         if session.status != Session.Status.ONGOING:
             return Response({'detail': 'Session must be in ONGOING state to pause.'}, status=400)
@@ -140,7 +140,7 @@ class SessionViewSet(viewsets.ModelViewSet):
         return Response({'detail': 'Session will pause in a few seconds.'})
 
     @action(detail=True, methods=['post'])
-    def resume(self, request, pk=None):
+    def resume(self, request, pk):
         session = self.get_object()
         validate_session_can_start(session)
         ll = LiveLoop.from_session(session)
@@ -150,7 +150,7 @@ class SessionViewSet(viewsets.ModelViewSet):
         return Response({'detail': 'Session will resume in a few seconds.'})
 
     @action(detail=True, methods=['post'])
-    def terminate(self, request, pk=None):
+    def terminate(self, request, pk):
         session = self.get_object()
         if session.status not in [Session.Status.ONGOING, Session.Status.PAUSED]:
             return Response({'detail': 'Session must be in ONGOING or PAUSED state to terminate.'}, status=400)
@@ -161,6 +161,30 @@ class SessionViewSet(viewsets.ModelViewSet):
         session.status = Session.Status.TERMINATED
         session.save()
         return Response({'detail': 'Session will terminate in a few seconds.'})
+
+    @action(detail=True, methods=['post'])
+    def place(self, request, pk):
+        session: Session = self.get_object()
+        serializer = SessionOrderPlacementSerializer(data={**request.data, 'session': session.pk})
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=400)
+        data = serializer.validated_data
+        if not isinstance(data, dict) or not data:
+            return Response({'detail': 'No data provided.'}, status=400)
+        
+        account: MarketAccount = session.account
+        symbol: MarketSymbol = session.symbol
+        side = data['side']
+        funds = data.get('funds')
+        deal_size = data.get('deal_size')
+        oman = OrderManager(account.get_interface(), session)
+
+        try:
+            order = oman.place(symbol, side.lower(), deal_size, funds)
+        except OrderPlacementError as e:
+            return Response({'detail': f'Order placement error: {e!s}'}, status=400)
+        return Response(OrderSerializer(order, context={'request': request}).data)
+
 
 class SessionGroupViewSet(viewsets.ModelViewSet):
     queryset = SessionGroup.objects.all()

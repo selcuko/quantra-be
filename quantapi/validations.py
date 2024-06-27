@@ -1,5 +1,8 @@
 import json
-from quantapi.models import Market, MarketSymbol, Session
+from typing import Literal
+from rest_framework import serializers
+from markets.errors import InsufficientBalance
+from quantapi.models import Market, MarketAccount, MarketSymbol, Order, Session
 
 
 class InvalidRequestError(Exception):
@@ -57,3 +60,38 @@ def validate_session_can_save(session: 'Session'):
     if session.assets > available_assets:
         raise InvalidRequestError(f'Session assets ({session.assets}) cannot exceed available assets ({available_assets})')
     return True
+
+
+def validate_order_payload(account: MarketAccount, symbol: MarketSymbol, side: Literal['BUY', 'SELL'], 
+                           deal_size: 'float|None', funds: 'float|None', session: 'Session|None' = None):
+    account_assets = json.loads(account.assets or '{}').get(symbol.base, 0)
+    price = json.loads(account.market.prices or '{}').get(f'{symbol.base}-USDT', 0)
+    if not symbol.market == account.market:
+        raise serializers.ValidationError('symbol.market should be the same as account.market')
+    if not symbol.spot_trading_enabled:
+        raise serializers.ValidationError('Spot trading is not enabled for this symbol')
+    if side == Order.Side.BUY:
+        if not funds:
+            raise serializers.ValidationError('funds is required for BUY orders')
+        elif session and funds > session.capital:
+            raise InsufficientBalance(f'You tried to buy with ${funds} but you only have ${session.capital:.2f} in your session.')
+        elif funds > account.capital:
+            raise InsufficientBalance(f'You tried to buy with ${funds} but you only have ${account.capital:.2f} in your account.')
+        elif funds < 5:
+            raise InvalidRequestError(f'You tried to buy with ${funds} but minimum amount is $5.')
+    if side == Order.Side.SELL:
+        if not deal_size:
+            raise serializers.ValidationError('deal_size is required for SELL orders')
+        elif session and deal_size > session.assets:
+            raise InsufficientBalance(f'You tried to sell {deal_size} {symbol.base} but you only have {session.assets} {symbol.base} in your session.')
+        elif deal_size > account_assets:
+            raise InsufficientBalance(f'You tried to sell {deal_size} {symbol.base} but you only have {account_assets} {symbol.base} in your account.')
+        elif deal_size * price < 5:
+            raise InvalidRequestError(f'You tried to sell {deal_size} {symbol.base} (${deal_size * price}) but the value is less than $5.')
+    if funds and deal_size:
+        raise serializers.ValidationError('funds and deal_size are mutually exclusive')
+    if funds and funds < 0:
+        raise serializers.ValidationError('funds should be greater than 0')
+    if deal_size and deal_size < 0:
+        raise serializers.ValidationError('deal_size should be greater than 0')
+

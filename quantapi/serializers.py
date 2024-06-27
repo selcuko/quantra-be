@@ -1,10 +1,9 @@
 import json
 from rest_framework import serializers
-from markets.errors import InsufficientBalance
 from quantapi.models import (Endpoint, GlobalSymbol, GroupOrder, Market, MarketAccount, 
                              MarketSymbol, Notification, Order, Session, SessionGroup, 
                              Signal, Strategy, Subscription)
-from quantapi.validations import InvalidRequestError, validate_symbol_against_market
+from quantapi.validations import validate_order_payload, validate_symbol_against_market
 
 
 class MarketSerializer(serializers.HyperlinkedModelSerializer):
@@ -160,7 +159,7 @@ class OrderSerializer(serializers.HyperlinkedModelSerializer):
         model = Order
         fields = ['id', 'url', 'oid', 'deal_size', 'deal_funds', 'funds', 'price', 'order_type', 'market_timestamp',
                   'status', 'side', 'force', 'created_at', 'placed_at', 'symbol', 'account', 'session',
-                  'group']
+                  'group', 'messages']
 
 
 class OrderPlacementSerializer(serializers.Serializer):
@@ -175,35 +174,26 @@ class OrderPlacementSerializer(serializers.Serializer):
         symbol = data['symbol']
         account = data['account']
         side = data['side']
-        funds = data.get('funds')
-        deal_size = data.get('deal_size')
-        account_assets = json.loads(account.assets or '{}').get(symbol.base, 0)
-        price = json.loads(account.market.prices or '{}').get(f'{symbol.base}-USDT', 0)
-        if not symbol.market == account.market:
-            raise serializers.ValidationError('symbol.market should be the same as account.market')
-        if not symbol.spot_trading_enabled:
-            raise serializers.ValidationError('Spot trading is not enabled for this symbol')
-        if side == Order.Side.BUY:
-            if not funds:
-                raise serializers.ValidationError('funds is required for BUY orders')
-            if funds > account.capital:
-                raise InsufficientBalance(f'You tried to buy with ${funds} but you only have ${account.capital:.2f} in your account.')
-            if funds < 5:
-                raise InvalidRequestError(f'You tried to buy with ${funds} but minimum amount is $5.')
-        if side == Order.Side.SELL:
-            if not deal_size:
-                raise serializers.ValidationError('deal_size is required for SELL orders')
-            elif deal_size > account_assets:
-                raise InsufficientBalance(f'You tried to sell {deal_size} {symbol.base} but you only have {account_assets} {symbol.base} in your account.')
-            elif deal_size * price < 5:
-                raise InvalidRequestError(f'You tried to sell {deal_size} {symbol.base} (${deal_size * price}) but the value is less than $5.')
-        if funds and deal_size:
-            raise serializers.ValidationError('funds and deal_size are mutually exclusive')
-        if funds and funds < 0:
-            raise serializers.ValidationError('funds should be greater than 0')
-        if deal_size and deal_size < 0:
-            raise serializers.ValidationError('deal_size should be greater than 0')
+        validate_order_payload(account, symbol, side, data.get('deal_size'), data.get('funds'))
         return data
+
+
+class SessionOrderPlacementSerializer(serializers.Serializer):
+    session = serializers.PrimaryKeyRelatedField(queryset=Session.objects.all())
+    side = serializers.ChoiceField(choices=Order.Side.choices)
+    deal_size = serializers.FloatField(required=False)
+    funds = serializers.FloatField(required=False)
+
+    def validate(self, attrs):
+        super().validate(attrs)
+        side = attrs['side']
+        funds = attrs.get('funds')
+        deal_size = attrs.get('deal_size')
+        session = attrs['session']
+        symbol = session.symbol
+        account = session.account
+        validate_order_payload(account, symbol, side, deal_size, funds, session)
+        return attrs
 
 
 class GroupOrderSerializer(serializers.ModelSerializer):

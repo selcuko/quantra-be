@@ -171,9 +171,9 @@ class MarketCredentials(models.Model):
 class MarketAccount(models.Model):
     market      = models.ForeignKey(Market, on_delete=models.PROTECT, related_name='accounts')
     credentials = models.ForeignKey(MarketCredentials, on_delete=models.PROTECT, related_name='accounts')
-    equity     = models.FloatField(null=True, blank=True, help_text='Total USDT equity in this account')
-    capital    = models.FloatField(null=True, blank=True, help_text='Total USDT capital in this account')
-    assets     = models.TextField(null=True, blank=True, help_text='Assets in this account')
+    equity     = models.FloatField(default=0, help_text='Total USDT equity in this account')
+    capital    = models.FloatField(default=0, help_text='Total USDT capital in this account')
+    assets     = models.TextField(default='{}', help_text='Assets in this account')
     last_cache = models.DateTimeField(null=True, blank=True, help_text='Last time equity/assets were updated')
     issues     = GenericRelation(Issue)
 
@@ -638,7 +638,7 @@ class Order(models.Model):
 
     @property
     def messages(self):
-        return self.messages_raw.split('\n')
+        return self.messages_raw.split(r'\n')
     
     @messages.setter
     def messages(self, value):
