@@ -58,6 +58,23 @@ class SessionGroupFilter(filters.FilterSet):
 
 
 class GlobalSymbolFilter(filters.FilterSet):
+    sort = filters.OrderingFilter(
+        fields=(
+            ('market_cap', 'market_cap'),
+            ('volume', 'volume'),
+            ('price_change_percentage_24h', 'price_change_percentage_24h'),
+            ('supply_ratio', 'supply_ratio'),
+            ('ath', 'ath'),
+            ('ath_date', 'ath_date'),
+            ('ath_prox', 'ath_prox'),
+            ('ath_ratio', 'ath_ratio'),
+            ('atl', 'atl'),
+            ('atl_date', 'atl_date'),
+            ('atl_prox', 'atl_prox'),
+            ('atl_ratio', 'atl_ratio'),
+            ('volume24h_to_market_cap', 'volume24h_to_market_cap'),
+        )
+    )
     name = filters.CharFilter(field_name='name', lookup_expr='icontains')
     category = filters.CharFilter(method='filter_category')
     market = filters.CharFilter(method='filter_market')
