@@ -11,12 +11,12 @@ class MarketSerializer(serializers.HyperlinkedModelSerializer):
 
     class Meta:
         model = Market
-        fields = ['id', 'exchange_name', 'prices_updated', 'prices']
+        fields = ['id', 'exchange_name', 'prices_updated', 'prices', 'icon']
 
 
 class MarketAccountSerializer(serializers.HyperlinkedModelSerializer):
     assets = serializers.SerializerMethodField()
-    market = serializers.CharField(source='market.exchange_name')
+    market = MarketSerializer()
     owner = serializers.CharField(source='credentials.owner')
     active = serializers.BooleanField(source='credentials.active')
     internal = serializers.BooleanField(source='credentials.internal')
