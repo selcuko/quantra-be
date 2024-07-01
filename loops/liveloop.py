@@ -1,4 +1,8 @@
 import django
+
+from loops.logger import *
+from loops.errors import AlreadyRunningError, NoEquityError
+from utils import can_session_buy, can_session_sell
 django.setup()
 from order import OrderManager
 import json
@@ -93,6 +97,8 @@ class LiveLoop:
 
     def precheck(self):
         """Prechecks before starting the live loop"""
+        if self.running and self.thread:
+            raise AlreadyRunningError()
         self.imarket.get_account()
         # validate capital and asset amound
         market_capital = self.imarket.capital
@@ -104,11 +110,7 @@ class LiveLoop:
             logger.warning(f'Asset limit ({self.session.assets}) is greater than available assets ({market_assets}), updating asset limit to {market_assets}', extra={'loop': repr(self)})
             self.session.assets = self.imarket.assets.get(self.symbol.base, 0)
         if self.session.capital < 5 and self.session.assets <= 0:
-            logger.critical(f'Capital and asset limits are too low, terminating ({self.session.capital} {self.symbol.quote}, {self.session.assets} {self.symbol.base}).', extra={'loop': repr(self)})
-            self.session.status = Session.Status.TERMINATED
-            self.session.save()
-            return False
-        return True
+            raise NoEquityError()
 
     def prepare_kline_snapshot(self):
         """Prepares the last kline and last 100 klines for the session."""
@@ -129,12 +131,10 @@ class LiveLoop:
 
     def run(self, **kwargs):
         """Fire and forget function to start the live loop and keep it running in a seperate thread."""
-        if self.running and self.thread:
-            logger.error(f'LiveLoop is already running in thread {self.thread.name}, id={self.thread.ident} - refusing to start another thread.', extra={'loop': repr(self)})
-            return
-        precheck_ok = self.precheck()
-        if not precheck_ok:
-            logger.error(f'Precheck failed, terminating.', extra={'loop': repr(self)})
+        try:
+            self.precheck()
+        except Exception as e:
+            logger.exception(f'Precheck failed, terminating.', extra={'loop': repr(self)})
             return
         snapshot_ok = self.prepare_kline_snapshot()
         if not snapshot_ok:
@@ -290,14 +290,6 @@ class LiveLoop:
 
         return True
 
-    def can_buy(self):
-        """Returns whether the session can buy or not based on available capital and buy permission."""
-        return self.session.capital >= 5 and self.session.buy_enabled
-
-    def can_sell(self):
-        """Returns whether the session can sell or not based on available assets and sell permission."""
-        return self.session.assets * (self.session.last_price or 0) >= 5 and self.session.sell_enabled
-
     def buy(self, last_kline:dict):
         """Buys the asset if possible. Returns the order object if successful, None otherwise. Meant to be called from on_candle method."""
         signal = Signal.objects.create(
@@ -306,7 +298,7 @@ class LiveLoop:
             side=Signal.Side.BUY,
             price=float(last_kline['close']),
             raw=last_kline)
-        if not self.can_buy():
+        if not can_session_buy(self.session):
             return
         order_manager = OrderManager(self.imarket, self.session)
 
@@ -335,7 +327,7 @@ class LiveLoop:
             side=Signal.Side.SELL,
             price=float(last_kline['close']),
             raw=last_kline)
-        if not self.can_sell():
+        if not can_session_sell(self.session):
             return
         order_manager = OrderManager(self.imarket, self.session)
 
@@ -383,6 +375,11 @@ class LiveLoop:
             print('neg res', residue)
             time.sleep(1)
         return True
+
+    def shutdown(self, exc:'Exception|None'=None, msg:str='', gracefully:bool=True):
+        '''Called internally when Loop wants to shutdown itself.'''
+        
+
 
     def idle(self):
         """Idle indefinitely (for development purposes)"""
