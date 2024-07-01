@@ -72,6 +72,9 @@ class GateIOMarket(IMarket):
         self.sign({}, path)
         response = self.session.get(url)
         data = response.json()
+        if not response.ok:
+            logger.error(f'Failed to fetch account data: {data}', extra={'market': self.name, 'type': 'MARKET'})
+            raise MarketAPIError(f'Failed to fetch account data: {data}')
         for symbol in data:
             self.assets[symbol['currency']] = float(symbol['available'])
         self.capital = self.assets.get('USDT', 0)
