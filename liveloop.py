@@ -288,7 +288,6 @@ class LiveLoop:
             self.session.initial_price = self.last_kline['close']
         self.session.save()
 
-        self.run_complex_orders()
         return True
 
     def can_buy(self):

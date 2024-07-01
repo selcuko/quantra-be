@@ -1,8 +1,6 @@
-from re import A
 import threading
 import time
 import traceback
-from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Callable, Optional
 
@@ -14,17 +12,17 @@ from django.utils import timezone
 import typing
 if typing.TYPE_CHECKING:
     from markets.interface import IMarket
-    from quantapi.models import Market, MarketSymbol
-
+    from quantapi.models import Market, MarketSymbol, MarketAccount
 
 
 class BookKeeper:
-    def __init__(self, symbol:'MarketSymbol', callback:Optional[Callable]=None, market:Optional['IMarket']=None):
-        self.market = market or symbol.market.get_interface()
+    def __init__(self, symbol:'MarketSymbol', account:'MarketAccount', callback:Optional[Callable]=None, interface:Optional['IMarket']=None):
+        self.interface = interface or account.get_interface()
+        self.account = account
         self.symbol = symbol
         self.orderbook = OrderBook()
         self.callbacks = [callback] if callback else []
-        self.name = f'BookKeeper of {symbol.name}@{self.market.name}'
+        self.name = f'BookKeeper of {symbol.name}@{self.interface.name}'
         self.thread = None
 
     def __str__(self):
@@ -34,9 +32,9 @@ class BookKeeper:
         """Start the BookKeeper in the background, in another thread."""
         if self.is_running():
             raise RuntimeError('This BookKeeper is already running.')
-        snapshot = self.market.get_full_orderbook(self.symbol)
+        snapshot = self.interface.get_full_orderbook(self.symbol)
         self.on_snapshot(snapshot)
-        self.thread = threading.Thread(target=self.market.init_orderbook_websocket, args=(self.symbol, self.on_update), daemon=True)
+        self.thread = threading.Thread(target=self.interface.init_orderbook_websocket, args=(self.symbol, self.on_update), daemon=True)
         self.thread.start()
 
     def is_running(self):
@@ -91,7 +89,7 @@ class BookKeeper:
 
     def stop(self):
         if self.thread and self.thread.is_alive():
-            self.market.stop_websocket_stream = True
+            self.interface.stop_websocket_stream = True
             self.thread.join()
 
 
@@ -110,7 +108,7 @@ class BookMaster:
     def add_keeper(self, keeper:BookKeeper):
         if keeper.symbol.name != self.symbol.name:
             raise ValueError(f'Cannot add a BookKeeper with a different symbol. Current symbol is {self.symbol.name}, what you were trying to add is: {keeper.symbol.name}')
-        self.keepers[keeper.market] = keeper
+        self.keepers[keeper.interface] = keeper
         keeper.add_callback(self.keeper_callback)
         self.load_snapshot(keeper.orderbook)
     
@@ -198,13 +196,15 @@ if __name__ == '__main__':
     from quantapi.models import Market, MarketSymbol
     
     bybit = Market.objects.get(exchange_name='BYBIT')
+    bybit_acct = MarketAccount.objects.get(market=bybit)
     btc_bybit = MarketSymbol.objects.get(name='BTC-USDT', market=bybit)
 
     okx = Market.objects.get(exchange_name='MEXC')
+    okx_acct = MarketAccount.objects.get(market=okx)
     btc_okx = MarketSymbol.objects.get(name='BTC-USDT', market=okx)
 
-    bybit_keeper = BookKeeper(btc_bybit)
-    okx_keeper = BookKeeper(btc_okx)
+    bybit_keeper = BookKeeper(btc_bybit, bybit_acct)
+    okx_keeper = BookKeeper(btc_okx, okx_acct)
 
     master = BookMaster(btc_bybit)
     master.add_keeper(bybit_keeper)

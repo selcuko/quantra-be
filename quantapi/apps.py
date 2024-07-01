@@ -4,7 +4,6 @@ from django.apps import AppConfig
 import pytz
 from logger import logger
 from models import interval_to_minutes
-from ob_server import start_orderbook_server
 
 
 def continue_sessions():
