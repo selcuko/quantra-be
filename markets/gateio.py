@@ -19,7 +19,7 @@ from match import MatchEngine
 from models import interval_to_minutes
 if typing.TYPE_CHECKING:
     from quantapi.models import MarketAccount, MarketSymbol, Order
-    from liveloop import LiveLoop
+    from loops import LiveLoop
 
 
 class GateIOMarket(IMarket):

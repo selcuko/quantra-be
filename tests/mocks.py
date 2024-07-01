@@ -6,8 +6,8 @@ from unittest.mock import Mock
 
 import pytz
 
-from liveloop import LiveLoop
-from loopgroup import LoopGroup
+from loops import LiveLoop
+from loops import LoopGroup
 from markets.errors import InsufficientBalance
 from markets.interface import IMarket
 from quantapi.models import MarketAccount, MarketSymbol, Order

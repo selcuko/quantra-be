@@ -201,8 +201,8 @@ class TestManager:
         self.bought = True
         self.bought_price = price
         if sync:
-            self.assets += sync.deal_size
-            self.capital -= sync.deal_funds
+            self.assets += sync.deal_size if sync.deal_size else 0
+            self.capital -= sync.deal_funds if sync.deal_funds else 0
             if self.capital < 0:
                 logger.error('Capital is less than 0, TestMan went out of sync with market data. (setting to 0)')
                 self.capital = 0
@@ -235,8 +235,8 @@ class TestManager:
         price = kline['close']
         self.bought = False
         if sync:
-            self.capital += sync.deal_funds
-            self.assets -= sync.deal_size
+            self.capital += sync.deal_funds if sync.deal_funds else 0
+            self.assets -= sync.deal_size if sync.deal_size else 0
             if self.assets < 0:
                 logger.error('Assets is less than 0, TestMan went out of sync with market data. (setting to 0)')
                 self.assets = 0

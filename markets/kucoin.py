@@ -7,8 +7,8 @@ from decimal import Decimal
 from typing import Literal
 if typing.TYPE_CHECKING:
     from quantapi.models import MarketSymbol, Order, MarketAccount
-    from liveloop import LiveLoop
-    from loopgroup import LoopGroup
+    from loops.liveloop import LiveLoop
+    from loops.loopgroup import LoopGroup
     
 
 import pytz

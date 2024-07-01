@@ -20,8 +20,8 @@ from models import interval_to_minutes
 
 if typing.TYPE_CHECKING:
     from quantapi.models import MarketSymbol, Order, MarketAccount
-    from liveloop import LiveLoop
-    from loopgroup import LoopGroup
+    from loops import LiveLoop
+    from loops import LoopGroup
 
 
 from websockets.exceptions import ConnectionClosed, ConnectionClosedOK

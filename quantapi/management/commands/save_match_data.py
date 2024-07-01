@@ -1,6 +1,6 @@
 import os
 from django.core.management.base import BaseCommand, CommandParser, CommandError
-from liveloop import LiveLoop
+from loops import LiveLoop
 from markets.errors import MarketAPIUnavailable
 from quantapi.models import MarketAccount
 

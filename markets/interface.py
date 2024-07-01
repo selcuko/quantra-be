@@ -8,8 +8,8 @@ from markets.errors import MarketAPIUnavailable
 
 if TYPE_CHECKING:
     from quantapi.models import Order, MarketSymbol, MarketAccount, Market
-    from liveloop import LiveLoop
-    from loopgroup import LoopGroup
+    from loops import LiveLoop
+    from loops import LoopGroup
 
 
 

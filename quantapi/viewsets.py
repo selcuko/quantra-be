@@ -10,7 +10,7 @@ from rest_framework.exceptions import MethodNotAllowed
 from rest_framework.response import Response
 
 from cache import LIVELOOPS, LOOPGROUPS
-from liveloop import LiveLoop
+from loops import LiveLoop
 from markets.errors import OrderPlacementError
 from order import OrderManager
 from quantapi.filters import (GlobalSymbolFilter, MarketAccountFilter, MarketSymbolFilter,

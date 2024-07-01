@@ -13,9 +13,9 @@ from django.views import View
 from cache import get_loopgroup, get_liveloop
 
 from backtest import async_analyze
-from liveloop import LiveLoop
+from loops import LiveLoop
 from logger import logger
-from loopgroup import LoopGroup
+from loops import LoopGroup
 from markets.errors import (InsufficientBalance, MarketDisabledTrading,
                             SymbolNotInMarket)
 from order import OrderManager

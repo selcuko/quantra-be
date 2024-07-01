@@ -22,8 +22,8 @@ from match import MatchEngine
 from models import interval_to_minutes
 
 if typing.TYPE_CHECKING:
-    from liveloop import LiveLoop
-    from loopgroup import LoopGroup
+    from loops.liveloop import LiveLoop
+    from loops.loopgroup import LoopGroup
     from quantapi.models import MarketAccount, MarketSymbol, Order
 
 

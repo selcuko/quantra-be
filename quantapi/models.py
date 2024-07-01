@@ -20,7 +20,7 @@ from cache import get_loopgroup
 from models import interval_to_minutes
 
 if typing.TYPE_CHECKING:
-    from liveloop import LiveLoop
+    from loops import LiveLoop
     from markets import IMarket
 
 
@@ -389,7 +389,7 @@ class Session(models.Model):
         """Resume an interrupted session."""
         from quantapi.validations import validate_session_can_start
         validate_session_can_start(self)
-        from liveloop import LiveLoop
+        from loops import LiveLoop
         ll = LiveLoop.from_session(self)
         ll.run()
         return ll
@@ -486,7 +486,7 @@ class SessionGroup(models.Model):
             raise ValueError('SessionGroup must be saved before resuming')
         if not self.strategy:
             raise ValueError('SessionGroup must have a strategy to resume')
-        from loopgroup import LoopGroup
+        from loops import LoopGroup
         loop = LoopGroup(group=self, freq=self.freq)
         try:
             loop.run(source=self.source)

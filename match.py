@@ -96,11 +96,11 @@ if __name__ == '__main__':
     import django
     django.setup()
     from logger import logger
-    from quantapi.models import Market
+    from quantapi.models import MarketAccount
     def callback(candle):
         logger.info(f'CANDLE: {candle!s}')
     print('Fetching market...')
-    market = Market.objects.get(exchange_name='BINANCE')
+    market = MarketAccount.objects.get(market__exchange_name='BINANCE')
     print('Loading interface...')
     iface = market.get_interface()
     print('Initiating websocket connection...')

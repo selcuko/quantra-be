@@ -4,7 +4,7 @@ from unittest import mock
 import pytz
 
 from logger import logger
-from loopgroup import LoopGroup
+from loops import LoopGroup
 from quantapi.models import (GroupOrder, MarketAccount, MarketCredentials,
                              Order, SessionGroup, Signal)
 from tests.core import QuantTestCase
@@ -53,7 +53,7 @@ class LoopGroupTests(QuantTestCase):
         self.assertEqual(loop.thread, None)
         self.assertEqual(loop.will_stop, False)
 
-    @mock.patch('loopgroup.get_strategy', mock_get_strategy)
+    @mock.patch('loops.loopgroup.get_strategy', mock_get_strategy)
     @mock.patch.object(MarketAccount, 'get_interface', mock_get_interface)
     def test_loop_precheck_passes(self):
         loop = LoopGroup(self.group)
@@ -63,7 +63,7 @@ class LoopGroupTests(QuantTestCase):
         self.assertIsNotNone(loop.strategy)
         self.assertIsNotNone(loop.interface)
 
-    @mock.patch('loopgroup.get_strategy', mock_get_strategy)
+    @mock.patch('loops.loopgroup.get_strategy', mock_get_strategy)
     @mock.patch.object(MarketAccount, 'get_interface', mock_get_interface)
     def test_loop_run_method_runs_ok(self):
         loop = LoopGroup(self.group)
@@ -84,7 +84,7 @@ class LoopGroupTests(QuantTestCase):
 
         loop.stop()
 
-    @mock.patch('loopgroup.get_strategy', mock_get_strategy)
+    @mock.patch('loops.loopgroup.get_strategy', mock_get_strategy)
     @mock.patch.object(MarketAccount, 'get_interface', mock_get_interface)
     def test_loop_can_handle_candle_event(self):
         loop = LoopGroup(self.group)
@@ -96,7 +96,7 @@ class LoopGroupTests(QuantTestCase):
         loop.on_candle(candle)
         self.assertEqual(loop.last_kline_dt, candle['time'])
 
-    @mock.patch('loopgroup.get_strategy', mock_get_strategy)
+    @mock.patch('loops.loopgroup.get_strategy', mock_get_strategy)
     @mock.patch.object(MarketAccount, 'get_interface', mock_get_interface)
     def test_loop_can_handle_buy_signal(self):
         self.account1.capital = 10
@@ -133,7 +133,7 @@ class LoopGroupTests(QuantTestCase):
         self.assertEqual(order.side, Order.Side.BUY)
         self.assertEqual(order.deal_funds, 10)
 
-    @mock.patch('loopgroup.get_strategy', mock_get_strategy)
+    @mock.patch('loops.loopgroup.get_strategy', mock_get_strategy)
     @mock.patch.object(MarketAccount, 'get_interface', mock_get_interface)
     def test_loop_can_handle_sell_signal(self):
         self.account1.assets = '{ "BTC": 0.1 }'
@@ -170,7 +170,7 @@ class LoopGroupTests(QuantTestCase):
         self.assertEqual(order.side, Order.Side.SELL)
         self.assertEqual(order.deal_funds, 5000.0)
 
-    @mock.patch('loopgroup.get_strategy', mock_get_strategy)
+    @mock.patch('loops.loopgroup.get_strategy', mock_get_strategy)
     @mock.patch.object(MarketAccount, 'get_interface', mock_get_interface)
     def test_loop_can_stop(self):
         loop = LoopGroup(self.group)
