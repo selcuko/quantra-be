@@ -33,7 +33,7 @@ class MarketSymbolFilter(filters.FilterSet):
 
 
 class SessionFilter(filters.FilterSet):
-    status = filters.MultipleChoiceFilter(choices=Session.Status.choices)
+    status = filters.CharFilter(method='filter_status')
     source = filters.MultipleChoiceFilter(choices=Session.CandleSource.choices, field_name='candle_source')
     account = filters.CharFilter(field_name='account__credentials__owner', label='account owner', lookup_expr='icontains')
     strategy = filters.CharFilter(field_name='strategy__pk', label='strategy')
@@ -46,6 +46,12 @@ class SessionFilter(filters.FilterSet):
     class Meta:
         model = Session
         fields = ['status', 'source', 'strategy', 'market', 'account', 'symbol', 'created_after']
+    
+    def filter_status(self, queryset, name, value):
+        query = Q()
+        for status in value.split(","):
+            query |= Q(status=status)
+        return queryset.filter(query)
 
 
 class SessionGroupFilter(filters.FilterSet):
