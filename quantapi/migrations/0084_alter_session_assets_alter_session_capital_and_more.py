@@ -7,7 +7,9 @@ import django.db.models.deletion
 def forwards(apps, schema_editor):
     Session = apps.get_model('quantapi', 'Session')
     Strategy = apps.get_model('quantapi', 'Strategy')
-    default_strategy = Strategy.objects.get(code='v1')
+    default_strategy = Strategy.objects.filter(code='v1').first()
+    if not default_strategy:
+        return
     sessions = Session.objects.filter(strategy__isnull=True)
     sessions.update(strategy=default_strategy)
 

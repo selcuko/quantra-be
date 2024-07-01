@@ -11,6 +11,9 @@ class OrderManagerTests(QuantTestCase):
         self.setup_market()
         self.setup_account()
         self.setup_session()
+        self.account.capital = 1000
+        self.account.assets = '{ "BTC": 1 }'
+        self.account.save()
         self.session.capital = 1000
         self.session.assets = 1
         self.session.save()

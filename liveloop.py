@@ -13,10 +13,11 @@ import pytz
 from logger import logger
 from markets.errors import OrderPostProcessingError
 from models import OHLCVDataset, interval_to_minutes
-from quantapi.models import MarketAccount, MarketSymbol, Session, SessionGroup, Signal, ComplexOrder
+from quantapi.models import MarketAccount, MarketSymbol, Session, SessionGroup, Signal
 from quantapi.models import Strategy as StrategyModel
 from strategy import Strategy, get_strategy
 from cache import set_liveloop
+
 
 class LiveLoop:
     def __init__(self, symbol:str, account:MarketAccount, strategy:Strategy, capital_limit:float,
@@ -68,7 +69,7 @@ class LiveLoop:
 
     def __str__(self):
         return f'LL:{self.symbol.base}@{self.market.exchange_name}:{self.freq}'
-    
+
     def __repr__(self):
         return f'{self.symbol.base}@{self.market.exchange_name}:{self.freq}'
 
@@ -318,6 +319,7 @@ class LiveLoop:
             )
         except OrderPostProcessingError as e:
             logger.error(f'Order post processing failed. Order might or might no be placed. {e!r}', extra={'type': 'ORDER', 'prefix': repr(self)})
+            return
         except:
             logger.error(f'Unhandled error while placing order.', exc_info=True, extra={'type': 'ORDER', 'loop': repr(self)})
             return
@@ -346,6 +348,7 @@ class LiveLoop:
             )
         except OrderPostProcessingError as e:
             logger.error(f'Order post processing failed. Order might or might no be placed. {e!r}', extra={'type': 'ORDER', 'prefix': repr(self)})
+            return
         except:
             logger.error(f'Unhandled error while placing order.', exc_info=True, extra={'type': 'ORDER', 'loop': repr(self)})
             return
@@ -353,15 +356,6 @@ class LiveLoop:
         order.signal = signal
         order.save()
         return order
-
-    def run_complex_orders(self):
-        if self.session.status != Session.Status.ONGOING:
-            return
-        complex_orders = ComplexOrder.objects.filter(session=self.session, status=ComplexOrder.Status.PENDING)
-        for co in complex_orders:
-            if co.is_ready(self):
-                co.execute(self)
-                co.save()
 
     def should_stop(self):
         """Returns whether the loop should stop or not"""

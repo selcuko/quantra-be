@@ -1,20 +1,13 @@
 from typing import Optional
 from django.test import TestCase
 from quantapi.models import Market, MarketAccount, MarketCredentials, MarketSymbol, Session, Strategy
+import strategy
 
 
 class QuantTestCase(TestCase):
     def setup_market(self, exchange='TEST-EXCHANGE'):
         self.market = Market.objects.create(exchange_name=exchange)
         return self.market
-    
-    def setup_strategy(self, name='Test Strategy', version='2.1b'):
-        self.strategy = Strategy.objects.create(
-            name=name,
-            technical_name='Technical Test Strategy',
-            code='tts',
-            version=version,
-        )
 
     def setup_account(self, market=None):
         if not market:
@@ -33,6 +26,17 @@ class QuantTestCase(TestCase):
         self.account.save()
         return self.account
 
+    def setup_strategy(self, name='Test Strategy', version='2.1b'):
+        if hasattr(self, 'strategy'):
+            return self.strategy
+        self.strategy = Strategy.objects.create(
+            name=name,
+            technical_name='Technical Test Strategy',
+            code='tts',
+            version=version,
+        )
+        return self.strategy
+
     def setup_session(self, account:Optional[MarketAccount]=None):
         if not account and not hasattr(self, 'account'):
             raise AttributeError('Run setup_account() first.')
@@ -48,6 +52,7 @@ class QuantTestCase(TestCase):
             initial_assets=0,
             capital=100,
             assets=0,
+            strategy=self.setup_strategy()
         )
         return self.session
 
