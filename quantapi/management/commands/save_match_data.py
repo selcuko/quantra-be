@@ -16,9 +16,9 @@ class Command(BaseCommand):
     help = 'Save MatchEngine data to a CSV file'
 
     def add_arguments(self, parser: CommandParser) -> None:
-        parser.add_argument('--symbol', type=str, help='Trading pair symbol (e.g. BTC-USDT)')
-        parser.add_argument('--market', type=str, help='Market exchange name (e.g. MEXC)')
-        parser.add_argument('--output', type=str, help='Output file path')
+        parser.add_argument('--symbol', required=True, type=str, help='Trading pair symbol (e.g. BTC-USDT)')
+        parser.add_argument('--market', required=True, type=str, help='Market exchange name (e.g. MEXC)')
+        parser.add_argument('--output', required=True, type=str, help='Output file path')
         parser.add_argument('--overwrite', action='store_true', help='Overwrite output file if it exists')
 
     def handle(self, *args, **options):

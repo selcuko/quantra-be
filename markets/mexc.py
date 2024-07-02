@@ -16,7 +16,7 @@ from websockets.sync.client import ClientConnection, connect
 
 from logger import logger
 from markets import IMarket
-from markets.errors import InsufficientBalance, KlineFetchFailed, MarketAPIUnavailable, RejectedOrder
+from markets.errors import InsufficientBalance, KlineFetchFailed, MarketAPIError, MarketAPIUnavailable, RejectedOrder
 from markets.helper import authentication_required
 from match import MatchEngine
 from models import interval_to_minutes
@@ -301,6 +301,8 @@ class MEXCMarket(IMarket):
         try:
             request_query = self._prep_payload()
             response = self.session.get(uri, params=request_query)
+            if not response.ok:
+                raise MarketAPIError(f'{self.name} API error: {response.text}')
             account_payload = response.json()
             self.spot_trading_enabled = 'SPOT' in account_payload.get('permissions', [])
             self.margin_trading_enabled = 'MARGIN' in account_payload.get('permissions', [])
