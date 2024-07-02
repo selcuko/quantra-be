@@ -37,10 +37,8 @@ class SessionFilter(filters.FilterSet):
     source = filters.MultipleChoiceFilter(choices=Session.CandleSource.choices, field_name='candle_source')
     account = filters.CharFilter(field_name='account__credentials__owner', label='account owner', lookup_expr='icontains')
     strategy = filters.CharFilter(field_name='strategy__pk', label='strategy')
-    market = filters.CharFilter(field_name='market_account__market__pk', lookup_expr='iexact', label='market ID')
-    market_name = filters.CharFilter(field_name='market_account__market__exchange_name', lookup_expr='icontains', label='market name')
-    symbol = filters.CharFilter(field_name='symbol__pk', label='symbol ID')
-    symbol_name = filters.CharFilter(field_name='symbol__name', lookup_expr='icontains', label='symbol name')
+    market = filters.CharFilter(field_name='account__market__exchange_name', lookup_expr='iexact', label='market ID')
+    symbol = filters.CharFilter(field_name='symbol__base', label='symbol ID')
     created_after = filters.DateTimeFilter(field_name='started', lookup_expr='gte')
 
     class Meta:

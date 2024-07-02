@@ -8,3 +8,9 @@ class NoEquityError(Exception):
 class AlreadyRunningError(Exception):
     '''Raised when trying to start a Session or SessionGroup that is already running'''
     message = 'This Loop is already running.'
+
+
+class CannotFetchCandles(Exception):
+    '''Raised when the interface cannot fetch candles for some reason'''
+    pass
+
