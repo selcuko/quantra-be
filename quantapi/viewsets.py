@@ -75,7 +75,10 @@ class MarketAccountViewSet(viewsets.ReadOnlyModelViewSet):
         serializer.is_valid(raise_exception=True)
         if not serializer.data or not isinstance(serializer.data, dict):
             return Response({'detail': 'No data provided.'}, status=400)
-        account = serializer.data.get('account')
+        if isinstance(serializer.validated_data, dict):
+            account = serializer.validated_data['account']
+        else:
+            account = serializer.data.get('account')
         get_serializer = MarketAccountSerializer(instance=account, context=self.get_serializer_context())
         return Response(get_serializer.data, status=201)
 
