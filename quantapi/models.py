@@ -18,6 +18,7 @@ from errors import SessionCannotContinue
 from logger import logger
 from cache import get_loopgroup
 from models import interval_to_minutes
+from quantapi.utils import credentials_expiring_soon
 
 if typing.TYPE_CHECKING:
     from loops import LiveLoop
@@ -155,6 +156,7 @@ class MarketCredentials(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     expires_at = models.DateTimeField(default=three_months_later)
+    notified_at = models.DateTimeField(null=True, blank=True, help_text='Last time owner was notified about expiration')
     owner      = models.CharField(max_length=30)
     internal   = models.BooleanField(default=False, help_text='Owned by a team member')
     active     = models.BooleanField(default=True, help_text='Account can be used for trading')
@@ -204,9 +206,15 @@ class MarketAccount(models.Model):
         if self.market != self.credentials.market:
             raise ValueError('Market and credentials should be for the same market.')
         super().save(*args, **kwargs)
-    
+
     def get_interface(self):
         from markets import get_market
+        remaining_time = self.credentials.expires_at - timezone.now()
+        last_notified = timezone.now() - self.credentials.notified_at if self.credentials.notified_at else timedelta(days=365)
+        if remaining_time < timedelta(days=7) and last_notified > timedelta(days=1):
+                self.credentials.notified_at = timezone.now()
+                self.credentials.save()
+                credentials_expiring_soon(self)
         return get_market(self.market.exchange_name, self.credentials.decrypted, self)
 
     @property
@@ -216,19 +224,19 @@ class MarketAccount(models.Model):
     @property
     def owner(self):
         return self.credentials.owner
-    
+
     @property
     def active(self):
         return self.credentials.active
-    
+
     @property
     def internal(self):
         return self.credentials.internal
-    
+
     @property
     def exchange(self):
         return self.market.exchange_name
-    
+
     @classmethod
     def get_available_accounts(cls, only_internal=False):
         if only_internal:
@@ -237,7 +245,7 @@ class MarketAccount(models.Model):
 
     def active_issues(self):
         return self.issues.filter(status=Issue.Status.ACTIVE)
-    
+
     def refresh(self, interface:'IMarket|None'=None, force=False):
         interface = interface or self.get_interface()
         if self.last_cache and timezone.now() - self.last_cache < timedelta(minutes=1) and not force:
@@ -887,16 +895,6 @@ class Backtest(models.Model):
 
     def __str__(self) -> str:
         return f'{self.symbol} {self.market} {self.status}'
-
-
-class WhitelistedUser(models.Model):
-    user = models.OneToOneField(User, on_delete=models.PROTECT, related_name='allowed_user')
-    allowed = models.BooleanField(default=False)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self) -> str:
-        return f'{self.user.username} {self.allowed}'
 
 
 class GlobalSymbol(models.Model):
