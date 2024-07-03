@@ -3,7 +3,7 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
-from telegram import send_message
+from relay.telegram import send_message
 
 class Issue(models.Model):
     class Level(models.TextChoices):

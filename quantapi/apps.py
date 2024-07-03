@@ -49,8 +49,6 @@ def continue_sessions():
             group.save()
             logger.critical(f'Failed to resume group {group} on startup.', exc_info=True, extra={'n_type': 'CRASH', 'subject': 'Failed to resume group on reboot'})
 
-    from watchdog import watchdog_loop
-    threading.Thread(target=watchdog_loop, daemon=True).start()
 
 
 def symbol_metrics_update_loop():
