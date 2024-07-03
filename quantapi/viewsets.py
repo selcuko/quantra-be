@@ -15,16 +15,15 @@ from markets.errors import OrderPlacementError
 from order import OrderManager
 from quantapi.filters import (GlobalSymbolFilter, MarketAccountFilter, MarketSymbolFilter,
                               SessionFilter, SessionGroupFilter)
-from quantapi.models import (Endpoint, GlobalSymbol, GroupOrder, Issue, Market,
-                             MarketAccount, MarketSymbol, Notification, Order,
+from quantapi.models import (GlobalSymbol, GroupOrder, Market,
+                             MarketAccount, MarketSymbol, Order,
                              Session, SessionGroup, Signal, Strategy,
                              Subscription)
-from quantapi.serializers import (DraftSessionSerializer, EndpointSerializer,
+from quantapi.serializers import (DraftSessionSerializer,
                                   GlobalSymbolSerializer, GroupOrderSerializer,
-                                  IssueSerializer, LiveLoopSerializer,
+                                  LiveLoopSerializer,
                                   LoopGroupSerializer, MarketAccountSerializer,
                                   MarketSerializer, MarketSymbolSerializer, NewAccountSerializer,
-                                  NotificationSerializer,
                                   OrderPlacementSerializer, OrderSerializer,
                                   SessionGroupSerializer,
                                   SessionOrderPlacementSerializer,
@@ -323,31 +322,6 @@ class SubscriptionViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Subscription.objects.all()
     serializer_class = SubscriptionSerializer
     filter_backends = [DjangoFilterBackend]
-
-
-class EndpointViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Endpoint.objects.all()
-    serializer_class = EndpointSerializer
-    filter_backends = [DjangoFilterBackend]
-
-
-class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Notification.objects.all()
-    serializer_class = NotificationSerializer
-    filter_backends = [DjangoFilterBackend]
-
-
-class IssueViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Issue.objects.all()
-    serializer_class = IssueSerializer
-    filter_backends = [DjangoFilterBackend]
-
-    @action(detail=False, methods=['get', 'post'], url_path='(?P<class_name>[^/.]+)/(?P<id>[^/.]+)', url_name='for-model')
-    def for_model(self, request, class_name, id):
-        issues = Issue.objects.filter(content_type__model=class_name, object_id=id)
-        serializer = IssueSerializer(issues, many=True)
-        return Response(serializer.data)
-
 
 class LiveLoopViewSet(viewsets.ViewSet):
     def list(self, request):

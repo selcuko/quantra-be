@@ -6,6 +6,8 @@ import traceback
 from django.conf import settings
 from logtail import LogtailHandler
 
+from relay.models import Notification
+
 
 class ColoredFormatter(logging.Formatter):
     """Logging Formatter to add colors and count warning / errors"""
@@ -78,7 +80,6 @@ class NotificationHandler(logging.Handler):
     def emit(self, record):
         if settings.TESTING:
             return
-        from quantapi.models import Notification
         if record.levelno <= logging.WARNING:
             return
         # get the exception passed in with exc_info=True

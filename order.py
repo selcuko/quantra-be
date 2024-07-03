@@ -11,7 +11,8 @@ from markets.errors import (InsufficientBalance, OrderNotFilledError,
                             OrderPlacementError, OrderPostProcessingError,
                             RejectedOrder)
 from markets.helper import float_to_precision
-from quantapi.models import GroupOrder, Issue, MarketSymbol, Order, Session, SessionGroup
+from quantapi.models import GroupOrder, MarketSymbol, Order, Session, SessionGroup
+from relay.models import Issue
 from utils import can_session_buy, can_session_sell
 
 

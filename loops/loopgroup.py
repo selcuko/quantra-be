@@ -14,11 +14,12 @@ from logger import logger
 from markets.errors import MarketAPIUnavailable
 from models import OHLCVDataset, interval_to_minutes
 from order import GroupOrderManager
-from quantapi.models import Issue, MarketAccount, Session, SessionGroup, Signal
+from quantapi.models import MarketAccount, Session, SessionGroup, Signal
 from quantapi.models import Strategy as StrategyModel
 from strategy import Strategy, get_strategy
 from cache import set_loopgroup
 from utils import can_group_buy, can_group_sell
+from relay.models import Issue
 
 MINIMUM_INITIAL_CAPITAL = 0
 MINIMUM_BUY_AMOUNT = 5

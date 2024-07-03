@@ -1,8 +1,8 @@
 import json
 from django.urls import reverse
 from rest_framework import serializers
-from quantapi.models import (Endpoint, GlobalSymbol, GroupOrder, Market, MarketAccount, MarketCredentials, 
-                             MarketSymbol, Notification, Order, Session, SessionGroup, 
+from quantapi.models import (GlobalSymbol, GroupOrder, Market, MarketAccount, MarketCredentials, 
+                             MarketSymbol, Order, Session, SessionGroup, 
                              Signal, Strategy, Subscription)
 from quantapi.validations import validate_order_payload, validate_symbol_against_market
 
@@ -152,7 +152,6 @@ class SessionSerializer(serializers.HyperlinkedModelSerializer):
     status = serializers.CharField(required=False)
     thread = serializers.SerializerMethodField()
     strategy = StrategySerializer(required=False)
-    issues = serializers.HyperlinkedRelatedField(many=True, read_only=True, view_name='issue-detail')
 
     class Meta:
         model = Session
@@ -160,7 +159,7 @@ class SessionSerializer(serializers.HyperlinkedModelSerializer):
                   'strategy', 'status', 'last_price', 'last_kline_timestamp', 
                   'last_heartbeat', 'capital', 'assets', 'initial_capital', 
                   'initial_assets', 'buy_enabled', 'sell_enabled', 'account', 
-                  'equity', 'orders', 'signals', 'thread', 'health', 'url', 'issues']
+                  'equity', 'orders', 'signals', 'thread', 'health', 'url']
 
 
     def get_thread(self, obj):
@@ -280,24 +279,6 @@ class SignalSerializer(serializers.HyperlinkedModelSerializer):
 class SubscriptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Subscription
-        fields = '__all__'
-
-
-class EndpointSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Endpoint
-        fields = '__all__'
-
-
-class NotificationSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Notification
-        fields = '__all__'
-
-
-class IssueSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Notification
         fields = '__all__'
 
 
