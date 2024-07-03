@@ -47,12 +47,6 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'quantapi',
-    'allauth',
-    'allauth.account',
-    'allauth.socialaccount',
-    'allauth.socialaccount.providers.google',
-    'allauth.socialaccount.providers.apple',
-    'allauth.socialaccount.providers.github',
     'silk',
     'rest_framework',
     'django_filters',
@@ -70,15 +64,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'allauth.account.middleware.AccountMiddleware',
     'quantapi.middleware.WhitelistedUserMiddleware',
     'silk.middleware.SilkyMiddleware'
-]
-
-LOGIN_REQUIRED_IGNORE_PATHS = [
-    r'/accounts/*',
-    r'/admin/$',
-    r'/about/$'
 ]
 
 LOGIN_REDIRECT_URL = '/'
@@ -109,11 +96,11 @@ WSGI_APPLICATION = 'quant.wsgi.application'
 
 RDS = {
         'ENGINE': 'django.db.backends.postgresql_psycopg2',
-        'NAME': os.environ.get('DATABASE_NAME', 'quantdev'),
-        'USER': 'postgres',
-        'PASSWORD': 'REDACTED',
-        'HOST': 'db.example.invalid',
-        'PORT': '5432',
+        'NAME': os.environ.get('DATABASE_NAME'),
+        'USER': os.environ.get('DATABASE_USER'),
+        'PASSWORD': os.environ.get('DATABASE_PASSWORD'),
+        'HOST': os.environ.get('DATABASE_HOST'),
+        'PORT': os.environ.get('DATABASE_PORT') or '5432',
 }
 SQLITE = {
             'ENGINE': 'django.db.backends.sqlite3',
@@ -145,10 +132,7 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 AUTHENTICATION_BACKENDS = [
-    # Needed to login by username in Django admin, regardless of `allauth`
     'django.contrib.auth.backends.ModelBackend',
-    # `allauth` specific authentication methods, such as login by email
-    'allauth.account.auth_backends.AuthenticationBackend',
 ]
 
 # Internationalization
@@ -176,23 +160,6 @@ STATICFILES_DIRS = [
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-
-SOCIALACCOUNT_PROVIDERS = {
-    'google': {
-        # For each OAuth based provider, either add a ``SocialApp``
-        # (``socialaccount`` app) containing the required client
-        # credentials, or list them here:
-        'APP': {
-            'client_id': 'REDACTED.apps.googleusercontent.com',
-            'secret': 'REDACTED',
-            'key': ''
-        },
-        'SCOPE': [
-            'profile',
-            'email',
-        ],
-    }
-}
 
 REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.LimitOffsetPagination',
