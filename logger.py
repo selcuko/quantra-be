@@ -6,7 +6,6 @@ import traceback
 from django.conf import settings
 from logtail import LogtailHandler
 
-from relay.models import Notification
 
 
 class ColoredFormatter(logging.Formatter):
@@ -78,6 +77,7 @@ if LOGTAIL_TOKEN and 0:
 
 class NotificationHandler(logging.Handler):
     def emit(self, record):
+        from relay.models import Notification
         if settings.TESTING:
             return
         if record.levelno <= logging.WARNING:

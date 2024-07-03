@@ -9,6 +9,8 @@ from typing import Callable, Literal, Optional
 import pytz
 import requests
 from binance.client import Client
+from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
+from websockets.sync.client import connect
 
 from logger import logger
 from markets.errors import (InsufficientBalance, KlineFetchFailed,
@@ -19,13 +21,8 @@ from match import MatchEngine
 from models import interval_to_minutes
 
 if typing.TYPE_CHECKING:
-    from quantapi.models import MarketSymbol, Order, MarketAccount
-    from loops import LiveLoop
-    from loops import LoopGroup
-
-
-from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
-from websockets.sync.client import connect
+    from loops import LiveLoop, LoopGroup
+    from quantapi.models import MarketAccount, MarketSymbol, Order
 
 
 class BinanceMarket(IMarket):
@@ -34,7 +31,6 @@ class BinanceMarket(IMarket):
     def __init__(self, config:dict, account:'MarketAccount'):
         if config is None:
             config = {}
-        self.authenticated = bool(config.get('API_KEY') and config.get('API_SECRET'))
         self.testnet = False
         self.spot_trading_enabled = False
         self.capital = 0
@@ -43,17 +39,14 @@ class BinanceMarket(IMarket):
         self.account = account
         self.market = self.account.market
         self.stop_websocket_stream = False
-        if self.authenticated:
-            self.testnet = config.get('TESTNET', False)
-            self.client = Client(
-                api_key=config['API_KEY'],
-                api_secret=config['API_SECRET'],
-                testnet=self.testnet)
-        else:
-            self.client = Client()
+        self.testnet = config.get('TESTNET', False)
+        self.client = Client(
+            api_key=config['API_KEY'],
+            api_secret=config['API_SECRET'],
+            testnet=self.testnet
+        )
         self.symbols = self.get_symbols()
-        if self.authenticated:
-            self.get_account()
+        self.get_account()
 
     def get_websocket_uri(self, symbol:'MarketSymbol|str', interval:str) -> str:
         if isinstance(symbol, str):
