@@ -87,7 +87,7 @@ class BinanceMarket(IMarket):
             'maker': data['m'],
         }
 
-    def init_match_engine(self, symbol:str, interval:str, callback:Callable, liveloop:'LiveLoop|LoopGroup|None'):
+    def init_match_engine(self, symbol:str, interval:str, callback:Callable, liveloop:'LiveLoop|LoopGroup|None', raw_callback:Optional[Callable]=None):
         ws_uri = f'wss://stream.binance.com:9443/ws/{self._format_symbol(symbol).lower()}@trade'
         ws = connect(ws_uri)
         me = MatchEngine(interval, callback)
@@ -103,6 +103,8 @@ class BinanceMarket(IMarket):
             try:
                 data = json.loads(ws.recv(timeout=10))
                 retries = 0
+                if raw_callback:
+                    raw_callback(data)
                 match = self.format_match(data)
                 me.on_match(match)
             except TimeoutError:

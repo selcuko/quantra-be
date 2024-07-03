@@ -6,7 +6,7 @@ import typing
 import uuid
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Callable, Literal
+from typing import Callable, Literal, Optional
 from urllib.parse import urlencode
 
 import pytz
@@ -23,6 +23,7 @@ from models import interval_to_minutes
 
 if typing.TYPE_CHECKING:
     from liveloop import LiveLoop
+    from loopgroup import LoopGroup
     from quantapi.models import MarketAccount, MarketSymbol, Order
 
 
@@ -109,7 +110,7 @@ class MEXCMarket(IMarket):
             raise Exception(f'Error while subscribing to {topic}: {ack}')
         return ws
 
-    def init_match_engine(self, symbol:str, interval:str, callback:Callable, liveloop:'LiveLoop'):
+    def init_match_engine(self, symbol:str, interval:str, callback:Callable, liveloop:'LiveLoop|LoopGroup', raw_callback:Optional[Callable]=None):
         ws = self.get_match_engine_ws(symbol)
         last_ping = datetime.now()
         me = MatchEngine(interval, callback)
@@ -138,6 +139,8 @@ class MEXCMarket(IMarket):
                 continue
             if response.get('msg') == 'PONG':
                 continue
+            if raw_callback:
+                raw_callback(response)
             deals = response['d']['deals']
             for deal in deals:
                 me.on_match(self.format_match(deal))

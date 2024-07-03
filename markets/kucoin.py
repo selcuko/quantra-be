@@ -8,6 +8,7 @@ from typing import Literal
 if typing.TYPE_CHECKING:
     from quantapi.models import MarketSymbol, Order, MarketAccount
     from liveloop import LiveLoop
+    from loopgroup import LoopGroup
     
 
 import pytz
@@ -182,7 +183,7 @@ class KucoinMarket(IMarket):
             raise ValueError(f'Error while subscribing to {symbol} on {self.name}: {ack}')
         return ws
 
-    def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable, liveloop:'LiveLoop'):
+    def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable, liveloop:'LiveLoop|LoopGroup', raw_callback=None):
         ws = self.get_match_engine_socket(symbol)
         last_ping = datetime.now()
         engine = MatchEngine(interval, callback)
@@ -214,8 +215,10 @@ class KucoinMarket(IMarket):
                 continue
             if not data.get('subject') == 'trade.l3match':
                 continue
+            if raw_callback:
+                raw_callback(data)
             engine.on_match(self.format_match(data.get('data')))
-        
+
     def has_symbol(self, symbol:str) -> bool:
         if not self.symbols:
             self.symbols = self.get_symbols()
@@ -235,7 +238,7 @@ class KucoinMarket(IMarket):
         except:
             logger.error(f'Error while standardizing klines for {self.name}: {klines}', exc_info=True)
             raise
-    
+
     @staticmethod
     def _standardize_symbol(symbol:str) -> str:
         return symbol
@@ -251,16 +254,16 @@ class KucoinMarket(IMarket):
     @staticmethod
     def _format_symbol(symbol:str) -> str:
         return symbol.upper()
-    
+
     @staticmethod
     def _format_interval(interval:str) -> str:
         return interval.replace(' ', '')
-    
+
     @staticmethod
     def _format_datetime(dt:datetime) -> int:
         assert isinstance(dt, datetime), f'Expected datetime, got {type(dt)}'
         return int(dt.timestamp())
-    
+
     def _get_symbol_from_name(self, symbol_name:str):
         try:
             return self.symbols[symbol_name]

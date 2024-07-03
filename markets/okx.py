@@ -21,6 +21,7 @@ from models import interval_to_minutes
 if typing.TYPE_CHECKING:
     from quantapi.models import MarketAccount, MarketSymbol, Order
     from liveloop import LiveLoop
+    from loopgroup import LoopGroup
 
 
 class OKXMarket(IMarket):
@@ -224,7 +225,7 @@ class OKXMarket(IMarket):
                 raise MarketAPIError(f'Failed to subscribe to websocket: {ack}')
             return ws
 
-    def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable, liveloop:'LiveLoop|None'):
+    def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable, liveloop:'LiveLoop|LoopGroup|None', raw_callback:'typing.Optional[typing.Callable]'=None):
         ws = self.get_match_engine_socket(symbol)
         engine = MatchEngine(interval, callback)
         retries = 30
@@ -247,6 +248,8 @@ class OKXMarket(IMarket):
             if not data.get('data'):
                 logger.warning(f'Received a message in an unrecognized format from {self.name} websocket: {data}', extra={'market': self, 'type': 'MARKET'})
                 continue
+            if raw_callback:
+                raw_callback(data)
             trade = self.format_match(data['data'][0])
             engine.on_match(trade)
 

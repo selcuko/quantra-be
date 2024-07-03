@@ -232,7 +232,7 @@ class BybitMarket(IMarket):
             raise MarketAPIError(f'Failed to subscribe to websocket: {ack}')
         return ws
 
-    def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable, liveloop:'LiveLoop|LoopGroup|None'):
+    def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable, liveloop:'LiveLoop|LoopGroup|None', raw_callback:typing.Optional[typing.Callable]=None):
         ws = self.get_match_engine_socket(symbol)
         last_ping = timezone.now()
         engine = MatchEngine(interval, callback)
@@ -258,6 +258,8 @@ class BybitMarket(IMarket):
                 ws = self.get_match_engine_socket(symbol)
                 retries += 1
                 continue
+            if raw_callback:
+                raw_callback(data)
             trade = self.format_match(data['data'][0])
             engine.on_match(trade)
         ws.close()
