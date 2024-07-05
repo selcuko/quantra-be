@@ -1,5 +1,11 @@
 
 
+class InvalidUsage(Exception):
+    """Invalid usage of API"""
+    status_code = 500
+    message = 'Invalid call signature'
+
+
 class SymbolNotInMarket(Exception):
     """Symbol not found in the market"""
     status_code = 400

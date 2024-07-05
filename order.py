@@ -5,6 +5,7 @@ from typing import Literal
 
 from django.utils import timezone
 
+import incident
 from logger import logger
 from markets import IMarket
 from markets.errors import (InsufficientBalance, OrderNotFilledError,
@@ -178,12 +179,7 @@ class GroupOrderManager:
                     assets = session.assets * pct / 100
                     order = manager.place(self.group.symbol, side, deal_size=assets, validate=False)
             except Exception as exc:
-                issue = Issue.from_exception(exc)
-                issue.object = session.account
-                issue.level = Issue.Level.CRITICAL
-                issue.save()
-                logger.critical(f'Error placing order for {session.account}: {exc!r}')
-                continue
+                incident.Order.ErrorPlacing(exc)
             order.group = group_order # type: ignore
             order.save()
             if order.status == Order.Status.FILLED:

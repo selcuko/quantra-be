@@ -84,7 +84,7 @@ class NewAccountSerializer(serializers.Serializer):
         except Exception as e:
             acct.delete()
             creds.delete()
-            raise serializers.ValidationError(detail='Failed to authenticate with the provided credentials.')
+            raise serializers.ValidationError(detail=f'Failed to authenticate with the provided credentials: {e!r}')
         data['account'] = acct
         data['credentials'] = creds
         return data
