@@ -1,3 +1,4 @@
+import json
 from typing import Optional
 from django.test import TestCase
 from quantapi.models import Market, MarketAccount, MarketCredentials, MarketSymbol, Session, Strategy
@@ -6,7 +7,10 @@ import strategy
 
 class QuantTestCase(TestCase):
     def setup_market(self, exchange='TEST-EXCHANGE'):
-        self.market = Market.objects.create(exchange_name=exchange)
+        self.market = Market.objects.create(exchange_name=exchange, prices=json.dumps({
+            'BTC-USDT': 50000,
+            'ETH-USDT': 3000,
+        }))
         return self.market
 
     def setup_account(self, market=None):
