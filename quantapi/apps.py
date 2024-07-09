@@ -62,6 +62,16 @@ def symbol_metrics_update_loop():
             logger.warning('Failed to update symbol metrics.', exc_info=True)
 
 
+def reboot_notification():
+    from relay.models import Notification
+    n = Notification.objects.create(
+        severity=Notification.Severity.INFO,
+        notification_type=Notification.Type.LOG,
+        subject='Quant API rebooted',
+        message='Quant API has been rebooted, initiating session recovery sequence.',
+    )
+    n.send()
+
 class QuantapiConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'quantapi'
@@ -71,6 +81,7 @@ class QuantapiConfig(AppConfig):
         # check if this is a migration or not
         import sys
         if 'runserver' in sys.argv or 'quant.wsgi' in sys.argv:
+            threading.Thread(target=reboot_notification, daemon=True).start()
             threading.Thread(target=continue_sessions, daemon=True).start()
             threading.Thread(target=symbol_metrics_update_loop, daemon=True).start()
 

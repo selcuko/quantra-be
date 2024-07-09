@@ -1,4 +1,5 @@
 import json
+from os import read
 from django.urls import reverse
 from rest_framework import serializers
 from quantapi.models import (GlobalSymbol, GroupOrder, Market, MarketAccount, MarketCredentials, 
@@ -9,19 +10,12 @@ from quantapi.validations import validate_order_payload, validate_symbol_against
 
 class MarketSerializer(serializers.HyperlinkedModelSerializer):
     prices = serializers.HyperlinkedIdentityField(view_name='market-prices')
-    accounts = serializers.SerializerMethodField()
+    accounts = serializers.HyperlinkedIdentityField(view_name='marketaccount-detail', many=True)
 
     class Meta:
         model = Market
         fields = ['id', 'exchange_name', 'prices_updated', 'prices', 'icon', 'accounts']
 
-    def get_accounts(self, obj):
-        request = self.context.get('request')
-        if not request:
-            return []
-        return [
-            request.build_absolute_uri(reverse('marketaccount-detail', args=[account.id])) for account in obj.accounts.all()
-        ]
 
 class MarketAccountSerializer(serializers.HyperlinkedModelSerializer):
     assets = serializers.SerializerMethodField()
@@ -273,7 +267,7 @@ class SignalSerializer(serializers.HyperlinkedModelSerializer):
     orders = serializers.HyperlinkedIdentityField(view_name='signal-orders')
     class Meta:
         model = Signal
-        fields = ['id', 'url', 'session', 'group', 'symbol', 'timestamp', 'orders']
+        fields = ['id', 'url', 'session', 'group', 'symbol', 'timestamp', 'orders', 'side', 'price']
 
 
 class SubscriptionSerializer(serializers.ModelSerializer):
