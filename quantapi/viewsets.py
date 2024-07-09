@@ -1,4 +1,5 @@
 import json
+from multiprocessing import context
 import threading
 
 from django.db.models import Prefetch
@@ -168,14 +169,14 @@ class SessionViewSet(viewsets.ModelViewSet):
     def orders(self, request, pk):
         session = self.get_object()
         orders = session.orders.all()
-        serializer = OrderSerializer(orders, many=True)
+        serializer = OrderSerializer(orders, many=True, context={'request': request})
         return Response(serializer.data)
 
     @action(detail=True, methods=['get'])
     def signals(self, request, pk):
         session = self.get_object()
         signals = session.signals.all()
-        serializer = SignalSerializer(signals, many=True)
+        serializer = SignalSerializer(signals, many=True, context={'request': request})
         return Response(serializer.data)
 
     @action(detail=True, methods=['post'])
