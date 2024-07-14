@@ -260,11 +260,13 @@ class GateIOMarket(IMarket):
         response = self.session.post(url, data=json.dumps(payload))
         data = response.json()
         if not data.get('id'):
-            msg = data.get('message').lower()
+            msg = data.get('message', '').lower() or data.get('retMsg', '').lower() or data.get('msg', '').lower()
             if 'not enough' in msg:
-                raise InsufficientBalance(f'Insufficient funds to place order on {self.name}: {data.get("retMsg")}')
+                raise InsufficientBalance(f'Insufficient funds to place order on {self.name}: {msg}')
             if 'too many decimals' in msg:
-                raise RejectedOrder(f'Order was rejected by the exchange {self.name}: {data.get("retMsg")}')
+                raise RejectedOrder(f'Order was rejected by the exchange {self.name}: {msg}')
+            if 'minimum transaction volume' in msg:
+                raise RejectedOrder(f'Minimum transaction volume is less than required: {msg}')
             raise OrderPlacementError(data.get('retMsg'))
         order = self.prep_order(data)
         if side == 'buy' and not order.funds and funds:
@@ -389,7 +391,7 @@ class GateIOMarket(IMarket):
                 details=json.dumps(order, indent=2)
             )
         except KeyError as e:
-            key = str(e).replace('\'', '')
+            key = str(e)
             raise MarketAPIUnrecognizedResponse(key, order)
 
     def prep_symbol(self, symbol:dict) -> 'MarketSymbol':

@@ -3,6 +3,7 @@ from unittest import mock
 
 import pytz
 
+from markets.errors import RejectedOrder
 from markets.gateio import GateIOMarket
 from quantapi.models import Order
 from tests.core import QuantTestCase
@@ -38,7 +39,7 @@ class GateIOMarketTests(QuantTestCase):
         })
 
     @mock.patch('markets.gateio.requests.Session.post')
-    def test_place_market_order_symbol_object(self, mock_post):
+    def test_place_market_order(self, mock_post):
         mock_post.return_value.json.return_value = {
             'id': 'oid123',
             'finish_as': 'FILLED',
@@ -63,3 +64,10 @@ class GateIOMarketTests(QuantTestCase):
         self.assertEqual(order.price, 100)
         self.assertEqual(order.funds, 100)
         self.assertEqual(order.market_timestamp, datetime(2020, 1, 1, tzinfo=pytz.UTC))
+
+    @mock.patch('markets.gateio.requests.Session.post')
+    def test_place_market_order_with_small_funds(self, mock_post):
+        mock_post.return_value.json.return_value = { 'msg': 'The minimum transaction volume cannot be less tha: 5USDT' }
+        self.interface.symbols[self.symbol.name] = self.symbol
+        with self.assertRaises(RejectedOrder):
+            self.interface.place_market_order(self.symbol, 'buy', funds='100')

@@ -1,7 +1,8 @@
 
 def mock_get_account(interface):
-    pass
+    interface.capital = 1000
+    interface.assets = { }
 
 
 def mock_get_symbols(interface):
-    pass
+    interface.symbols = { }

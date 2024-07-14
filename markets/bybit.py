@@ -6,7 +6,7 @@ import json
 import time
 import requests
 from logger import logger
-from markets.errors import InsufficientBalance, KlineFetchFailed, MarketAPIError, MarketAPIUnavailable, OrderPlacementError, OrderPostProcessingError, RejectedOrder
+from markets.errors import InsufficientBalance, KlineFetchFailed, MarketAPIError, MarketAPIUnavailable, MarketAPIUnrecognizedResponse, OrderPlacementError, OrderPostProcessingError, RejectedOrder
 from markets.interface import IMarket
 from logger import logger
 from django.utils import timezone
@@ -289,8 +289,11 @@ class BybitMarket(IMarket):
             if 'too many decimals' in data.get('retMsg').lower() or 'exceeded' in data.get('retMsg').lower():
                 raise RejectedOrder(f'Order was rejected by the exchange {self.name}: {data.get("retMsg")}')
             raise OrderPlacementError(data.get('retMsg'))
-        
-        return self.get_order(symbol_object, data['result']['orderId'])
+
+        order = self.get_order(symbol_object, data['result']['orderId'])
+        if side == 'buy' and funds and not order.funds:
+            order.funds = float(funds)
+        return order
 
     def get_order(self, symbol:'MarketSymbol|str', order:'Order|int', retries:int=1) -> 'Order':
         if not isinstance(order, str) and not isinstance(order, int):
@@ -399,19 +402,23 @@ class BybitMarket(IMarket):
 
     def prep_order(self, order:dict) -> 'Order':
         from quantapi.models import Order
-        return Order(
-            oid=order['orderId'],
-            status='FILLED' if order['orderStatus'] == 'PartiallyFilledCanceled' else order['orderStatus'].upper(),
-            order_type=order['orderType'].upper(),
-            deal_size=float(order['cumExecQty']),
-            deal_funds=float(order['cumExecValue']),
-            price=float(order['basePrice']),
-            side=order['side'].upper(),
-            market_timestamp=self.standardize_timestamp(order['createdTime']),
-            symbol=self.get_symbol_from_name(self.standardize_symbol(order['symbol'])),
-            account=self.account,
-            details=json.dumps(order, indent=2)
-        )
+        try:
+            return Order(
+                oid=order['orderId'],
+                status='FILLED' if order['orderStatus'] == 'PartiallyFilledCanceled' else order['orderStatus'].upper(),
+                order_type=order['orderType'].upper(),
+                deal_size=float(order['cumExecQty']),
+                deal_funds=float(order['cumExecValue']),
+                price=float(order['basePrice']),
+                side=order['side'].upper(),
+                market_timestamp=self.standardize_timestamp(order['createdTime']),
+                symbol=self.get_symbol_from_name(self.standardize_symbol(order['symbol'])),
+                account=self.account,
+                details=json.dumps(order, indent=2)
+          )
+        except KeyError as e:
+            key = str(e)
+            raise MarketAPIUnrecognizedResponse(key, order)
 
     def prep_symbol(self, symbol:dict) -> 'MarketSymbol':
         from quantapi.models import MarketSymbol

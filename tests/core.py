@@ -63,14 +63,18 @@ class QuantTestCase(TestCase):
     def setup_symbol(self, name):
         if not self.market:
             raise AttributeError('Run setup_market() first.')
-        self.symbol = MarketSymbol.objects.create(
+        if (symbol := MarketSymbol.objects.filter(name=name, market=self.market).first()):
+            return symbol
+        symbol = MarketSymbol.objects.create(
             name=name,
             base=name.split('-')[0],
             quote=name.split('-')[1],
             market=self.market,
             spot_trading_enabled=True,
         )
-        return self.symbol
+        if not hasattr(self, 'symbol'):
+            self.symbol = symbol
+        return symbol
 
     def setup_symbols(self, names=['BTC-USDT', 'ETH-USDT']):
         return {name: self.setup_symbol(name) for name in names}
