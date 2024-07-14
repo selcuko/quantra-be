@@ -7,7 +7,7 @@ import time
 import traceback
 import requests
 from logger import logger
-from markets.errors import InsufficientBalance, KlineFetchFailed, MarketAPIError, OrderPlacementError, OrderPostProcessingError, RejectedOrder
+from markets.errors import InsufficientBalance, KlineFetchFailed, MarketAPIError, MarketAPIUnrecognizedResponse, OrderPlacementError, OrderPostProcessingError, RejectedOrder
 from markets.interface import IMarket
 from logger import logger
 
@@ -267,6 +267,8 @@ class GateIOMarket(IMarket):
                 raise RejectedOrder(f'Order was rejected by the exchange {self.name}: {data.get("retMsg")}')
             raise OrderPlacementError(data.get('retMsg'))
         order = self.prep_order(data)
+        if side == 'buy' and not order.funds and funds:
+            order.funds = float(funds)
         return order
 
     def get_order(self, symbol:'MarketSymbol|str|None', order:'Order|str|int', retries=0) -> 'Order':
@@ -372,19 +374,23 @@ class GateIOMarket(IMarket):
 
     def prep_order(self, order:dict) -> 'Order':
         from quantapi.models import Order
-        return Order(
-            oid=order['id'],
-            status=order['finish_as'].upper(),
-            order_type=order['type'].upper(),
-            deal_size=float(order['filled_amount']),
-            deal_funds=float(order['filled_total']),
-            price=float(order['fill_price']),
-            side=order['side'].upper(),
-            market_timestamp=self.standardize_timestamp(order['create_time']),
-            symbol=self.get_symbol_from_name(self.standardize_symbol(order['currency_pair'])),
-            market=self.market,
-            details=json.dumps(order, indent=2)
-        )
+        try:
+            return Order(
+                oid=order['id'],
+                status=order['finish_as'].upper(),
+                order_type=order['type'].upper(),
+                deal_size=float(order['filled_amount']),
+                deal_funds=float(order['filled_total']),
+                price=float(order['fill_price']),
+                side=order['side'].upper(),
+                market_timestamp=self.standardize_timestamp(order['create_time']),
+                symbol=self.get_symbol_from_name(self.standardize_symbol(order['currency_pair'])),
+                account=self.account,
+                details=json.dumps(order, indent=2)
+            )
+        except KeyError as e:
+            key = str(e).replace('\'', '')
+            raise MarketAPIUnrecognizedResponse(key, order)
 
     def prep_symbol(self, symbol:dict) -> 'MarketSymbol':
         from quantapi.models import MarketSymbol

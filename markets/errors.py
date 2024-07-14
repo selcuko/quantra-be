@@ -55,6 +55,17 @@ class MarketAPIUnavailable(MarketAPIError):
     message = 'Market API is unavailable'
 
 
+class MarketAPIUnrecognizedResponse(MarketAPIError):
+    """Market API returned an unrecognized response"""
+    status_code = 503
+
+    def __init__(self, key, response):
+        self.message = f'Market API returned an unrecognized response: expected {key} in {response}'
+
+    def __str__(self):
+        return self.message
+
+
 class InsufficientBalance(Exception):
     """Insufficient balance"""
     status_code = 400
