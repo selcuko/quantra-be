@@ -267,7 +267,7 @@ class GateIOMarket(IMarket):
                 raise RejectedOrder(f'Order was rejected by the exchange {self.name}: {msg}')
             if 'minimum transaction volume' in msg:
                 raise RejectedOrder(f'Minimum transaction volume is less than required: {msg}')
-            raise OrderPlacementError(data.get('retMsg'))
+            raise OrderPlacementError(msg or str(data))
         order = self.prep_order(data)
         if side == 'buy' and not order.funds and funds:
             order.funds = float(funds)

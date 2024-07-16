@@ -265,6 +265,12 @@ class GroupOrderSerializer(serializers.ModelSerializer):
 class SignalSerializer(serializers.HyperlinkedModelSerializer):
     symbol = InlineMarketSymbolSerializer()
     orders = serializers.HyperlinkedIdentityField(view_name='signal-orders')
+    price = serializers.SerializerMethodField()
+
+    def get_price(self, signal):
+        # check for NaN
+        return signal.price if signal.price == signal.price else None
+
     class Meta:
         model = Signal
         fields = ['id', 'url', 'session', 'group', 'symbol', 'timestamp', 'orders', 'side', 'price']
