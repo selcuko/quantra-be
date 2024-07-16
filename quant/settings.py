@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 
 import os
 from pathlib import Path
+from socket import gethostbyname, gethostname
 import sys
 import sentry_sdk
 
@@ -45,6 +46,7 @@ TESTING = sys.argv[1:2] == ['test']
 
 
 ALLOWED_HOSTS = ['localhost', 'api.example.com', 'api-dev.example.com']
+ALLOWED_HOSTS += [gethostbyname(gethostname())]
 CSRF_TRUSTED_ORIGINS = ['https://example.org', 'https://example.com', 'https://dev.example.com', 'https://api.example.com', 'https://api-dev.example.com']
 CORS_ALLOW_ALL_ORIGINS = True
 
