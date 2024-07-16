@@ -39,12 +39,12 @@ SECRET_KEY = 'django-insecure-REDACTED'
 SYMKEY = b'REDACTED'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DEBUG', True)
 ENVIRONMENT = os.environ.get('ENVIRONMENT', 'local')
 TESTING = sys.argv[1:2] == ['test']
 
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = ['localhost', 'api.example.com', 'api-dev.example.com']
 CSRF_TRUSTED_ORIGINS = ['https://example.org', 'https://example.com', 'https://dev.example.com', 'https://api.example.com', 'https://api-dev.example.com']
 CORS_ALLOW_ALL_ORIGINS = True
 
@@ -104,6 +104,7 @@ WSGI_APPLICATION = 'quant.wsgi.application'
 
 USE_X_FORWARDED_HOST = True
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
 
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
