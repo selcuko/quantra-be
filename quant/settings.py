@@ -16,17 +16,6 @@ from socket import gethostbyname, gethostname
 import sys
 import sentry_sdk
 
-sentry_sdk.init(
-    dsn="https://REDACTED@sentry.example.invalid/0",
-    # Set traces_sample_rate to 1.0 to capture 100%
-    # of transactions for performance monitoring.
-    traces_sample_rate=1.0,
-    # Set profiles_sample_rate to 1.0 to profile 100%
-    # of sampled transactions.
-    # We recommend adjusting this value in production.
-    profiles_sample_rate=1.0,
-)
-
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -44,6 +33,18 @@ DEBUG = os.environ.get('DEBUG', True)
 ENVIRONMENT = os.environ.get('ENVIRONMENT', 'local')
 TESTING = sys.argv[1:2] == ['test']
 
+if ENVIRONMENT != 'local':
+    sentry_sdk.init(
+        dsn="https://REDACTED@sentry.example.invalid/0",
+        # Set traces_sample_rate to 1.0 to capture 100%
+        # of transactions for performance monitoring.
+        traces_sample_rate=1.0,
+        # Set profiles_sample_rate to 1.0 to profile 100%
+        # of sampled transactions.
+        # We recommend adjusting this value in production.
+        profiles_sample_rate=1.0,
+    )
+
 
 ALLOWED_HOSTS = ['localhost', 'api.example.com', 'api-dev.example.com']
 ALLOWED_HOSTS += [gethostbyname(gethostname())]
@@ -60,6 +61,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'channels',
     'quantapi',
     'relay',
     'silk',
@@ -82,6 +84,12 @@ MIDDLEWARE = [
     'silk.middleware.SilkyMiddleware'
 ]
 
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels.layers.InMemoryChannelLayer',
+    },
+}
+
 LOGIN_REDIRECT_URL = '/'
 
 ROOT_URLCONF = 'quant.urls'
@@ -103,6 +111,8 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'quant.wsgi.application'
+ASGI_APPLICATION = 'quant.asgi.application'
+
 
 USE_X_FORWARDED_HOST = True
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
