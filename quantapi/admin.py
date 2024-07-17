@@ -12,17 +12,6 @@ class IssuesInline(GenericTabularInline):
     extra = 0
 
 
-class IssueAdmin(admin.ModelAdmin):
-    list_filter = ('level', 'status')
-    list_display = ('related_class', 'subject', 'level', 'status', 'created_at')
-
-    def get_queryset(self, request: HttpRequest) -> QuerySet[Issue]:
-        return super().get_queryset(request).prefetch_related('object')
-    
-    def related_class(self, obj):
-        return obj.object.__class__.__name__
-
-
 class BacktestAdmin(admin.ModelAdmin):
     list_display = ('__str__', 'symbol', 'market', 'start', 'end', 'freq', 'status')
     search_fields = ('symbol', 'market',)
@@ -140,17 +129,7 @@ class OrderAdmin(admin.ModelAdmin):
         return obj.oid or 'No ID'
 
 
-class NotificationAdmin(admin.ModelAdmin):
-    list_display = ('timestamp', 'message', 'severity', 'notification_type', 'state')
-    list_filter = ('severity', 'notification_type', 'state')
-    search_fields = ('message', 'subject')
 
-    actions = ['send']
-
-    @admin.action(description="Send selected notifications to respective groups")
-    def send(self, request, queryset):
-        for notification in queryset:
-            notification.send()
 
 
 class GlobalSymbolAdmin(admin.ModelAdmin):
@@ -242,11 +221,6 @@ admin.site.register(Session, SessionAdmin)
 admin.site.register(Signal, SignalAdmin)
 admin.site.register(Order, OrderAdmin)
 admin.site.register(Subscription)
-admin.site.register(Endpoint)
 admin.site.register(Backtest, BacktestAdmin)
-admin.site.register(WhitelistedUser)
 admin.site.register(Strategy)
-admin.site.register(Notification, NotificationAdmin)
-admin.site.register(ComplexOrder, ComplexOrderAdmin)
-admin.site.register(Issue, IssueAdmin)
 admin.site.register(Tag, TagAdmin)

@@ -7,7 +7,7 @@ import time
 import traceback
 import requests
 from logger import logger
-from markets.errors import InsufficientBalance, KlineFetchFailed, MarketAPIError, OrderPlacementError, OrderPostProcessingError, RejectedOrder
+from markets.errors import InsufficientBalance, KlineFetchFailed, MarketAPIError, MarketAPIUnrecognizedResponse, OrderPlacementError, OrderPostProcessingError, RejectedOrder
 from markets.interface import IMarket
 from logger import logger
 
@@ -19,7 +19,7 @@ from match import MatchEngine
 from models import interval_to_minutes
 if typing.TYPE_CHECKING:
     from quantapi.models import MarketAccount, MarketSymbol, Order
-    from liveloop import LiveLoop
+    from loops import LiveLoop
 
 
 class GateIOMarket(IMarket):
@@ -260,13 +260,17 @@ class GateIOMarket(IMarket):
         response = self.session.post(url, data=json.dumps(payload))
         data = response.json()
         if not data.get('id'):
-            msg = data.get('message').lower()
+            msg = data.get('message', '').lower() or data.get('retMsg', '').lower() or data.get('msg', '').lower()
             if 'not enough' in msg:
-                raise InsufficientBalance(f'Insufficient funds to place order on {self.name}: {data.get("retMsg")}')
+                raise InsufficientBalance(f'Insufficient funds to place order on {self.name}: {msg}')
             if 'too many decimals' in msg:
-                raise RejectedOrder(f'Order was rejected by the exchange {self.name}: {data.get("retMsg")}')
-            raise OrderPlacementError(data.get('retMsg'))
+                raise RejectedOrder(f'Order was rejected by the exchange {self.name}: {msg}')
+            if 'minimum transaction volume' in msg:
+                raise RejectedOrder(f'Minimum transaction volume is less than required: {msg}')
+            raise OrderPlacementError(msg or str(data))
         order = self.prep_order(data)
+        if side == 'buy' and not order.funds and funds:
+            order.funds = float(funds)
         return order
 
     def get_order(self, symbol:'MarketSymbol|str|None', order:'Order|str|int', retries=0) -> 'Order':
@@ -372,19 +376,23 @@ class GateIOMarket(IMarket):
 
     def prep_order(self, order:dict) -> 'Order':
         from quantapi.models import Order
-        return Order(
-            oid=order['id'],
-            status=order['finish_as'].upper(),
-            order_type=order['type'].upper(),
-            deal_size=float(order['filled_amount']),
-            deal_funds=float(order['filled_total']),
-            price=float(order['fill_price']),
-            side=order['side'].upper(),
-            market_timestamp=self.standardize_timestamp(order['create_time']),
-            symbol=self.get_symbol_from_name(self.standardize_symbol(order['currency_pair'])),
-            market=self.market,
-            details=json.dumps(order, indent=2)
-        )
+        try:
+            return Order(
+                oid=order['id'],
+                status=order['finish_as'].upper(),
+                order_type=order['type'].upper(),
+                deal_size=float(order['filled_amount']),
+                deal_funds=float(order['filled_total']),
+                price=float(order['fill_price']),
+                side=order['side'].upper(),
+                market_timestamp=self.standardize_timestamp(order['create_time']),
+                symbol=self.get_symbol_from_name(self.standardize_symbol(order['currency_pair'])),
+                account=self.account,
+                details=json.dumps(order, indent=2)
+            )
+        except KeyError as e:
+            key = str(e)
+            raise MarketAPIUnrecognizedResponse(key, order)
 
     def prep_symbol(self, symbol:dict) -> 'MarketSymbol':
         from quantapi.models import MarketSymbol

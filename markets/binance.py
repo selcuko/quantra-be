@@ -9,6 +9,8 @@ from typing import Callable, Literal, Optional
 import pytz
 import requests
 from binance.client import Client
+from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
+from websockets.sync.client import connect
 
 from logger import logger
 from markets.errors import (InsufficientBalance, KlineFetchFailed,
@@ -19,22 +21,14 @@ from match import MatchEngine
 from models import interval_to_minutes
 
 if typing.TYPE_CHECKING:
-    from quantapi.models import MarketSymbol, Order, MarketAccount
-    from liveloop import LiveLoop
-    from loopgroup import LoopGroup
-
-
-from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
-from websockets.sync.client import connect
+    from loops import LiveLoop, LoopGroup
+    from quantapi.models import MarketAccount, MarketSymbol, Order
 
 
 class BinanceMarket(IMarket):
     name = 'Binance'
 
     def __init__(self, config:dict, account:'MarketAccount'):
-        if config is None:
-            config = {}
-        self.authenticated = bool(config.get('API_KEY') and config.get('API_SECRET'))
         self.testnet = False
         self.spot_trading_enabled = False
         self.capital = 0
@@ -43,17 +37,14 @@ class BinanceMarket(IMarket):
         self.account = account
         self.market = self.account.market
         self.stop_websocket_stream = False
-        if self.authenticated:
-            self.testnet = config.get('TESTNET', False)
-            self.client = Client(
-                api_key=config['API_KEY'],
-                api_secret=config['API_SECRET'],
-                testnet=self.testnet)
-        else:
-            self.client = Client()
-        self.symbols = self.get_symbols()
-        if self.authenticated:
-            self.get_account()
+        self.testnet = config.get('TESTNET', False)
+        self.client = Client(
+            api_key=config['API_KEY'],
+            api_secret=config['API_SECRET'],
+            testnet=self.testnet
+        )
+        self.get_symbols()
+        self.get_account()
 
     def get_websocket_uri(self, symbol:'MarketSymbol|str', interval:str) -> str:
         if isinstance(symbol, str):
@@ -222,13 +213,12 @@ class BinanceMarket(IMarket):
                 details=json.dumps(symbol))
         return exc_symbol
 
-    @staticmethod
-    def _prep_order(order:dict) -> 'Order':
+    def _prep_order(self, order:dict) -> 'Order':
         from quantapi.models import Order
         order_time = order.get('time') or order.get('workingTime') or order.get('transactTime') or order.get('updateTime') or 0
         return Order(
             oid=order['orderId'],
-            client_oid=order['clientOrderId'],
+            client_oid=order.get('clientOrderId'),
             order_type=order['type'].upper(),
             price=float(order['price']),
             market_timestamp=datetime.fromtimestamp(int(order_time // 1000), tz=pytz.UTC),
@@ -238,6 +228,7 @@ class BinanceMarket(IMarket):
             funds=float(order.get('origQuoteOrderQty', 0)),
             details=json.dumps(order),
             side=order['side'].upper(),
+            account=self.account
         )
 
     def _get_klines(self, symbol:str, interval:str, start:datetime, end:Optional[datetime]=None, limit=1000, retry=0) -> list[list]:
@@ -306,7 +297,6 @@ class BinanceMarket(IMarket):
         return self.symbols
 
     def place_market_order(self, symbol:'MarketSymbol|str', side:Literal['buy', 'sell'], funds:Optional[str]=None, quantity:Optional[str]=None, validate=True) -> 'Order':
-        initial_quantity = quantity
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         client_oid = uuid.uuid4().hex
@@ -327,6 +317,7 @@ class BinanceMarket(IMarket):
             order = self._prep_order(_order_payload)
         except Exception as e:
             raise OrderPostProcessingError(e, oid=_order_payload.get('orderId'))
+        order.symbol = symbol
         return order
 
     def get_order(self, symbol:'MarketSymbol|str', order:'Order|int', retries:int=1) -> 'Order':

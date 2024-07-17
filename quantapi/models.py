@@ -1,6 +1,5 @@
 import json
 import threading
-import traceback
 import typing
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -8,63 +7,21 @@ from decimal import Decimal
 import pytz
 from cryptography.fernet import Fernet
 from django.conf import settings
+from django.utils import timezone
 from django.contrib.auth.models import User
-from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
-from django.contrib.contenttypes.models import ContentType
+from django.contrib.contenttypes.fields import GenericRelation
 from django.db import models
 
 from errors import SessionCannotContinue
 from logger import logger
 from cache import get_loopgroup
-from strategy import get_strategy
+from models import interval_to_minutes
+from quantapi.utils import credentials_expiring_soon
+from relay.models import Issue
 
 if typing.TYPE_CHECKING:
-    from liveloop import LiveLoop
-
-
-class Issue(models.Model):
-    class Level(models.TextChoices):
-        INFO = 'INFO', 'Info'
-        WARNING = 'WARNING', 'Warning'
-        ERROR = 'ERROR', 'Error'
-        CRITICAL = 'CRITICAL', 'Critical'
-    class Status(models.TextChoices):
-        ACTIVE = 'ACTIVE', 'Active'
-        ACKNOWLEDGED = 'ACKNOWLEDGED', 'Acknowledged'
-        IGNORED = 'IGNORED', 'Ignored'
-
-    level = models.CharField(max_length=30, choices=Level.choices, default=Level.INFO)
-    status = models.CharField(max_length=30, choices=Status.choices, default=Status.ACTIVE)
-    message = models.TextField()
-    subject = models.CharField(max_length=250)
-    traceback = models.TextField(null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    # Generic relationship fields
-    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
-    object_id = models.PositiveIntegerField()
-    object = GenericForeignKey()
-
-    def __str__(self):
-        return f'{self.status} {self.level} {self.subject}'
-
-    @property
-    def class_name(self):
-        if (cls:=self.content_type.model_class()):
-            return cls.__name__
-        else:
-            return 'Unknown'
-
-    @classmethod
-    def from_exception(cls, e:Exception, save=False):
-        issue = cls()
-        issue.traceback = traceback.format_exc()
-        issue.message = repr(e)
-        issue.subject = str(e)
-        if save:
-            issue.save()
-        return issue
+    from loops import LiveLoop
+    from markets import IMarket
 
 
 class Market(models.Model):
@@ -80,6 +37,7 @@ class Market(models.Model):
     symbols: models.QuerySet['MarketSymbol']
     prices = models.TextField(null=True, blank=True, help_text='Prices of symbols in this market')
     prices_updated = models.DateTimeField(null=True, blank=True, help_text='Last time prices were updated')
+    icon = models.URLField(null=True, blank=True, help_text='URL of the exchange icon')
 
     def filters(self, symbol):
         details = json.loads(symbol.details or '{}', )
@@ -120,6 +78,25 @@ class Market(models.Model):
                 'price_step': None,
             }
 
+    def fields(self):
+        access_key = { 'name': 'access_key', 'display_name': 'Access Key' }
+        api_key = { 'name': 'api_key', 'display_name': 'API Key' }
+        api_secret = { 'name': 'api_secret', 'display_name': 'API Secret' }
+        api_passphrase = { 'name': 'api_passphrase', 'display_name': 'API Passphrase' }
+        fields = []
+        match self.exchange_name.lower():
+            case 'binance' | 'bybit' | 'gateio':
+                fields = [api_key, api_secret]
+            case 'kucoin':
+                fields = [api_key, api_secret, api_passphrase]
+            case 'mexc':
+                fields = [api_secret, access_key]
+            case 'okx':
+                fields = [api_key, api_secret, api_passphrase]
+            case _:
+                fields = []
+        return fields
+
     def __str__(self):
         return self.exchange_name
 
@@ -133,6 +110,7 @@ class MarketCredentials(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     expires_at = models.DateTimeField(default=three_months_later)
+    notified_at = models.DateTimeField(null=True, blank=True, help_text='Last time owner was notified about expiration')
     owner      = models.CharField(max_length=30)
     internal   = models.BooleanField(default=False, help_text='Owned by a team member')
     active     = models.BooleanField(default=True, help_text='Account can be used for trading')
@@ -169,47 +147,50 @@ class MarketCredentials(models.Model):
 class MarketAccount(models.Model):
     market      = models.ForeignKey(Market, on_delete=models.PROTECT, related_name='accounts')
     credentials = models.ForeignKey(MarketCredentials, on_delete=models.PROTECT, related_name='accounts')
-    equity     = models.FloatField(null=True, blank=True, help_text='Total USDT equity in this account')
-    capital    = models.FloatField(null=True, blank=True, help_text='Total USDT capital in this account')
-    assets     = models.TextField(null=True, blank=True, help_text='Assets in this account')
+    equity     = models.FloatField(default=0, help_text='Total USDT equity in this account')
+    capital    = models.FloatField(default=0, help_text='Total USDT capital in this account')
+    assets     = models.TextField(default='{}', help_text='Assets in this account')
     last_cache = models.DateTimeField(null=True, blank=True, help_text='Last time equity/assets were updated')
     issues     = GenericRelation(Issue)
 
     def __str__(self):
-        return f'{self.market.exchange_name} {self.credentials.owner} (${round(self.equity, 2) if self.equity else 0})'
+        return f'MarketAccount <{self.pk}>'
 
     def save(self, *args, **kwargs):
         if self.market != self.credentials.market:
             raise ValueError('Market and credentials should be for the same market.')
         super().save(*args, **kwargs)
-    
+
     def get_interface(self):
         from markets import get_market
+        remaining_time = self.credentials.expires_at - timezone.now()
+        last_notified = timezone.now() - self.credentials.notified_at if self.credentials.notified_at else timedelta(days=365)
+        if remaining_time < timedelta(days=7) and last_notified > timedelta(days=1):
+                self.credentials.notified_at = timezone.now()
+                self.credentials.save()
+                credentials_expiring_soon(self)
         return get_market(self.market.exchange_name, self.credentials.decrypted, self)
 
     @property
     def available_capital(self):
-        assets = json.loads(self.assets or '{}')
-        if not self.capital:
-            return None
         return self.capital
 
     @property
     def owner(self):
         return self.credentials.owner
-    
+
     @property
     def active(self):
         return self.credentials.active
-    
+
     @property
     def internal(self):
         return self.credentials.internal
-    
+
     @property
     def exchange(self):
         return self.market.exchange_name
-    
+
     @classmethod
     def get_available_accounts(cls, only_internal=False):
         if only_internal:
@@ -218,6 +199,13 @@ class MarketAccount(models.Model):
 
     def active_issues(self):
         return self.issues.filter(status=Issue.Status.ACTIVE)
+
+    def refresh(self, interface:'IMarket|None'=None, force=False):
+        interface = interface or self.get_interface()
+        if self.last_cache and timezone.now() - self.last_cache < timedelta(minutes=1) and not force:
+            return
+        interface.get_account()
+        return
 
 
 class MarketSymbol(models.Model):
@@ -264,10 +252,7 @@ class MarketSymbol(models.Model):
         }
 
     def __str__(self):
-        try:
-            return f'{self.name}@{self.market.exchange_name}'
-        except:
-            return f'{self.name}@NOMARKET'
+        return self.name
 
     def filters(self):
         return self.market.filters(self)
@@ -304,6 +289,9 @@ class Session(models.Model):
         HOUR8 = '8 hour', '8 hours'
         HOUR12 = '12 hour', '12 hours'
         DAY1  = '1 day',  '1 day'
+        WEEK1 = '1 week', '1 week'
+        MONTH1 = '1 month', '1 month'
+
 
     session_type = models.CharField(max_length=30, choices=Type.choices, default=Type.LIVE_MAINNET)
     freq = models.CharField(max_length=30, default=Freq.MIN15, choices=Freq.choices)
@@ -312,19 +300,19 @@ class Session(models.Model):
     started = models.DateTimeField(auto_now_add=True)
     ended = models.DateTimeField(null=True, blank=True)
     symbol = models.ForeignKey(MarketSymbol, on_delete=models.PROTECT, related_name='sessions')
-    strategy = models.ForeignKey('Strategy', on_delete=models.PROTECT, related_name='sessions', null=True, blank=True)
+    strategy = models.ForeignKey('Strategy', on_delete=models.PROTECT, related_name='sessions')
     planned_shutdown = models.DateTimeField(null=True, blank=True)
-    status = models.CharField(max_length=30, choices=Status.choices)
+    status = models.CharField(max_length=30, choices=Status.choices, default=Status.PLANNED)
     report = models.CharField(max_length=256, null=True, blank=True, help_text='Report file name')
     last_heartbeat = models.DateTimeField(null=True, blank=True)
     last_price = models.FloatField(null=True, blank=True)
     last_kline_timestamp = models.DateTimeField(null=True, blank=True)
     signals: models.QuerySet['Signal']
     subscriptions: models.QuerySet['Subscription']
-    initial_capital = models.FloatField()
-    initial_assets = models.FloatField()
-    capital = models.FloatField()
-    assets = models.FloatField()
+    initial_capital = models.FloatField(default=0)
+    initial_assets = models.FloatField(default=0)
+    capital = models.FloatField(default=0)
+    assets = models.FloatField(default=0)
     thread_id = models.BigIntegerField(null=True, blank=True)
     use_heikin_ashi = models.BooleanField(default=False)
     candle_source = models.CharField(max_length=30, choices=CandleSource.choices, default=CandleSource.TRADE)
@@ -335,7 +323,7 @@ class Session(models.Model):
     sell_enabled = models.BooleanField(default=True)
     initiated_at = models.DateTimeField(auto_now_add=True)
     orders: models.QuerySet['Order']
-    issues     = GenericRelation(Issue)
+    issues = GenericRelation(Issue)
 
     @property
     def equity(self):
@@ -346,7 +334,7 @@ class Session(models.Model):
         return round(self.capital + self.assets * last_price, 2)
 
     def __str__(self):
-        return f'{self.strategy} - {self.symbol.base} - {self.account.market.exchange_name} - {self.status}'
+        return f'Session <{self.pk}>'
 
     @property
     def analytics(self):
@@ -355,49 +343,20 @@ class Session(models.Model):
 
     @property
     def thread(self):
-        threads = threading.enumerate()
-        for thread in threads:
-            if thread.ident == self.thread_id and thread.is_alive():
+        for thread in threading.enumerate():
+            if thread.ident == self.thread_id:
                 return thread
 
     def resume(self):
         """Resume an interrupted session."""
-        if self.group:
-            raise ValueError('Cannot resume a session that belongs to a group, try resuming the SessionGroup instead')
-        if not self.status == Session.Status.ONGOING:
-            raise ValueError(f'Session status should be ONGOING to resume, not {self.status}')
-        if not self.pk:
-            raise ValueError('Session must be saved before resuming')
-        if not self.strategy:
-            raise ValueError('Session must have a strategy to resume')
-        from liveloop import LiveLoop
-        strategy = get_strategy(self.strategy.name)
-        ll = LiveLoop(
-            symbol=self.symbol.name,
-            account=self.account,
-            strategy=strategy(params=json.loads(self.strategy_parameters or '{}')),
-            capital_limit=self.capital,
-            asset_limit=self.assets,
-            freq=self.freq,
-            end=self.planned_shutdown,
-            session=self)
-        if self.candle_source == Session.CandleSource.WEBSOCKET:
-            ll.run(websocket=True)
-        elif self.candle_source == Session.CandleSource.REST:
-            ll.run(polling=True)
-        elif self.candle_source == Session.CandleSource.TRADE:
-            ll.run(match_engine=True)
-        else:
-            raise ValueError(f'Invalid candle source: {self.candle_source}')
+        from quantapi.validations import validate_session_can_start
+        validate_session_can_start(self)
+        from loops import LiveLoop
+        ll = LiveLoop.from_session(self)
+        ll.run()
         return ll
 
-    def recent_order_error(self):
-        # return True if if there is an order with status ERROR in the last 5 orders
-        orders = Order.objects.filter(signal__session=self).order_by('-created_at')[:5]
-        orders = orders.filter(status=Order.Status.ERROR)
-        return orders.exists()
-
-    def update(self, interface, save=True):
+    def refresh(self, interface, save=True):
         # Update session capital and assets to ensure they are not higher than the interface's
         interface = interface or self.account.get_interface()
         new_capital = min(self.capital, interface.capital)
@@ -411,13 +370,22 @@ class Session(models.Model):
         if save: self.save()
 
     def save(self, **kwargs):
-        if self.account:
-            if self.capital > (self.account.capital or 0):
-                raise ValueError(f'Session capital ({self.capital}) cannot be higher than account capital ({self.account.capital}).')
-            account_assets = json.loads(self.account.assets or '{}')
-            if self.assets > account_assets.get(self.symbol.base, 0):
-                raise ValueError(f'Session assets ({self.assets}) cannot be higher than account assets ({account_assets.get(self.symbol.base)}).')
+        from quantapi.validations import validate_session_can_save
+        validate_session_can_save(self)
         super().save(**kwargs)
+
+    def health(self):
+        if self.status != Session.Status.ONGOING:
+            return 'Not ongoing'
+        if not self.last_kline_timestamp:
+            return 'No heartbeat'
+        candle_mins = interval_to_minutes(self.freq)
+        if self.last_kline_timestamp < datetime.now(pytz.utc) - timedelta(minutes=candle_mins*3):
+            return 'No heartbeat for 3 candles'
+        thread = self.thread
+        if not thread or not thread.is_alive():
+            return 'Thread not alive'
+        return 'Healthy'
 
 
 class SessionGroup(models.Model):
@@ -449,7 +417,7 @@ class SessionGroup(models.Model):
     issues     = GenericRelation(Issue)
 
     def __str__(self):
-        return f'{self.status} SessionGroup for {self.symbol.base}@{self.market.exchange_name}'
+        return f'SessionGroup <{self.pk}>'
 
     @property
     def capital(self):
@@ -480,7 +448,7 @@ class SessionGroup(models.Model):
             raise ValueError('SessionGroup must be saved before resuming')
         if not self.strategy:
             raise ValueError('SessionGroup must have a strategy to resume')
-        from loopgroup import LoopGroup
+        from loops import LoopGroup
         loop = LoopGroup(group=self, freq=self.freq)
         try:
             loop.run(source=self.source)
@@ -562,7 +530,7 @@ class Signal(models.Model):
         return super().save(*args, **kwargs)
 
     def __str__(self) -> str:
-        return f'{self.side} {self.symbol} {self.price}'
+        return f'{self.side} {self.price}'
     
     @property
     def symbol(self):
@@ -652,7 +620,7 @@ class Order(models.Model):
 
     @property
     def messages(self):
-        return self.messages_raw.split('\n')
+        return self.messages_raw.split(r'\n')
     
     @messages.setter
     def messages(self, value):
@@ -664,11 +632,7 @@ class Order(models.Model):
         self.messages = messages
 
     def __str__(self) -> str:
-        if self.side == Order.Side.BUY:
-            return f'{self.status} {self.order_type.title()} {self.side} Order: ${self.deal_funds} worth of {self.symbol.name}'
-        elif self.side == Order.Side.SELL:
-            return f'{self.status} {self.order_type.title()} {self.side} Order: {self.deal_size} {self.symbol.base}'
-        return f'{self.status} {self.order_type.title()} Order: {self.symbol.name}'
+        return f'Order <{self.pk}> {self.side} {self.status}'
 
     def refresh_from_market(self, market_interface):
         if not self.oid:
@@ -762,7 +726,7 @@ class ComplexOrder(models.Model):
     market_order = models.OneToOneField(Order, on_delete=models.PROTECT, related_name='complex_order', null=True, blank=True)
 
     def __str__(self) -> str:
-        return f'{self.status} {self.type} @ {self.session.symbol.base}'
+        return f'{self.status} {self.type}'
 
     def is_ready(self, ll:'LiveLoop') -> bool:
         if self.type == ComplexOrder.Type.TARGET_PRICE and self.target_price:
@@ -782,86 +746,6 @@ class Subscription(models.Model):
 
     def __str__(self) -> str:
         return f'SUB {self.user.username} - {self.session.strategy} - {self.session.symbol.name}'
-
-
-class Endpoint(models.Model):
-    class Type(models.TextChoices):
-        TELEGRAM = 'TELEGRAM'
-    class Group(models.TextChoices):
-        TRADER = 'TRADER'
-        ADMIN = 'ADMIN'
-        DEVOPS = 'DEVOPS'
-    user = models.ForeignKey(User, on_delete=models.PROTECT, related_name='endpoints')
-    endpoint_type = models.CharField(max_length=30, choices=Type.choices)
-    external_id = models.CharField(max_length=256)
-    group = models.CharField(max_length=30, choices=Group.choices, default=Group.ADMIN)
-
-    def __str__(self) -> str:
-        return f'{self.endpoint_type} {self.external_id}'
-
-
-class Notification(models.Model):
-    class Severity(models.TextChoices):
-        INFO = 'INFO'
-        WARNING = 'WARNING'
-        ERROR = 'ERROR'
-        CRITICIAL = 'CRITICAL'
-    class Type(models.TextChoices):
-        ORDER = 'ORDER'
-        SIGNAL = 'SIGNAL'
-        EXCEPTION = 'EXCEPTION'
-        CRASH = 'CRASH'
-        DEBUG = 'DEBUG'
-        LOG = 'LOG'
-
-    class State(models.TextChoices):
-        NEW = 'NEW'
-        SENT = 'SENT'
-        SENT_PARTIAL = 'SENT_PARTIAL'
-        ERROR = 'ERROR'
-
-    severity = models.CharField(max_length=30, choices=Severity.choices, default=Severity.INFO)
-    notification_type = models.CharField(max_length=30, choices=Type.choices, default=Type.DEBUG)
-    state = models.CharField(max_length=30, choices=State.choices, default=State.NEW)
-    subject = models.CharField(max_length=256, null=True, blank=True)
-    message = models.TextField()
-    details = models.TextField(null=True, blank=True)
-    timestamp = models.DateTimeField(auto_now_add=True)
-    sent_to = models.ManyToManyField(Endpoint, related_name='notifications', blank=True)
-    acknowledged_by = models.ManyToManyField(User, related_name='acknowledged_notifications', blank=True)
-
-    def __str__(self) -> str:
-        return f'{self.severity} {self.notification_type} {self.state} {self.subject or ""}'
-
-    def send(self):
-        from telegram import send_message
-        if not self.pk:
-            self.save()
-        message = f'[{self.severity}] {self.message}'
-        sent_to = []
-        already_sent_to = self.sent_to.all()
-        for endpoint in Endpoint.objects.all():
-            if endpoint in already_sent_to:
-                sent_to.append(endpoint)
-                continue
-            try:
-                send_message(int(endpoint.external_id), message)
-                sent_to.append(endpoint)
-            except:
-                logger.error(f'Failed to send notification to {endpoint.external_id} (notification {self.pk})')
-        self.sent_to.add(*sent_to)
-        if len(sent_to) == 0:
-            self.state = Notification.State.ERROR
-        elif len(sent_to) < len(Endpoint.objects.all()):
-            self.state = Notification.State.SENT_PARTIAL
-        else:
-            self.state = Notification.State.SENT
-        self.save()
-    
-    def save(self, *args, **kwargs):
-        if not self.subject:
-            self.subject = f'{self.severity} {self.notification_type} Message (No Subject)'
-        super().save(*args, **kwargs)
 
 
 class Backtest(models.Model):
@@ -885,16 +769,6 @@ class Backtest(models.Model):
 
     def __str__(self) -> str:
         return f'{self.symbol} {self.market} {self.status}'
-
-
-class WhitelistedUser(models.Model):
-    user = models.OneToOneField(User, on_delete=models.PROTECT, related_name='allowed_user')
-    allowed = models.BooleanField(default=False)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self) -> str:
-        return f'{self.user.username} {self.allowed}'
 
 
 class GlobalSymbol(models.Model):

@@ -14,16 +14,17 @@ import requests
 from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
 from websockets.sync.client import ClientConnection, connect
 
+import incident
 from logger import logger
 from markets import IMarket
-from markets.errors import InsufficientBalance, KlineFetchFailed, MarketAPIError, MarketAPIUnavailable, RejectedOrder
+from markets.errors import InsufficientBalance, InvalidUsage, KlineFetchFailed, MarketAPIError, MarketAPIUnavailable, RejectedOrder
 from markets.helper import authentication_required
 from match import MatchEngine
 from models import interval_to_minutes
 
 if typing.TYPE_CHECKING:
-    from liveloop import LiveLoop
-    from loopgroup import LoopGroup
+    from loops.liveloop import LiveLoop
+    from loops.loopgroup import LoopGroup
     from quantapi.models import MarketAccount, MarketSymbol, Order
 
 
@@ -53,11 +54,15 @@ class MEXCMarket(IMarket):
             self.get_symbols()
             self.get_account()
         except requests.ConnectionError as exc:
-            raise MarketAPIUnavailable(f'Could not connect to {self.name} API') from exc
+            incident.Market.APIUnavailable(self.name, exc)
+            return
 
         self.spot_trading_enabled = False
         self.margin_trading_enabled = False
         self.stop_websocket_stream = False
+
+    def verify_key(self, response):
+        return 'api key info invalid' not in response.get('msg', '').lower()
 
     def format_ws_candle(self, candle):
         return {
@@ -299,30 +304,31 @@ class MEXCMarket(IMarket):
     def get_klines(self, symbol, interval, start=None, end=None, limit=1000, retry=1):
         return self._get_klines(symbol, interval, start, end, limit, retry=retry)
 
-    def get_account(self):
+    def get_account(self, save=True):
         uri = f'{self.url}/api/v3/account'
-        try:
-            request_query = self._prep_payload()
-            response = self.session.get(uri, params=request_query)
-            if not response.ok:
-                raise MarketAPIError(f'{self.name} API error: {response.text}')
-            account_payload = response.json()
-            self.spot_trading_enabled = 'SPOT' in account_payload.get('permissions', [])
-            self.margin_trading_enabled = 'MARGIN' in account_payload.get('permissions', [])
-            
-            for asset in account_payload['balances']:
-                self.assets[asset['asset']] = float(asset['free'])
-            self.capital = self.assets.get('USDT', 0)
+        request_query = self._prep_payload()
+        response = self.session.get(uri, params=request_query)
+        if not response.ok:
+            if not self.verify_key(response.json()):
+                raise incident.Market.KeyExpired(self.account) 
+            raise MarketAPIError(f'{self.name} API error: {response.text}')
+        account_payload = response.json()
+        self.spot_trading_enabled = 'SPOT' in account_payload.get('permissions', [])
+        self.margin_trading_enabled = 'MARGIN' in account_payload.get('permissions', [])
 
-        except:
-            logger.error(f'Error while fetching account data for {self.name}', exc_info=True)
-            raise
+        for asset in account_payload['balances']:
+            self.assets[asset['asset']] = float(asset['free'])
+        self.capital = self.assets.get('USDT', 0)
+
+        self.account.capital = self.capital
+        self.account.assets = json.dumps(self.assets)
+        if save:
+            self.account.save()
 
     def _get_klines(self, symbol, interval, start=None, end=None, limit=1000, retry=3):
         if not end and not start:
-            raise ValueError('Either start or end must be provided')
+            raise InvalidUsage('Either start or end must be provided')
         if limit > 1000:
-            logger.warning(f'MEXC only allows a maximum of 1000 klines per request, you requested {limit}')
             limit = 1000
         calculated_timerange = timedelta(minutes=interval_to_minutes(interval) * limit)
         if not start and end:
@@ -333,20 +339,19 @@ class MEXCMarket(IMarket):
             if end - start > calculated_timerange:
                 # calculate how many candles are in the timerange
                 candles_in_timerange = (end - start) // timedelta(minutes=interval_to_minutes(interval))
-                raise ValueError(f'We can get a maximum of 1000 klines per request (limit={limit}), your timerange is too wide ({candles_in_timerange} candles), please reduce the timerange or increase the interval')
+                raise InvalidUsage(f'We can get a maximum of 1000 klines per request (limit={limit}), your timerange is too wide ({candles_in_timerange} candles), please reduce the timerange or increase the interval')
         try:
             uri = f'{self.url}/api/v3/klines?symbol={self._format_symbol(symbol)}&interval={self._format_interval(interval)}&limit={limit}&startTime={self._format_datetime(start)}&endTime={self._format_datetime(end)}'
             response = requests.get(uri)
             if not response.ok:
                 raise ValueError(f'Error while fetching klines for {self.name}: {response.text}')
             kline_data = response.json()
-        except:
-            logger.error(f'Error while fetching klines for {self.name}', exc_info=True)
+        except Exception as e:
+            incident.Market.CandleFetchFailed(self.name, e)
             if retry > 0:
-                logger.warning(f'Retrying {retry} more times')
                 time.sleep(1)
                 return self._get_klines(symbol, interval, start, end, limit, retry-1)
-            raise
+            raise incident.Market.CandleFetchFailed(self.name, e)
         if not kline_data or not isinstance(kline_data, list) or not isinstance(kline_data[0], list):
             return []
         return self._standardize_klines(kline_data)

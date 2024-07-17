@@ -5,13 +5,15 @@ from typing import Literal
 
 from django.utils import timezone
 
+import incident
 from logger import logger
 from markets import IMarket
 from markets.errors import (InsufficientBalance, OrderNotFilledError,
                             OrderPlacementError, OrderPostProcessingError,
                             RejectedOrder)
 from markets.helper import float_to_precision
-from quantapi.models import GroupOrder, Issue, MarketSymbol, Order, Session, SessionGroup
+from quantapi.models import GroupOrder, MarketSymbol, Order, Session, SessionGroup
+from relay.models import Issue
 from utils import can_session_buy, can_session_sell
 
 
@@ -74,7 +76,6 @@ class OrderManager:
                 deal_size_str = f'{deal_size:f}'
                 request['deal_size'] = deal_size
         else:
-            print('deal_size:', deal_size, 'deal_funds:', deal_funds, 'side:', side)
             raise ValueError('deal_size for sell or deal_funds for buy must be provided.')
         try:
             order = self.market.place_market_order(symbol, side, deal_funds_str, deal_size_str)
@@ -123,28 +124,19 @@ class OrderManager:
         if not order.status == Order.Status.FILLED and not silent:
             order.save()
             raise OrderNotFilledError(f'Order not filled, status is {order.status} ({order.oid=}).', order=order)
-
+        self.account.refresh(self.market, force=True)
         if self.session:
             order.session = self.session
             if order.status == Order.Status.FILLED and order.deal_funds and order.deal_size:
                 if side == 'buy':
                     self.session.capital -= order.deal_funds
                     self.session.assets += order.deal_size
-                    if (account := self.session.account):
-                        account.capital = (account.capital or 0) - order.deal_funds
-                        assets = json.loads(account.assets or '{}')
-                        assets[symbol.base] = (assets.get(symbol.base, 0) + order.deal_size)
-                        account.assets = json.dumps(assets)
-                        account.save()
                 elif side == 'sell':
                     self.session.capital += order.deal_funds
                     self.session.assets -= order.deal_size
-                    if (account := self.session.account):
-                        account.capital = (account.capital or 0) + order.deal_funds
-                        assets = json.loads(account.assets or '{}')
-                        assets[symbol.base] = (assets.get(symbol.base, 0) - order.deal_size)
-                        account.assets = json.dumps(assets)
-                        account.save()
+                account_assets = json.loads(self.account.assets or '{}').get(symbol.base, 0)
+                self.session.capital = min(self.session.capital, self.account.capital)
+                self.session.assets  = min(self.session.assets, account_assets)
                 self.session.save()
         if manual:
             order.force = True
@@ -187,12 +179,7 @@ class GroupOrderManager:
                     assets = session.assets * pct / 100
                     order = manager.place(self.group.symbol, side, deal_size=assets, validate=False)
             except Exception as exc:
-                issue = Issue.from_exception(exc)
-                issue.object = session.account
-                issue.level = Issue.Level.CRITICAL
-                issue.save()
-                logger.critical(f'Error placing order for {session.account}: {exc!r}')
-                continue
+                incident.Order.ErrorPlacing(exc)
             order.group = group_order # type: ignore
             order.save()
             if order.status == Order.Status.FILLED:

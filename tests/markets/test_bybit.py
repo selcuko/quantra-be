@@ -5,6 +5,7 @@ import pytz
 from django.utils import timezone
 
 from markets.bybit import BybitMarket
+from quantapi.models import Order
 from tests.core import QuantTestCase
 from tests.markets.mocks import mock_get_account, mock_get_symbols
 from tests.mocks import MockResponse
@@ -18,6 +19,7 @@ class BybitMarketTests(QuantTestCase):
 
     def setUp(self):
         self.setup_market('BYBIT')
+        self.setup_symbol('BTC-USDT')
         self.setup_account()
 
     @mock.patch.object(BybitMarket, 'get_symbols', mock_get_symbols)
@@ -135,3 +137,39 @@ class BybitMarketTests(QuantTestCase):
             end=now + timedelta(minutes=1),
             limit=2,
         )
+
+    @mock.patch('markets.bybit.requests.Session.get')
+    @mock.patch('markets.bybit.requests.Session.post')
+    def test_place_market_order(self, mock_post, mock_get):
+        self.interface = self.get_interface()
+        mock_get.return_value.json.return_value = {
+            'retMsg': 'OK',
+            'result': { 'list': [{
+                'orderId': 'oid123',
+                'orderStatus': 'FILLED',
+                'orderType': 'MARKET',
+                'cumExecValue': '99',
+                'cumExecQty': '.99',
+                'basePrice': '100',
+                'side': 'BUY',
+                'createdTime': int(datetime(2020, 1, 1).timestamp() * 1000),
+                'symbol': 'BTCUSDT',
+            }]}
+        }
+        mock_post.return_value.json.return_value = {
+            'retMsg': 'OK',
+            'result': { 'orderId': 'oid123' }
+        }
+        self.interface.symbols[self.symbol.name] = self.symbol
+        order = self.interface.place_market_order(self.symbol, 'buy', funds='100')
+        self.assertEqual(order.account, self.account)
+        self.assertEqual(order.symbol, self.symbol)
+        self.assertEqual(order.oid, 'oid123')
+        self.assertEqual(order.side, Order.Side.BUY)
+        self.assertEqual(order.order_type, Order.Type.MARKET)
+        self.assertEqual(order.status, Order.Status.FILLED)
+        self.assertEqual(order.deal_funds, 99)
+        self.assertEqual(order.deal_size, 0.99)
+        self.assertEqual(order.price, 100)
+        self.assertEqual(order.funds, 100)
+        self.assertEqual(order.market_timestamp, datetime(2020, 1, 1, tzinfo=pytz.UTC))

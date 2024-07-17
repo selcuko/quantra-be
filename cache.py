@@ -1,7 +1,7 @@
 import typing
 if typing.TYPE_CHECKING:
-    from liveloop import LiveLoop
-    from loopgroup import LoopGroup
+    from loops import LiveLoop
+    from loops import LoopGroup
 
 
 LIVELOOPS:dict[int, 'LiveLoop']  = {}

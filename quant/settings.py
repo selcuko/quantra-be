@@ -12,7 +12,10 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 
 import os
 from pathlib import Path
+from socket import gethostbyname, gethostname
 import sys
+import sentry_sdk
+
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -26,14 +29,27 @@ SECRET_KEY = 'django-insecure-REDACTED'
 SYMKEY = b'REDACTED'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DEBUG', True)
 ENVIRONMENT = os.environ.get('ENVIRONMENT', 'local')
 TESTING = sys.argv[1:2] == ['test']
 
+if ENVIRONMENT != 'local':
+    sentry_sdk.init(
+        dsn="https://REDACTED@sentry.example.invalid/0",
+        # Set traces_sample_rate to 1.0 to capture 100%
+        # of transactions for performance monitoring.
+        traces_sample_rate=1.0,
+        # Set profiles_sample_rate to 1.0 to profile 100%
+        # of sampled transactions.
+        # We recommend adjusting this value in production.
+        profiles_sample_rate=1.0,
+    )
 
-ALLOWED_HOSTS = ['*']
-CSRF_TRUSTED_ORIGINS = ['https://example.org', 'https://example.com', 'https://dev.example.com']
-WHITELISTED_DEFAULT_EMAILS = ['user@example.com', 'user2@example.com']
+
+ALLOWED_HOSTS = ['localhost', 'api.example.com', 'api-dev.example.com']
+ALLOWED_HOSTS += [gethostbyname(gethostname())]
+CSRF_TRUSTED_ORIGINS = ['https://example.org', 'https://example.com', 'https://dev.example.com', 'https://api.example.com', 'https://api-dev.example.com']
+CORS_ALLOW_ALL_ORIGINS = True
 
 # Application definition
 
@@ -45,36 +61,34 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'channels',
     'quantapi',
-    'allauth',
-    'allauth.account',
-    'allauth.socialaccount',
-    'allauth.socialaccount.providers.google',
-    'allauth.socialaccount.providers.apple',
-    'allauth.socialaccount.providers.github',
+    'relay',
     'silk',
+    'rest_framework',
+    'django_filters',
+    'corsheaders',
+    'drf_spectacular',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'allauth.account.middleware.AccountMiddleware',
-    'quantapi.middleware.WhitelistedUserMiddleware',
     'silk.middleware.SilkyMiddleware'
 ]
-if ENVIRONMENT == 'dev':
-    MIDDLEWARE.remove('login_required.middleware.LoginRequiredMiddleware')
 
-LOGIN_REQUIRED_IGNORE_PATHS = [
-    r'/accounts/*',
-    r'/admin/$',
-    r'/about/$'
-]
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels.layers.InMemoryChannelLayer',
+    },
+}
 
 LOGIN_REDIRECT_URL = '/'
 
@@ -97,6 +111,11 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'quant.wsgi.application'
+ASGI_APPLICATION = 'quant.asgi.application'
+
+
+USE_X_FORWARDED_HOST = True
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 
 # Database
@@ -104,11 +123,11 @@ WSGI_APPLICATION = 'quant.wsgi.application'
 
 RDS = {
         'ENGINE': 'django.db.backends.postgresql_psycopg2',
-        'NAME': os.environ.get('DATABASE_NAME', 'quantdev'),
-        'USER': 'postgres',
-        'PASSWORD': 'REDACTED',
-        'HOST': 'db.example.invalid',
-        'PORT': '5432',
+        'NAME': os.environ.get('DATABASE_NAME'),
+        'USER': os.environ.get('DATABASE_USER'),
+        'PASSWORD': os.environ.get('DATABASE_PASSWORD'),
+        'HOST': os.environ.get('DATABASE_HOST'),
+        'PORT': os.environ.get('DATABASE_PORT') or '5432',
 }
 SQLITE = {
             'ENGINE': 'django.db.backends.sqlite3',
@@ -140,10 +159,7 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 AUTHENTICATION_BACKENDS = [
-    # Needed to login by username in Django admin, regardless of `allauth`
     'django.contrib.auth.backends.ModelBackend',
-    # `allauth` specific authentication methods, such as login by email
-    'allauth.account.auth_backends.AuthenticationBackend',
 ]
 
 # Internationalization
@@ -172,19 +188,15 @@ STATICFILES_DIRS = [
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-SOCIALACCOUNT_PROVIDERS = {
-    'google': {
-        # For each OAuth based provider, either add a ``SocialApp``
-        # (``socialaccount`` app) containing the required client
-        # credentials, or list them here:
-        'APP': {
-            'client_id': 'REDACTED.apps.googleusercontent.com',
-            'secret': 'REDACTED',
-            'key': ''
-        },
-        'SCOPE': [
-            'profile',
-            'email',
-        ],
-    }
+REST_FRAMEWORK = {
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.LimitOffsetPagination',
+    'PAGE_SIZE': 100,
+    'EXCEPTION_HANDLER': 'quantapi.exceptions.ValidationErrorHandler',
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Quant API',
+    'DESCRIPTION': 'Private API of quant-be',
+    'VERSION': '1.0.0',
 }
