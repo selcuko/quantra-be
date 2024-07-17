@@ -33,7 +33,7 @@ class MarketAccountSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = MarketAccount
         fields = ['id', 'market', 'equity', 'capital', 'assets', 'last_cache', 
-                  'owner', 'active', 'internal', 'prices_updated', 'url']
+                  'owner', 'active', 'internal', 'prices_updated', 'url', 'credentials_expires_at']
 
     def get_assets(self, obj):
         # XXX: this serializer method is hacky. come back here to optimize.
