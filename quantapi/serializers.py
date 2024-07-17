@@ -11,10 +11,14 @@ from quantapi.validations import validate_order_payload, validate_symbol_against
 class MarketSerializer(serializers.HyperlinkedModelSerializer):
     prices = serializers.HyperlinkedIdentityField(view_name='market-prices')
     accounts = serializers.HyperlinkedIdentityField(view_name='marketaccount-detail', many=True)
+    tradable_symbols = serializers.SerializerMethodField()
+
+    def get_tradable_symbols(self, market):
+        return MarketSymbol.objects.filter(market=market, spot_trading_enabled=True).count()
 
     class Meta:
         model = Market
-        fields = ['id', 'exchange_name', 'prices_updated', 'prices', 'icon', 'accounts']
+        fields = ['id', 'exchange_name', 'prices_updated', 'prices', 'icon', 'accounts', 'tradable_symbols']
 
 
 class MarketAccountSerializer(serializers.HyperlinkedModelSerializer):
@@ -24,6 +28,7 @@ class MarketAccountSerializer(serializers.HyperlinkedModelSerializer):
     active = serializers.BooleanField(source='credentials.active')
     internal = serializers.BooleanField(source='credentials.internal')
     prices_updated = serializers.DateTimeField(source='market.prices_updated', allow_null=True)
+    credentials_expires_at = serializers.DateTimeField(source='credentials.expires_at', allow_null=True)
 
     class Meta:
         model = MarketAccount
