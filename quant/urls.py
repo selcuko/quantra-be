@@ -12,8 +12,6 @@ urlpatterns = [
     path('schema/swagger/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
     path('schema/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
     path('', include('quantapi.urls')),
-    path('', include('relay.urls')),
-    path('', include('aggregator.urls')),
 ]
 urlpatterns += [path('silk/', include('silk.urls', namespace='silk'))]
 if settings.DEBUG:
