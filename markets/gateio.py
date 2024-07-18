@@ -18,26 +18,27 @@ from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
 from match import MatchEngine
 from models import interval_to_minutes
 if typing.TYPE_CHECKING:
-    from quantapi.models import MarketAccount, MarketSymbol, Order
+    from quantapi.models import MarketAccount, MarketSymbol, Order, Market
     from loops import LiveLoop
 
 
 class GateIOMarket(IMarket):
     name = 'Gate.io'
 
-    def __init__(self, config: dict, account: 'MarketAccount'):
+    def __init__(self, config: dict, account: 'MarketAccount|None'=None, market: 'Market|None'=None):
         self.url = 'https://api.gateio.ws'
-        self.api_key = config['API_KEY']
-        self.api_secret = config['API_SECRET']
+        self.api_key = config.get('API_KEY', '')
+        self.api_secret = config.get('API_SECRET', '')
         self.recv_window = 60000
         self.session = requests.Session()
         self.session.headers.update({
-            'KEY': config['API_KEY'],
+            'KEY': self.api_key,
             'Content-Type': 'application/json'
         })
+        self.private = bool(self.api_key and self.api_secret)
 
         self.account = account
-        self.market = self.account.market
+        self.market = self.account.market if account else market  # type: ignore
         self.spot_trading_enabled = True
         self.capital = 0
         self.symbols = {}
@@ -46,7 +47,8 @@ class GateIOMarket(IMarket):
         self.authenticated = True
         self.stop_websocket_stream = False
 
-        self.get_account()
+        if self.private:
+            self.get_account()
         self.get_symbols()
 
     def sign(self, payload:dict, path:str, method:str='GET') -> str:

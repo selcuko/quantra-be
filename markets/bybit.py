@@ -16,7 +16,7 @@ from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
 from match import MatchEngine
 from models import interval_to_minutes
 if typing.TYPE_CHECKING:
-    from quantapi.models import MarketSymbol, Order, MarketAccount
+    from quantapi.models import MarketSymbol, Order, MarketAccount, Market
     from loops import LiveLoop
     from loops import LoopGroup
 
@@ -24,21 +24,23 @@ if typing.TYPE_CHECKING:
 class BybitMarket(IMarket):
     name = 'Bybit'
 
-    def __init__(self, config: dict, account: 'MarketAccount'):
+    def __init__(self, config: dict, account: 'MarketAccount|None'=None, market: 'Market|None'=None):
         self.url = 'https://api.bybit.com'
-        self.api_key = config['API_KEY']
-        self.api_secret = config['API_SECRET']
+        self.api_key = config.get('API_KEY', '')
+        self.api_secret = config.get('API_SECRET', '')
+        self.private = bool(self.api_key and self.api_secret)
         self.recv_window = 60000
         self.session = requests.Session()
         self.session.headers.update({
-            'X-BAPI-API-KEY': config['API_KEY'],
             'X-BAPI-SIGN-TYPE': '2',
             'X-BAPI-RECV-WINDOW': str(self.recv_window),
             'Content-Type': 'application/json'
         })
+        if self.api_key:
+            self.session.headers['X-BAPI-API-KEY'] = self.api_key
 
         self.account = account
-        self.market = self.account.market
+        self.market = account.market if account else market  # type: ignore
         self.spot_trading_enabled = True
         self.capital = 0
         self.symbols = {}
@@ -48,7 +50,8 @@ class BybitMarket(IMarket):
         self.stop_websocket_stream = False
 
         try:
-            self.get_account()
+            if self.private:
+                self.get_account()
             self.get_symbols()
         except requests.ConnectionError as exc:
             raise MarketAPIUnavailable(f'Could not connect to {self.name} API') from exc
