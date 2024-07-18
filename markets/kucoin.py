@@ -33,6 +33,7 @@ class KucoinMarket(IMarket):
         if not config:
             config = {}
         self.authenticated = bool(config.get('API_KEY') and config.get('API_SECRET') and config.get('API_PASSPHRASE'))
+        self.private = self.authenticated
         self.testnet = False  # KuCoin does not offer a TestNet at the moment (2023-09-22)
         self.spot_trading_enabled = False
         self.capital = 0
@@ -523,7 +524,10 @@ class KucoinMarket(IMarket):
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         try:
-            orderbook = self.kmarket.get_aggregated_orderv3(symbol.name)
+            if self.private:
+                orderbook = self.kmarket.get_aggregated_orderv3(symbol.name)
+            else:
+                orderbook = self.kmarket.get_part_order(100, symbol.name)
             if not orderbook:
                 raise ValueError(f'Error while getting full orderbook for {symbol} on {self.name}')
             return self.format_orderbook_snapshot(orderbook)
