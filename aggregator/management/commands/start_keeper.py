@@ -11,7 +11,7 @@ def callback(update):
     with open('book.log', 'a') as f:
         f.write(json.dumps(update, default=str) + '\n')
 
-market = Market.objects.get(exchange_name='MEXC')
+market = Market.objects.get(exchange_name='OKX')
 market.get_interface()
 symbol = MarketSymbol.objects.get(name='BTC-USDT', market=market)
 k = KeeperPool.get(symbol, callback)
@@ -25,12 +25,12 @@ def print_bidlist(bids):
 while True:
     try:
         bids, asks = k.book.get_depth(count=10, depth=10)
-        #bids, asks = k.book.get_best(count=10)
-        #print(f'\nBids ({len(k.book.bids.values())}):')
-        #print_bidlist(bids)
+        bids, asks = k.book.get_best(count=10)
+        print(f'\nBids ({len(k.book.bids.values())}):')
+        print_bidlist(bids)
         print('\nPrice:', k.book.get_price())
-        #print(f'\nAsks ({len(k.book.asks.values())}):')
-        #print_bidlist(asks)
+        print(f'\nAsks ({len(k.book.asks.values())}):')
+        print_bidlist(asks)
         time.sleep(1)
     except Exception as e:
         traceback.print_exc()

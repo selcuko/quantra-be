@@ -19,7 +19,7 @@ from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
 from match import MatchEngine
 from models import interval_to_minutes
 if typing.TYPE_CHECKING:
-    from quantapi.models import MarketAccount, MarketSymbol, Order
+    from quantapi.models import MarketAccount, MarketSymbol, Order, Market
     from loops.liveloop import LiveLoop
     from loops.loopgroup import LoopGroup
 
@@ -27,21 +27,22 @@ if typing.TYPE_CHECKING:
 class OKXMarket(IMarket):
     name = 'OKX'
 
-    def __init__(self, config: dict, account: 'MarketAccount'):
+    def __init__(self, config: dict, account: 'MarketAccount|None', market: 'Market|None'=None):
         self.url = 'https://www.okx.com'
-        self.api_key = config['API_KEY']
-        self.api_secret = config['API_SECRET']
-        self.api_passphrase = config['API_PASSPHRASE']
+        self.api_key = config.get('API_KEY', '')
+        self.api_secret = config.get('API_SECRET', '')
+        self.api_passphrase = config.get('API_PASSPHRASE', '')
         self.recv_window = 60000
         self.session = requests.Session()
         self.session.headers.update({
-            'OK-ACCESS-KEY': config['API_KEY'],
-            'OK-ACCESS-PASSPHRASE': config['API_PASSPHRASE'],
+            'OK-ACCESS-KEY': self.api_key,
+            'OK-ACCESS-PASSPHRASE': self.api_passphrase,
             'Content-Type': 'application/json'
         })
+        self.private = bool(self.api_key and self.api_secret and self.api_passphrase)
 
         self.account = account
-        self.market = account.market
+        self.market = account.market if account else market  # type: ignore
         self.spot_trading_enabled = True
         self.capital = 0
         self.symbols = {}
@@ -52,7 +53,8 @@ class OKXMarket(IMarket):
         self.orderbook_seq = 0
 
         try:
-            self.get_account()
+            if self.private:
+                self.get_account()
             self.get_symbols()
         except requests.ConnectionError as exc:
             raise MarketAPIUnavailable(f'Could not connect to {self.name} API') from exc
