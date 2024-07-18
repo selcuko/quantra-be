@@ -1,8 +1,9 @@
 import threading
 from typing import Callable, Optional
+from markets import get_market
 from orderpulse.structures import Book
 from markets.interface import IMarket
-from quantapi.models import MarketSymbol, MarketAccount
+from quantapi.models import MarketSymbol
 
 
 class KeeperPool:
@@ -14,18 +15,14 @@ class KeeperPool:
             if callback and callback not in keeper.callbacks:
                 keeper.add_callback(callback)
             return keeper
-        account = MarketAccount.objects.filter(market=symbol.market).first()
-        if not account:
-            raise RuntimeError('No account found for market')
-        keeper = BookKeeper(symbol, account, callback)
+        keeper = BookKeeper(symbol, callback)
         cls.pool[symbol] = keeper
         return keeper
 
 
 class BookKeeper:
-    def __init__(self, symbol:'MarketSymbol', account:'MarketAccount', callback:Optional[Callable]=None, interface:Optional['IMarket']=None):
-        self.interface = interface or account.get_interface()
-        self.account = account
+    def __init__(self, symbol:'MarketSymbol', callback:Optional[Callable]=None, interface:Optional['IMarket']=None):
+        self.interface = interface or get_market(symbol.market.exchange_name, {}, market=symbol.market)
         self.symbol = symbol
         self.callbacks = [callback] if callback else []
         self.name = f'BookKeeper of {symbol.name}@{self.interface.name}'

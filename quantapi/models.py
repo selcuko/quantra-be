@@ -97,6 +97,11 @@ class Market(models.Model):
                 fields = []
         return fields
 
+    def get_interface(self):
+        """Returns a public interface for this market."""
+        from markets import get_market
+        return get_market(self.exchange_name, {}, market=self)
+
     def __str__(self):
         return self.exchange_name
 

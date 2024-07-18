@@ -23,19 +23,16 @@ class IMarket:
     capital: float
     assets: dict[str, float]
     commission: dict[str, float]
-    account: 'MarketAccount'
+    account: 'MarketAccount|None'
     market: 'Market'
     stop_websocket_stream:bool = False
 
-    def __init__(self, config:dict, account:'MarketAccount'):
+    def __init__(self, config:dict, account:'MarketAccount|None'=None):
         """Initialize a market instance with config if provided."""
-        self.config = config
-        self.account = account
-        self.market = self.account.market
         raise NotImplementedError
     
     def __str__(self) -> str:
-        return f'{self.name} Interface <{self.account.owner}>'
+        return f'{self.name} Interface <{self.account.owner if self.account else "Public"}>'
 
     def json(self) -> dict:
         """Return a dict/JSON for this instance. Serialization done whenever necessary.
@@ -45,7 +42,7 @@ class IMarket:
         """
         return {
             'name': self.name,
-            'owner': self.account.owner,
+            'owner': self.account.owner if self.account else None,
             'exchange': self.market.exchange_name,
         }
 
@@ -321,6 +318,8 @@ class IMarket:
         raise NotImplementedError()
 
     def cache_to_db(self, force=False):
+        if not self.account:
+            return
         if not self.market:
             return
         if self.account.last_cache and (timezone.now() - self.account.last_cache) < timedelta(minutes=5):

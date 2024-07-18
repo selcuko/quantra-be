@@ -22,29 +22,30 @@ from models import interval_to_minutes
 
 if typing.TYPE_CHECKING:
     from loops import LiveLoop, LoopGroup
-    from quantapi.models import MarketAccount, MarketSymbol, Order
+    from quantapi.models import MarketAccount, MarketSymbol, Order, Market
 
 
 class BinanceMarket(IMarket):
     name = 'Binance'
 
-    def __init__(self, config:dict, account:'MarketAccount'):
-        self.testnet = False
+    def __init__(self, config:dict, account:'MarketAccount|None'=None, market:Optional['Market']=None):
         self.spot_trading_enabled = False
         self.capital = 0
         self.assets = {}
         self.commission = {}
         self.account = account
-        self.market = self.account.market
+        if not account and not market:
+            raise ValueError('Either account or market must be provided')
+        self.market = self.account.market if self.account else market  # type: ignore
         self.stop_websocket_stream = False
-        self.testnet = config.get('TESTNET', False)
         self.client = Client(
-            api_key=config['API_KEY'],
-            api_secret=config['API_SECRET'],
-            testnet=self.testnet
+            api_key=config.get('API_KEY'),
+            api_secret=config.get('API_SECRET'),
         )
+        self.private = bool(config.get('API_KEY') and config.get('API_SECRET'))
         self.get_symbols()
-        self.get_account()
+        if self.private:
+            self.get_account()
 
     def get_websocket_uri(self, symbol:'MarketSymbol|str', interval:str) -> str:
         if isinstance(symbol, str):
@@ -352,12 +353,15 @@ class BinanceMarket(IMarket):
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         ws_uri = f'wss://stream.binance.com:9443/ws/{self._format_symbol(symbol.name).lower()}@depth@100ms'
+        last_pong = datetime.now()
         try:
             ws = connect(ws_uri)
             while not self.stop_websocket_stream and not (liveloop and liveloop.should_stop()):
-                ws.pong()
+                if (datetime.now() - last_pong) > timedelta(seconds=10):
+                    ws.pong()
+                    last_pong = datetime.now()
                 try:
-                    data = json.loads(ws.recv(timeout=1))
+                    data = json.loads(ws.recv(timeout=5))
                 except TimeoutError:
                     continue
                 orderbook = {
@@ -365,10 +369,10 @@ class BinanceMarket(IMarket):
                     'asks': [ { 'price': Decimal(item[0]), 'size': Decimal(item[1]), 'count': 1 } for item in data['a'] ],
                 }
                 callback(orderbook)
-        except:
+        except Exception as e:
             if retries < self.WS_MAX_RETRIES:
                 retries += 1
-                time.sleep(1)
+                time.sleep(5)
                 return self.init_orderbook_websocket(symbol, callback, liveloop, retries)
             msg = f'Cannot start websocket connection for orderbook for {symbol} on {self.name} (tried {retries} times).'
             logger.error(msg, exc_info=True)
