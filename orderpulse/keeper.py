@@ -1,12 +1,25 @@
 import threading
 from typing import Callable, Optional
-
-import typing
-
 from orderpulse.structures import Book
-if typing.TYPE_CHECKING:
-    from markets.interface import IMarket
-    from quantapi.models import MarketSymbol, MarketAccount
+from markets.interface import IMarket
+from quantapi.models import MarketSymbol, MarketAccount
+
+
+class KeeperPool:
+    pool: dict['MarketSymbol', 'BookKeeper'] = {}
+
+    @classmethod
+    def get(cls, symbol:'MarketSymbol', callback:Optional[Callable]=None):
+        if (keeper := cls.pool.get(symbol)):
+            if callback and callback not in keeper.callbacks:
+                keeper.add_callback(callback)
+            return keeper
+        account = MarketAccount.objects.filter(market=symbol.market).first()
+        if not account:
+            raise RuntimeError('No account found for market')
+        keeper = BookKeeper(symbol, account, callback)
+        cls.pool[symbol] = keeper
+        return keeper
 
 
 class BookKeeper:

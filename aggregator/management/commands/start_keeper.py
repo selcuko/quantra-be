@@ -5,7 +5,7 @@ import traceback
 from django.core.management.base import BaseCommand, CommandError
 from quantapi.models import Market, MarketSymbol, MarketAccount
 
-from orderpulse.keeper import BookKeeper
+from orderpulse.keeper import BookKeeper, KeeperPool
 
 def callback(update):
     with open('book.log', 'a') as f:
@@ -16,7 +16,7 @@ symbol = MarketSymbol.objects.get(name='BTC-USDT', market=market)
 account = MarketAccount.objects.filter(market=market).first()
 if not account:
     raise CommandError('No account found for market')
-k = BookKeeper(symbol, account, callback)
+k = KeeperPool.get(symbol, callback)
 k.start()
 
 def print_bidlist(bids):
