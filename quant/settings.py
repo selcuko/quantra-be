@@ -64,6 +64,7 @@ INSTALLED_APPS = [
     'channels',
     'quantapi',
     'relay',
+    'aggregator',
     'silk',
     'rest_framework',
     'django_filters',
@@ -85,8 +86,11 @@ MIDDLEWARE = [
 ]
 
 CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels.layers.InMemoryChannelLayer',
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [("127.0.0.1", 6379)],
+        },
     },
 }
 
@@ -97,7 +101,7 @@ ROOT_URLCONF = 'quant.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': ['templates'],
+        'DIRS': ['aggregator/templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
