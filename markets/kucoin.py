@@ -9,7 +9,7 @@ if typing.TYPE_CHECKING:
     from quantapi.models import MarketSymbol, Order, MarketAccount
     from loops.liveloop import LiveLoop
     from loops.loopgroup import LoopGroup
-    
+
 
 import pytz
 from kucoin.client import Market, Trade, User
@@ -29,8 +29,7 @@ from websockets.sync.client import ClientConnection
 class KucoinMarket(IMarket):
     name = 'KuCoin'
     
-    def __init__(self, config:dict, account:'MarketAccount') -> None:
-        from quantapi.models import Market as MarketModel
+    def __init__(self, config:dict, account:'MarketAccount|None', market:'Market|None'=None) -> None:
         if not config:
             config = {}
         self.authenticated = bool(config.get('API_KEY') and config.get('API_SECRET') and config.get('API_PASSPHRASE'))
@@ -39,9 +38,8 @@ class KucoinMarket(IMarket):
         self.capital = 0
         self.assets = {}
         self.account = account
-        self.market = self.account.market
+        self.market = self.account.market if self.account else market  # type: ignore
         self.commission = {}
-        
         try:
             if self.authenticated:
                 self.kmarket = Market(
@@ -57,7 +55,7 @@ class KucoinMarket(IMarket):
                     secret=config['API_SECRET'], 
                     passphrase=config['API_PASSPHRASE']) 
             else:
-                self.kmarket = Market()               
+                self.kmarket = Market()
         except:
             logger.fatal(f'Error while initializing {self.name}', exc_info=True)
             raise
@@ -66,6 +64,7 @@ class KucoinMarket(IMarket):
 
         if self.authenticated:
             self.get_account()
+        self.get_symbols()
 
         self.stop_websocket_stream = False
 
