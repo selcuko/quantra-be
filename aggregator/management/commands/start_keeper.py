@@ -6,14 +6,10 @@ from quantapi.models import Market, MarketSymbol
 
 from orderpulse.keeper import KeeperPool
 
-def callback(update):
-    with open('book.log', 'a') as f:
-        f.write(json.dumps(update, default=str) + '\n')
-
 market = Market.objects.get(exchange_name='MEXC')
 market.get_interface()
 symbol = MarketSymbol.objects.get(name='BTC-USDT', market=market)
-k = KeeperPool.get(symbol, callback)
+k = KeeperPool.get(symbol)
 k.start()
 
 def print_bidlist(bids):

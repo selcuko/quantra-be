@@ -575,13 +575,15 @@ class KucoinMarket(IMarket):
         last_ping = datetime.now()
         seq = 0
         while not self.stop_websocket_stream:
-            if last_ping < datetime.now() - timedelta(seconds=30):
-                ws.send(json.dumps({'id': str(uuid.uuid4()), 'type': 'ping'}))
-                last_ping = datetime.now()
             try:
+                if last_ping < datetime.now() - timedelta(seconds=30):
+                    ws.send(json.dumps({'id': str(uuid.uuid4()), 'type': 'ping'}))
+                    last_ping = datetime.now()
                 msg = json.loads(ws.recv(timeout=10))
             except TimeoutError:
                 continue
+            except ConnectionClosed:
+                return self.init_orderbook_websocket(symbol, callback)
             if msg.get('type') == 'pong':
                 continue
             if not msg.get('subject') == 'trade.l2update':

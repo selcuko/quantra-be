@@ -362,7 +362,11 @@ class BybitMarket(IMarket):
         symbol_object = self.get_symbol_from_name(symbol) if isinstance(symbol, str) else symbol
         if not symbol_object:
             raise ValueError(f'Symbol not found: {symbol}')
-        ws = connect(ws_uri)
+        try:
+            ws = connect(ws_uri)
+        except TimeoutError:
+            time.sleep(5)
+            return self.init_orderbook_websocket(symbol, callback, liveloop, retries)
         ws.send(json.dumps({
             'op': 'subscribe',
             'args': [f'orderbook.200.{self.format_symbol(symbol_object.name)}']
