@@ -10,15 +10,15 @@ from loops import LiveLoop
 from loops import LoopGroup
 from markets.errors import InsufficientBalance
 from markets.interface import IMarket
-from quantapi.models import MarketAccount, MarketSymbol, Order
+from quantapi.models import Market, MarketAccount, MarketSymbol, Order
 from strategy.interface import Strategy
 
 
 class MockIMarket(Mock, IMarket):
-    def __init__(self, config, account, **kwargs) -> None:
-        super().__init__(config, account, **kwargs)
+    def __init__(self, config, account=None, market=None, **kwargs) -> None:
+        super().__init__(config, account, market, **kwargs)
         self.account = account
-        self.market = account.market
+        self.market = account.market if account else market  # type: ignore
         self.capital = 10
         self.assets = {
             'BTC': 0.1
@@ -47,6 +47,8 @@ class MockIMarket(Mock, IMarket):
         pass
 
     def place_market_order(self, symbol: MarketSymbol | str, side: Literal['buy'] | Literal['sell'], funds: str | None = None, quantity: str | None = None, validate=True) -> Order:
+        if not self.account:
+            raise ValueError('Account not found.')
         if isinstance(symbol, str):
             symbol = MarketSymbol.objects.get(name=symbol, market=self.market)
         if side == 'buy' and (self.account.capital or 0) < float(funds or 0):
@@ -116,7 +118,11 @@ class MockCache(Mock):
 
 
 def mock_get_interface(account:MarketAccount):
-    return MockIMarket({}, account)
+    return MockIMarket({}, account=account)
+
+
+def market_get_interface(market:Market):
+    return MockIMarket({}, market=market)
 
 
 def mock_get_strategy(name):

@@ -351,7 +351,6 @@ class BybitMarket(IMarket):
 
     def format_orderbook(self, data:dict) -> dict:
         if (data.get('seq') or 0) <= self.orderbook_seq:
-            print('Ignoring orderbook update, seq:', data['seq'], 'current:', self.orderbook_seq)
             return { 'bids': [], 'asks': [] }
         return {
             'bids': [ { 'price': Decimal(bid[0]), 'size': Decimal(bid[1]), 'count': 1 } for bid in data['b'] ],

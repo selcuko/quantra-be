@@ -209,7 +209,11 @@ class MEXCMarket(IMarket):
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         ws_uri = 'wss://wbs.mexc.com/ws'
-        ws = connect(ws_uri)
+        try:
+            ws = connect(ws_uri)
+        except TimeoutError:
+            time.sleep(5)
+            return self.init_orderbook_websocket(symbol, callback)
         topic = f'spot@public.increase.depth.v3.api@{self._format_symbol(symbol.name)}'
         sub = {
             'method': 'SUBSCRIPTION',
@@ -221,10 +225,10 @@ class MEXCMarket(IMarket):
             raise Exception(f'Error while subscribing to {topic}: {ack}')
         last_ping = datetime.now()
         while not self.stop_websocket_stream:
-            if (datetime.now() - last_ping).seconds > 30:
-                ws.send('{"method": "PING"}')
-                last_ping = datetime.now()
             try:
+                if (datetime.now() - last_ping).seconds > 30:
+                    ws.send('{"method": "PING"}')
+                    last_ping = datetime.now()
                 response = json.loads(ws.recv(timeout=10))
             except TimeoutError:
                 continue

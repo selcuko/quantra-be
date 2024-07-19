@@ -553,7 +553,11 @@ class KucoinMarket(IMarket):
         token = self.get_websocket_token()
         conn_id = uuid.uuid4().hex
         ws_uri = f'wss://ws-api-spot.kucoin.com/?token={token}&[connectId={conn_id}]'
-        ws = connect(ws_uri)
+        try:
+            ws = connect(ws_uri)
+        except TimeoutError:
+            time.sleep(5)
+            return self.init_orderbook_websocket(symbol, callback)
         welcome = ws.recv()
         if not json.loads(welcome)['type'] == 'welcome':
             raise ValueError(f'Error while initializing websocket for {self.name}: {welcome}')

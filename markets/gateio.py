@@ -356,6 +356,9 @@ class GateIOMarket(IMarket):
                 pre_ob = { 'asks': data['result']['a'], 'bids': data['result']['b']}
                 orderbook = self.format_orderbook_update(pre_ob)
                 callback(orderbook)
+        except TimeoutError:
+            time.sleep(3)
+            return self.init_orderbook_websocket(symbol, callback, liveloop, retries)
         except Exception as e:
             if retries < self.WS_MAX_RETRIES:
                 time.sleep(1)

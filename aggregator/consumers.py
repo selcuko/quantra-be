@@ -2,23 +2,21 @@
 import asyncio
 import datetime
 import json
-import channels.layers
 import django
 django.setup()
-from channels.generic.websocket import AsyncWebsocketConsumer, WebsocketConsumer
+from channels.generic.websocket import AsyncWebsocketConsumer
 from asgiref.sync import sync_to_async
-from orderpulse.keeper import BookKeeper
-from quantapi.models import Market, MarketAccount, MarketSymbol
+from orderpulse.keeper import KeeperPool
+from quantapi.models import Market, MarketSymbol
 
 
 class OrderbookConsumer(AsyncWebsocketConsumer):
     async def connect(self):
-        self.keeper = None
-        self.update = None
+        self.update = {}
         await self.accept()
 
     async def disconnect(self, close_code):
-        print('Disconnected:', close_code)
+        pass
 
     async def receive(self, text_data):
         inbound = json.loads(text_data)
@@ -33,30 +31,39 @@ class OrderbookConsumer(AsyncWebsocketConsumer):
         await handler(inbound)
 
     async def default_handler(self, event):
-        print('Default handler:', event)
         await self.send(text_data=json.dumps(event))
 
-    def set_update(self, update):
-        self.update = update
-
-    def get_keeper(self):
-        market = Market.objects.get(exchange_name='BYBIT')
-        symbol = MarketSymbol.objects.get(name='BTC-USDT', market=market)
-        account = MarketAccount.objects.get(market=market)
-        return BookKeeper(symbol, account, self.set_update)
+    def get_keeper(self, market, symbol):
+        market = Market.objects.get(exchange_name=market)
+        symbol = MarketSymbol.objects.get(name=symbol, market=market)
+        return KeeperPool.get(symbol)
 
     async def subscribe(self, event):
         # send ACK frame and start the subscription loop
+        try:
+            market = event['market']
+            symbol = event['symbol']
+            self.depth = event.get('depth', 1)
+            self.count = event.get('count', 10)
+        except KeyError:
+            await self.send(text_data=json.dumps({'error': 'Market and symbol must be specified'}))
+            return
+        self.keeper = await sync_to_async(self.get_keeper)(market, symbol)
+        if not self.keeper.is_running():
+            self.keeper.start()
+        await self.sub_loop()
 
-        self.keeper = await sync_to_async(self.get_keeper)()
-        self.keeper.start()
-        await self.send(text_data=json.dumps({'type': 'subscribed'}))
-        await self.sub_loop(event)
-
-    async def sub_loop(self, event):
+    async def sub_loop(self):
         while True:
-            await self.send(text_data=json.dumps({'update': self.update}, default=str))
-            await asyncio.sleep(1)
+            bids, asks = self.keeper.book.get_depth(count=self.count, depth=self.depth)
+            await self.send(text_data=json.dumps({
+                'bids': bids,
+                'asks': asks,
+                'price': self.keeper.book.get_price(),
+            }, default=str))
+            # sleep until the next second
+            ms = datetime.datetime.now().microsecond
+            await asyncio.sleep(1 - ms / 1_000_000)
 
 
 

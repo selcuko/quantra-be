@@ -60,9 +60,12 @@ class QuantTestCase(TestCase):
         )
         return self.session
 
-    def setup_symbol(self, name):
-        if not self.market:
-            raise AttributeError('Run setup_market() first.')
+    def setup_symbol(self, name, market=None):
+        if not hasattr(self, 'market'):
+            if market:
+                self.market = market
+            else:
+                self.setup_market()
         if (symbol := MarketSymbol.objects.filter(name=name, market=self.market).first()):
             return symbol
         symbol = MarketSymbol.objects.create(

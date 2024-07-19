@@ -2,16 +2,15 @@ from datetime import datetime
 import json
 import time
 import traceback
-from django.core.management.base import BaseCommand, CommandError
-from quantapi.models import Market, MarketSymbol, MarketAccount
+from quantapi.models import Market, MarketSymbol
 
-from orderpulse.keeper import BookKeeper, KeeperPool
+from orderpulse.keeper import KeeperPool
 
 def callback(update):
     with open('book.log', 'a') as f:
         f.write(json.dumps(update, default=str) + '\n')
 
-market = Market.objects.get(exchange_name='KUCOIN')
+market = Market.objects.get(exchange_name='MEXC')
 market.get_interface()
 symbol = MarketSymbol.objects.get(name='BTC-USDT', market=market)
 k = KeeperPool.get(symbol, callback)
@@ -24,11 +23,11 @@ def print_bidlist(bids):
 
 while True:
     try:
-        bids, asks = k.book.get_depth(count=10, depth=10)
-        bids, asks = k.book.get_best(count=10)
+        bids, asks = k.book.get_depth(count=5, depth=1)
+        #bids, asks = k.book.get_best(count=10)
         print(f'\nBids ({len(k.book.bids.values())}):')
         print_bidlist(bids)
-        print('\nPrice:', k.book.get_price())
+        print(f'\nPrice: {k.book.get_price():,.2f}')
         print(f'\nAsks ({len(k.book.asks.values())}):')
         print_bidlist(asks)
         time.sleep(1)
