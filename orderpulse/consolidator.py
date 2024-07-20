@@ -9,17 +9,18 @@ class BookAggregator:
         self.symbol = symbol
         self.book = Book()
         self.keepers: dict[str, BookKeeper] = {}
+        self.px_in_process = []
 
     def add_markets(self, markets: list[str]):
         def inner(market):
             for market in markets:
                 self.add_market(market)
-        Thread(target=inner, args=(markets,)).start()
+        Thread(target=inner, args=(markets,), daemon=True).start()
 
     def add_market(self, market: str):
         symbol = MarketSymbol.objects.get(name=self.symbol, market=Market.objects.get(exchange_name=market))
         keeper = KeeperPool.get(symbol, self.keeper_callback)
-        Thread(target=self.add_keeper, args=(keeper,)).start()
+        Thread(target=self.add_keeper, args=(keeper,), daemon=True).start()
 
     def add_keeper(self, keeper: BookKeeper, start=True):
         self.keepers[keeper.interface.name] = keeper
@@ -47,6 +48,9 @@ class BookAggregator:
             self.calc_price_point(ask.price, 'asks')
 
     def calc_price_point(self, px: float, side='bids'):
+        if px in self.px_in_process:
+            return
+        self.px_in_process.append(px)
         bids = []
         container = self.book.bids if side == 'bids' else self.book.asks
         for keeper in self.keepers.values():
@@ -61,6 +65,7 @@ class BookAggregator:
             container.pop(merged_bid.price, None)
         else:
             self.book.insert_bid(merged_bid, side, clean=False)
+        self.px_in_process.remove(px)
 
     def merge_bids(self, bids:list[Bid]):
         if len(bids) == 0:

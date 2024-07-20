@@ -1,20 +1,11 @@
 from datetime import datetime
-import json
 import time
-import traceback
-
 from orderpulse.consolidator import BookAggregator
 from quantapi.models import Market
 
-def callback(update):
-    with open('book.log', 'a') as f:
-        f.write(json.dumps(update, default=str) + '\n')
 
 agg = BookAggregator('BTC-USDT')
-markets = ['MEXC', 'KUCOIN', 'GATEIO', 'BYBIT', 'OKX', 'BINANCE']
-for m in markets:
-    market = Market.objects.get(exchange_name=m)
-    iface  = market.get_interface()
+markets = ['GATEIO', 'BYBIT']
 agg.add_markets(markets)
 
 def print_bidlist(bids):
@@ -35,4 +26,4 @@ while True:
         print(f'\nHealth:', [f'{k}: {v}' for k, v in health.items()])
         time.sleep(1)
     except Exception as e:
-        traceback.print_exc()
+        break
