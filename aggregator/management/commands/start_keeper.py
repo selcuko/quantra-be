@@ -21,7 +21,7 @@ class Command(BaseCommand):
 
         while True:
             try:
-                bids, asks = k.book.get_depth(count=5, depth=100)
+                bids, asks = k.book.get_depth(count=5, depth=1)
                 queue_c = k.queue.qsize()
                 td = f'{k.since_last_update():.2f}s' if k.since_last_update() else 'no updates'
                 #bids, asks = k.book.get_best(count=10)
@@ -30,7 +30,7 @@ class Command(BaseCommand):
                 print(f'\nPrice: {k.book.get_price():,.2f}\tUpdated: {td}')
                 print(f'\nAsks ({len(k.book.asks.values())}):')
                 print_bidlist(asks)
-                print(f'\nQueue: {queue_c}')
+                print(f'\nQueue: {queue_c} ({k.update_count})')
                 time.sleep(1)
             except Exception as e:
                 traceback.print_exc()

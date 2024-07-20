@@ -1,9 +1,10 @@
 from datetime import datetime
 import math
 import copy
-from pprint import pprint
 from typing import Iterable
 from sortedcontainers import SortedDict
+
+from orderpulse.manager import BookManager
 
 
 class Bid:
@@ -26,10 +27,11 @@ class Bid:
 
 
 class Book:
-    def __init__(self):
+    def __init__(self, manager: BookManager):
+        self.manager = manager
         self.snapshot_applied = False
-        self.bids = SortedDict()
-        self.asks = SortedDict()
+        self.bids = self.manager.SortedDict()
+        self.asks = self.manager.SortedDict()
 
     def get_bids(self) -> list[Bid]:
         return list(self.bids.values())
@@ -42,72 +44,59 @@ class Book:
         asks = snapshot.get('asks', [])
 
         for bid in bids:
-            self.insert_bid(bid, 'bids')
+            Book.insert_bid(self.bids, self.asks, bid, 'bids')
 
         for ask in asks:
-            self.insert_bid(ask, 'asks')
+            Book.insert_bid(self.bids, self.asks, ask, 'asks')
 
         self.snapshot_applied = True
 
     def copy(self):
-        book = Book()
+        book = Book(self.manager)
         book.bids = copy.deepcopy(self.bids)
         book.asks = copy.deepcopy(self.asks)
         return book
 
-    def on_update(self, update: dict):
-        copy = self.copy()
-        bids = update.get('bids', [])
-        asks = update.get('asks', [])
-
-        for bid in bids:
-            self.insert_bid(bid, 'bids')
-
-        for ask in asks:
-            self.insert_bid(ask, 'asks')
-        diff = self.get_diff(copy)
-        return diff
-
-    def get_diff(self, book):
-        """Get delta between self and another book (self is the newer book)"""
+    @staticmethod
+    def on_update(bids:SortedDict, asks:SortedDict, update: dict):
+        u_bids = update.get('bids', [])
+        u_asks = update.get('asks', [])
         diff = { 'bids': [], 'asks': [] }
-        bid_px = set((*self.bids.keys(), *book.bids.keys()))
-        ask_px = set((*self.asks.keys(), *book.asks.keys()))
-        for px in bid_px:
-            if self.bids.get(px) != book.bids.get(px):
-                new_size = 0
-                if self.bids.get(px):
-                    new_size = self.bids[px].size
-                diff['bids'].append({ 'price': px, 'size': new_size })
-        for px in ask_px:
-            if self.asks.get(px) != book.asks.get(px):
-                new_size = 0
-                if self.asks.get(px):
-                    new_size = self.asks[px].size
-                diff['asks'].append({ 'price': px, 'size': new_size })
+        for bid in u_bids:
+            diff.update(Book.insert_bid(bids, asks, bid, 'bids'))
+
+        for ask in u_asks:
+            diff.update(Book.insert_bid(bids, asks, ask, 'asks'))
         return diff
 
-    def insert_bid(self, bid:Bid|dict, side='bids', clean=True):
-        container = self.bids if side == 'bids' else self.asks
+    @staticmethod
+    def insert_bid(bids:SortedDict, asks:SortedDict, bid:Bid|dict, side='bids', clean=True):
+        diff = {}
+        container = bids if side == 'bids' else asks
         bid = bid if isinstance(bid, Bid) else Bid(bid.get('price', 0), bid.get('size', 0))
         if bid.price and bid.size:
             container[bid.price] = bid
+            diff[bid.price] = { 'price': bid.price, 'size': bid.size }
             if side == 'bids':
                 # remove all asks with price less than this bid
                 if clean:
-                    new_asks = self.asks.irange(maximum=bid.price, inclusive=(False, True))
+                    new_asks = asks.irange(maximum=bid.price, inclusive=(False, True))
                     new_asks = list(new_asks)
                     for ask in new_asks:
-                        self.asks.pop(ask, None)
+                        asks.pop(ask, None)
+                        diff[ask] = { 'price': ask, 'size': 0 }
             if side == 'asks':
                 # remove all bids with price greater than this ask
                 if clean:
-                    new_bids = self.bids.irange(minimum=bid.price, inclusive=(True, False))
+                    new_bids = bids.irange(minimum=bid.price, inclusive=(True, False))
                     new_bids = list(new_bids)
                     for bid in new_bids:
-                        self.bids.pop(bid, None)
+                        bids.pop(bid, None)
+                        diff[bid] = { 'price': bid, 'size': 0 }
         else:
+            diff[bid.price] = { 'price': bid.price, 'size': 0 }
             container.pop(bid.price, None)
+        return diff
 
     def get_price(self):
         try:
@@ -171,23 +160,4 @@ class Depth:
         if side == 'bids':
             return math.floor(price / self.depth) * self.depth
         return math.ceil(price / self.depth) * self.depth
-
-
-if __name__ == '__main__':
-    book = Book()
-    snapshot = {
-        'bids': [{'price': 100, 'size': 1}, {'price': 101, 'size': 2}, {'price': 102, 'size': 3}],
-        'asks': [{'price': 103, 'size': 1}, {'price': 104, 'size': 2}, {'price': 105, 'size': 3}],
-    }
-    update = {
-        'bids': [{'price': 100, 'size': 2}],
-        'asks': [{'price': 102, 'size': 1}, {'price': 103, 'size': 3}],
-    }
-    book.on_snapshot(snapshot)
-    diff = book.on_update(update)
-    pprint(diff['bids'])
-    pprint(diff['asks'])
-
-
-
 
