@@ -102,7 +102,12 @@ class BookKeeper:
         self.update_count += 1
 
     def process_queue(self):
-        proc = multiprocessing.Process(target=queue_worker, args=(self.book.bids, self.book.asks, self.queue, self.last_update, self.stop_event), daemon=True)
+        proc = multiprocessing.Process(
+            target=queue_worker, 
+            args=(self.book.bids, self.book.asks, self.queue, self.last_update, self.stop_event), 
+            daemon=True,
+            name=f'BookWorker-{self.symbol.name}@{self.interface.name.upper()}'
+        )
         proc.start()
 
     def add_callback(self, callback:Callable):

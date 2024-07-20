@@ -27,7 +27,7 @@ class Command(BaseCommand):
                 #bids, asks = k.book.get_best(count=10)
                 print(f'\nBids ({len(k.book.bids.values())}):')
                 print_bidlist(bids)
-                print(f'\nPrice: {k.book.get_price():,.2f}\tUpdated: {td}')
+                print(f'\nPrice: {k.book.get_price():,.2f}\tLatency: {td}')  # latency is the timedelta between we receive the update and process it
                 print(f'\nAsks ({len(k.book.asks.values())}):')
                 print_bidlist(asks)
                 print(f'\nQueue: {queue_c} ({k.update_count})')
