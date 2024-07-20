@@ -22,7 +22,7 @@ def queue_worker(bids: SortedDict, asks: SortedDict, queue:multiprocessing.Queue
     while not stop_event.is_set():
         update = queue.get()
         Book.on_update(bids, asks, update)
-        last_update.value = int(time.time())
+        last_update.value = update['received'].timestamp()
 
 
 class KeeperPool:
