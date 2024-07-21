@@ -1,6 +1,7 @@
 import multiprocessing
 from multiprocessing.managers import ListProxy
 import multiprocessing.synchronize
+import queue
 from threading import Thread
 import time
 
@@ -44,11 +45,13 @@ class BookAggregator:
         self.keepers: dict[str, BookKeeper] = {}
         self.applied_snapshots: list[str] = []
         self.px_in_process = manager.list()
-        self.workers = multiprocessing.Pool(processes=6)
         self.rwlock = ReadWriteLock(manager)
         self.queue = manager.Queue()
         self.updates_count = 0
-        self.qsize = manager.Value('i', 0)
+        self.queue = manager.Queue()
+        self.stop_event = manager.Event()
+        self.proc = multiprocessing.Process(target=self.queue_processor, args=(self.queue, self.stop_event))
+        self.proc.start()
 
     def hash(self):
         return hash('+'.join(self.keepers.keys()))
@@ -56,67 +59,87 @@ class BookAggregator:
     def add_markets(self, markets: list[str]):
         def inner(market):
             for market in markets:
-                try:
-                    self.add_market(market)
-                except Exception as e:
-                    print('ERROR ADDING MARKET', market, e)
+                self.add_market(market)
         Thread(target=inner, args=(markets,), daemon=True).start()
 
-    def add_market(self, market: str):
+    def add_market(self, name: str):
         from quantapi.models import MarketSymbol, Market
-        symbol = MarketSymbol.objects.get(name=self.symbol, market=Market.objects.get(exchange_name=market))
+        market = Market.objects.get(exchange_name=name)
+        symbol = MarketSymbol.objects.get(name=self.symbol, market=market)
         keeper = KeeperPool.get(symbol)
         Thread(target=self.add_keeper, args=(keeper,), daemon=True).start()
 
     def add_keeper(self, keeper: BookKeeper, start=True):
-        #print('ADDING', keeper.interface.name)
         with self.rwlock.write():
             self.keepers[keeper.interface.name] = keeper
         if not keeper.snapshot_applied:
             if not start:
-                raise ValueError('Cannot add keeper without applying snapshot (set start=True to apply snapshot automatically)')
+                raise ValueError('Keeper has no snapshot')
             keeper.start()
         with self.rwlock.read():
             keepers = { k.market.exchange_name: { 'bids': k.book.bids, 'asks': k.book.asks } for k in self.keepers.values() }
-        self.qsize.value += 1
-        self.workers.apply_async(self.keeper_snapshot, args=(self.book.bids, self.book.asks, keeper.book.bids.values(), keeper.book.asks.values(), self.px_in_process, keepers, self.rwlock, self.qsize))
-        #BookAggregator.keeper_snapshot(self.book.bids, self.book.asks, keeper.book.bids.values(), keeper.book.asks.values(), self.px_in_process)
+        self.keeper_snapshot(self.book.bids, self.book.asks, keeper.book.bids.values(), keeper.book.asks.values(), self.px_in_process, keepers, self.rwlock)
         keeper.add_callback(self.keeper_callback_async)
 
     @staticmethod
-    def keeper_snapshot(bids: SortedDict, asks: SortedDict, keeper_bids: list[Bid], keeper_asks: list[Bid], px_in_process: ListProxy, keepers: dict[str, dict[str, SortedDict]], rwlock, qsize):
+    def keeper_snapshot(bids: SortedDict, asks: SortedDict, keeper_bids: list[Bid], keeper_asks: list[Bid], px_in_process: ListProxy, keepers: dict[str, dict[str, SortedDict]], rwlock):
         for bid in keeper_bids:
             BookAggregator.calc_price_point(bids, asks, bid.price, px_in_process, 'bids', keepers, rwlock)
         for ask in keeper_asks:
             BookAggregator.calc_price_point(bids, asks, ask.price, px_in_process, 'asks', keepers, rwlock)
-        qsize.value -= 1
 
     def keeper_callback_async(self, update):
         self.updates_count += 1
-        self.qsize.value += 1
         keepers = { k.market.exchange_name: { 'bids': k.book.bids, 'asks': k.book.asks } for k in self.keepers.values() }
-        self.workers.apply_async(self.keeper_callback, args=(self.book.bids, self.book.asks, update, self.px_in_process, keepers, self.rwlock, self.qsize))
+        self.queue.put((self.book.bids, self.book.asks, update, self.px_in_process, keepers, self.rwlock))
+
+    def get_chunk(self, size=10):
+        """Returns a chunk of the queue with at most given size"""
+        chunk = []
+        while len(chunk) < size:
+            try:
+                # get an item from the queue
+                # block if the queue is empty
+                block = len(chunk) == 0
+                chunk.append(self.queue.get(block))
+            except queue.Empty:
+                break
+        return chunk
 
     @staticmethod
-    def keeper_callback(bids, asks, update, px_in_process, keepers: dict[str, dict[str, SortedDict]], rwlock, qsize):
+    def queue_processor(queue, stop_event):
+        while not stop_event.is_set():
+            # chunk is a list of update tuples (bids, asks, update, px_in_process, keepers, rwlock)
+            t0 = time.time()
+            #chunk = self.get_chunk(250)
+            t1 = time.time()
+            #print(len(chunk), self.queue.qsize())
+            t15 = time.time()
+            BookAggregator.keeper_callback_wrapper(queue.get())
+            t2 = time.time()
+            #print(f'\tWRAP: {t2-t15:.6f}')
+
+    @staticmethod
+    def keeper_callback_wrapper(args):
         t0 = time.time()
+        BookAggregator.keeper_callback(*args)
+        t1 = time.time()
+        #print(f'\tACTUAL: {t1-t0:.6f}')
+
+    @staticmethod
+    def keeper_callback(bids, asks, update, px_in_process, keepers: dict[str, dict[str, SortedDict]], rwlock):
         for bid in update.get('bids', []):
             bid = Bid(bid.get('price'), bid.get('size'), bid.get('updated'))
-            if bid.size == 0:
-                pass
             BookAggregator.calc_price_point(bids, asks, bid.price, px_in_process, 'bids', keepers, rwlock)
         for ask in update.get('asks', []):
             ask = Bid(ask.get('price'), ask.get('size'), ask.get('updated'))
             BookAggregator.calc_price_point(bids, asks, ask.price, px_in_process, 'asks', keepers, rwlock)
-        t1 = time.time()
-        #print(f'{t1-t0:.4f}')
-        qsize.value -= 1
 
     @staticmethod
     def calc_price_point(__bids: SortedDict, __asks: SortedDict, px: float, px_in_process: ListProxy, side:str, keepers: dict[str, dict[str, SortedDict]], rwlock):
         t0 = time.time()
         if not keepers:
-            print('NO KEEPERS SKIPPING')
+            #print('NO KEEPERS SKIPPING')
             return
         if px in px_in_process or -px in px_in_process:
             return
@@ -126,13 +149,13 @@ class BookAggregator:
         new_bids = []
         container = __bids if side == 'bids' else __asks
         #print('WAITING FOR LOCK', keepers.keys())
-        """for market, keeper_book in keepers.items():
+        for market, keeper_book in keepers.items():
             #print('COLLECTING BIDS', market)
             keeper_container = keeper_book['bids'] if side == 'bids' else keeper_book['asks']
             if (b := keeper_container.get(px)):
-                new_bids.append(b)"""
+                new_bids.append(b)
         # as a list comprehension
-        new_bids = [ keeper_container[px] for keeper_container in (keeper_book['bids'] if side == 'bids' else keeper_book['asks'] for keeper_book in keepers.values()) if keeper_container.get(px) ]
+        #new_bids = [ keeper_container[px] for keeper_container in (keeper_book['bids'] if side == 'bids' else keeper_book['asks'] for keeper_book in keepers.values()) if keeper_container.get(px) ]
         t2 = time.time()
         if not new_bids:
             container.pop(px, None)
@@ -179,3 +202,5 @@ class BookAggregator:
         with self.rwlock.read():
             for keeper in self.keepers.values():
                 keeper.stop()
+        self.stop_event.set()
+        self.proc.join()
