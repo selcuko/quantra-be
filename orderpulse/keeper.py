@@ -98,7 +98,10 @@ class BookKeeper:
 
     def on_update(self, update:dict):
         update['received'] = datetime.now()
+        update['market'] = self.market.exchange_name
         self.queue.put(update)
+        for callback in self.callbacks:
+            callback(update)
         self.update_count += 1
 
     def process_queue(self):
