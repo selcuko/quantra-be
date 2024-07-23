@@ -1,24 +1,25 @@
-from datetime import datetime
-import math
 import copy
-from typing import Iterable
-from sortedcontainers import SortedDict
+from datetime import datetime
+from decimal import Decimal
+from multiprocessing.managers import ValueProxy
+from typing import Any
 
-from orderpulse.manager import BookManager
+from sortedcontainers import SortedDict
 
 
 class Bid:
-    def __init__(self, price: float, size:float, updated:datetime|None=None):
+    def __init__(self, price: Decimal, size: Decimal):
+        assert price > 0,                   'price must be greater than 0'
+        #assert size >= 0,                   'size must be greater than 0'
+        assert isinstance(price, Decimal),  'price must be a Decimal'
+        assert isinstance(size, Decimal),   'size must be a Decimal'
         self.price = price
         self.size = size
-        self.updated = updated or datetime.now()
-        self.value = self.price * self.size
-
-    def __hash__(self):
-        return hash(self.price)
+        self.value = price * size
+        self.updated = datetime.now()
 
     def __repr__(self):
-        return f'(price={self.price}, size={self.size})'
+        return f'Bid(price={self.price}, size={self.size})'
 
     def __eq__(self, other):
         if not isinstance(other, Bid):
@@ -26,138 +27,131 @@ class Bid:
         return self.price == other.price and self.size == other.size
 
 
+class Delta:
+    def __init__(self, sequence: int|None, received: datetime, processed: datetime|None, bids: dict[Decimal, Bid]|None=None, asks: dict[Decimal, Bid]|None=None, market:str=''):
+        self.sequence = sequence or -1
+        self.received = received
+        self.processed = processed
+        self.bids = bids or SortedDict()
+        self.asks = asks or SortedDict()
+        self.market = market
+
+    def __repr__(self):
+        return f'Delta(sequence={self.sequence}, received={self.received}, processed={self.processed}, bids={len(self.bids.keys())}, asks={len(self.asks.keys())})'
+
+
 class Book:
-    def __init__(self, manager: BookManager):
-        self.manager = manager
-        self.snapshot_applied = False
-        self.bids = self.manager.SortedDict()
-        self.asks = self.manager.SortedDict()
+    def __init__(self, bids:SortedDict, asks:SortedDict, seq:ValueProxy[int]):
+        self.bids = bids
+        self.asks = asks
+        self.sequence = seq
 
-    def get_bids(self) -> list[Bid]:
-        return list(self.bids.values())
-
-    def get_asks(self) -> list[Bid]:
-        return list(self.asks.values())
-
-    def on_snapshot(self, snapshot: dict):
-        bids = snapshot.get('bids', [])
-        asks = snapshot.get('asks', [])
-
-        for bid in bids:
-            Book.insert_bid(self.bids, self.asks, bid, 'bids')
-
-        for ask in asks:
-            Book.insert_bid(self.bids, self.asks, ask, 'asks')
-
-        self.snapshot_applied = True
-
-    def copy(self):
-        book = Book(self.manager)
-        book.bids = copy.deepcopy(self.bids)
-        book.asks = copy.deepcopy(self.asks)
-        return book
+    def __repr__(self):
+        return f'Book(bids={len(self.bids.keys())}, asks={len(self.asks.keys())}, seq={self.sequence.value})'
 
     @staticmethod
-    def on_update(bids:SortedDict, asks:SortedDict, update: dict):
-        u_bids = update.get('bids', [])
-        u_asks = update.get('asks', [])
-        diff = { 'bids': [], 'asks': [] }
-        for bid in u_bids:
-            diff.update(Book.insert_bid(bids, asks, bid, 'bids'))
-
-        for ask in u_asks:
-            diff.update(Book.insert_bid(bids, asks, ask, 'asks'))
-        return diff
+    def convert(payload:dict[str, Any]):
+        """Converts the market payload to a Delta object"""
+        return Delta(
+            sequence=payload.get('sequence'),
+            received=payload['received'],
+            processed=payload.get('processed'),
+            bids=SortedDict({Decimal(bid['price']): Bid(Decimal(bid['price']), Decimal(bid['size'])) for bid in payload['bids']}),
+            asks=SortedDict({Decimal(ask['price']): Bid(Decimal(ask['price']), Decimal(ask['size'])) for ask in payload['asks']}),
+            market=payload['market'],
+        )
 
     @staticmethod
-    def insert_bid(bids:SortedDict, asks:SortedDict, bid:Bid|dict, side='bids', clean=True):
-        diff = {}
-        container = bids if side == 'bids' else asks
-        bid = bid if isinstance(bid, Bid) else Bid(bid.get('price', 0), bid.get('size', 0))
-        if bid.price and bid.size:
-            container[bid.price] = bid
-            diff[bid.price] = { 'price': bid.price, 'size': bid.size }
-            if side == 'bids':
-                # remove all asks with price less than this bid
-                if clean:
-                    new_asks = asks.irange(maximum=bid.price, inclusive=(False, True))
-                    new_asks = list(new_asks)
-                    for ask in new_asks:
-                        asks.pop(ask, None)
-                        diff[ask] = { 'price': ask, 'size': 0 }
-            if side == 'asks':
-                # remove all bids with price greater than this ask
-                if clean:
-                    new_bids = bids.irange(minimum=bid.price, inclusive=(True, False))
-                    new_bids = list(new_bids)
-                    for bid in new_bids:
-                        bids.pop(bid, None)
-                        diff[bid] = { 'price': bid, 'size': 0 }
-        else:
-            diff[bid.price] = { 'price': bid.price, 'size': 0 }
-            container.pop(bid.price, None)
-        return diff
-
-    def get_price(self):
-        try:
-            best_bid = self.bids.peekitem(-1)[1]
-            best_ask = self.asks.peekitem(0)[1]
-        except IndexError:
-            return 0
-        px = best_bid.price if best_bid.updated > best_ask.updated else best_ask.price
-        return px
-
-    def get_best(self, bids=None, asks=None, count=10):
-        if not bids:
-            bids = self.bids
-        if not asks:
-            asks = self.asks
-        bids = list(bids.values())[-count:]
-        asks = list(asks.values())[:count]
-        return bids, asks
-
-    def get_depth(self, count=10, depth:float=1):
-        depthed = Depth(self.bids.values(), self.asks.values(), depth)
-        bids, asks = depthed.bids, depthed.asks
-        return self.get_best(bids, asks, count)
-
-
-class Depth:
-    def __init__(self, bids:Iterable[Bid], asks:Iterable[Bid], depth:float=1):
-        self.initial_bids = copy.deepcopy(bids)
-        self.initial_asks = copy.deepcopy(asks)
-        self.bids = SortedDict()
-        self.asks = SortedDict()
-        self.depth = depth
-        self.set_depth()
-
-    def set_depth(self):
-        self.set_depth_for_bids(self.initial_bids, side='bids')
-        self.set_depth_for_bids(self.initial_asks, side='asks')
-
-    def set_depth_for_bids(self, bids:Iterable[Bid], side='bids'):
-        container = self.bids if side == 'bids' else self.asks
-        for bid in bids:
-            depthed_price = self.get_depthed_price(bid.price, side)
-            if depthed_price in container:
-                container[depthed_price].size += bid.size
-                container[depthed_price].updated = max(container[depthed_price].updated, bid.updated)
+    def apply(book: 'Book', delta: Delta, verify_sequence=True):
+        """Applies a Delta to a Book (as a difference delta)"""
+        if verify_sequence:
+            assert book.sequence.value < delta.sequence, f'Delta sequence {delta.sequence} must be greater than the Book sequence {book.sequence.value}'
+        book.sequence.value = delta.sequence
+        for price, bid in delta.bids.items():
+            if old_bid := book.bids.get(price):
+                book.bids[price] = Bid(price, old_bid.size + bid.size)
             else:
-                container[depthed_price] = Bid(depthed_price, bid.size, bid.updated)
+                book.bids[price] = Bid(price, bid.size)
+            try:
+                if book.bids[price].size == 0:
+                    del book.bids[price]
+            except KeyError:
+                print(book.bids, price)
+        for price, ask in delta.asks.items():
+            if old_ask := book.asks.get(price):
+                book.asks[price] = Bid(price, old_ask.size + ask.size)
+            else:
+                book.asks[price] = Bid(price, ask.size)
+            if book.asks[price].size == 0:
+                del book.asks[price]
 
-    def get_depthed_price(self, price, side:str):
-        if self.depth == 0:
-            return price
-        if self.depth == 1:
-            if side == 'bids':
-                return math.floor(price)
-            return math.ceil(price)
-        if self.depth > 1:
-            if side == 'bids':
-                return price // self.depth * self.depth
-            return price // self.depth * self.depth + self.depth
-        price = float(price)
-        if side == 'bids':
-            return math.floor(price / self.depth) * self.depth
-        return math.ceil(price / self.depth) * self.depth
+    @staticmethod
+    def insert(book: 'Book', delta: Delta) -> Delta:
+        """Inserts a Delta into a Book (as a new state), and returns a Delta with the difference"""
+        assert book.sequence.value < delta.sequence, f'Delta sequence {delta.sequence} must be greater than the Book sequence {book.sequence.value}'
+        book.sequence.value = delta.sequence
+        diff_delta = Delta(
+            sequence=delta.sequence,
+            received=delta.received,
+            processed=None,
+            bids=SortedDict(),
+            asks=SortedDict(),
+            market=delta.market,
+        )
+        for bid in delta.bids.values():
+            if bid.size:
+                old_size = 0
+                if old_bid := book.bids.get(bid.price):
+                    old_size = old_bid.size
+                book.bids[bid.price] = bid
+                if bid.size - old_size:
+                    diff_delta.bids[bid.price] = Bid(bid.price, bid.size - old_size)
+                outdated_asks = book.asks.irange(maximum=bid.price, inclusive=(False, True))
+                outdated_asks = list(outdated_asks)
+                for outdated_ask in outdated_asks:
+                    dropped_ask = book.asks.pop(outdated_ask, None)
+                    if isinstance(dropped_ask, Bid) and dropped_ask.size:
+                        diff_delta.asks[outdated_ask] = Bid(outdated_ask, -dropped_ask.size)
+            elif isinstance(dropped_bid := book.bids.pop(bid.price, None), Bid):
+                diff_delta.bids[bid.price] = Bid(bid.price, -dropped_bid.size)
 
+        for ask in delta.asks.values():
+            if ask.size:
+                old_size = 0
+                if old_ask := book.asks.get(ask.price):
+                    old_size = old_ask.size
+                book.asks[ask.price] = ask
+                if ask.size - old_size:
+                    diff_delta.asks[ask.price] = Bid(ask.price, ask.size - old_size)
+                outdated_bids = book.bids.irange(minimum=ask.price, inclusive=(True, False))
+                outdated_bids = list(outdated_bids)
+                for outdated_bid in outdated_bids:
+                    dropped_bid = book.bids.pop(outdated_bid, None)
+                    if isinstance(dropped_bid, Bid) and dropped_bid.size:
+                        diff_delta.bids[outdated_bid] = Bid(outdated_bid, -dropped_bid.size)
+            elif isinstance(dropped_ask := book.asks.pop(ask.price, None), Bid):
+                diff_delta.asks[ask.price] = Bid(ask.price, -dropped_ask.size)
+        return diff_delta
+
+    @staticmethod
+    def merge(main: 'Book', snapshot: 'Book'):
+        """Merges a snapshot into the main book. Values in snapshot are interpreted as deltas"""
+        print('merging', main.sequence.value, snapshot.sequence.value)
+        delta = Delta(
+            sequence=main.sequence.value + 1,
+            received=datetime.now(),
+            processed=None,
+            bids=copy.deepcopy(snapshot.bids),
+            asks=copy.deepcopy(snapshot.asks),
+        )
+        print('delta to be merged', delta)
+        Book.apply(main, delta)
+        return delta
+
+    def get_best(self, count=5):
+        """Returns the best bids and asks"""
+        return (
+            list(self.bids.values())[-count:],
+            list(self.asks.values())[:count],
+        )
+ 
