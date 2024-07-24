@@ -1,61 +1,58 @@
-from datetime import datetime
 import time
-import traceback
-from orderpulse.aggregator import Aggregator
-from orderpulse.structures import Book
 from quantapi.models import Market, MarketSymbol
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandParser, CommandError
 from orderpulse.keeper import KeeperPool
 
-def print_bidlist(bids):
-    for bid in bids:
-        delta = datetime.now() - bid.updated
-        print(f'{bid.price:,.2f}\t{bid.size:8,.5f}\t[{delta.seconds}s]')
 
 class Command(BaseCommand):
+
+    def add_arguments(self, parser: CommandParser) -> None:
+        
+        depth_choices = [0.01, 0.1, 1, 10, 100]
+        parser.add_argument('symbol', type=str, help='Market symbol (e.g. BTC-USDT)')
+        parser.add_argument('market', type=str, help='Exchange name (e.g. GATEIO)')
+        parser.add_argument('--depth', type=int, help='Depth of the order book', default=1, choices=depth_choices)
+        parser.add_argument('--count', type=int, help='Number of bids and asks to display', default=5)
+        parser.add_argument('--interval', type=int, help='Interval in seconds to update the order book', default=1)
+
+    def print_bids(self, bids, side='bids', length=0):
+        print(f'{side.capitalize()} ({length}):')
+        for bid in bids:
+            print(f'{bid.price:,.2f}\t{bid.size:,.5f}')
+        print()
+
+    def validate(self, options):
+        options['market'] = options['market'].upper()
+        options['symbol'] = options['symbol'].upper().replace('-', '').replace('USDT', '') + '-USDT'
+        available_markets = Market.objects.values_list('exchange_name', flat=True)
+        if not options['market'] in available_markets:
+            raise CommandError(f'Exchange {options["market"]} not registered, choose from: {available_markets}')
+
     def handle(self, *args, **options):
-        market = Market.objects.get(exchange_name='GATEIO')
-        market.get_interface()
-        symbol = MarketSymbol.objects.get(name='BTC-USDT', market=market)
+        self.validate(options)
+        try:
+            market = Market.objects.get(exchange_name=options['market'])
+            symbol = MarketSymbol.objects.get(name=options['symbol'], market=market)
+        except Market.DoesNotExist:
+            raise CommandError(f'Market {options["market"]} not found.')
+        except MarketSymbol.DoesNotExist:
+            raise CommandError(f'Market symbol {options["symbol"]} not found in {options["market"]}.')
+
+        self.stdout.write(f'Starting keeper for {options["symbol"]} on {options["market"]}')
         k = KeeperPool.get(symbol)
         k.start()
-        bc = k.book.copy()
-        ag = Aggregator(symbol.name, k.manager)
-        ag.add_keeper(k)
-
-        def callback(diff):
-            Book.apply_diff(bc.bids, bc.asks, diff)
-            k_best = k.book.get_best(count=3)
-            bc_best = bc.get_best(count=3)
-            bids = zip(k_best[0], bc_best[0])
-            asks = zip(k_best[1], bc_best[1])
-            print('Bids:')
-            for k_bid, bc_bid in bids:
-                style = self.style.SUCCESS if k_bid.price == bc_bid.price and k_bid.size == bc_bid.size else self.style.ERROR
-                size_format = f'{k_bid.size:,.5f}' if k_bid.size == bc_bid.size else f'{k_bid.size:,.5f} {bc_bid.size:,.5f}'
-                type_diff = '' if type(k_bid) == type(bc_bid) else f'k={type(k_bid)} bc={type(bc_bid)}'
-                self.stdout.write(style(f'{k_bid.price:,.2f} {bc_bid.price:,.2f} - {size_format} {type_diff}'))
-            print('Asks:')
-            for k_ask, bc_ask in asks:
-                style = self.style.SUCCESS if k_ask.price == bc_ask.price and k_ask.size == bc_ask.size else self.style.ERROR
-                size_format = f'{k_ask.size:,.5f}' if k_ask.size == bc_ask.size else f'{k_ask.size:,.5f} {bc_ask.size:,.5f}'
-                type_diff = '' if type(k_ask.price) == type(bc_ask.price) else f'k={type(k_ask.price)} bc={type(bc_ask.price)}'
-                self.stdout.write(style(f'{k_ask.price:,.2f} {bc_ask.price:,.2f} - {size_format} {type_diff}'))
-
-        k.add_callback(callback)
 
         while True:
             try:
-                bids, asks = k.book.get_depth(count=5, depth=1)
-                queue_c = k.queue.qsize()
-                td = f'{k.since_last_update():.2f}s' if k.since_last_update() else 'no updates'
-                #bids, asks = k.book.get_best(count=10)
-                """print(f'\nBids ({len(k.book.bids.values())}):')
-                print_bidlist(bids)
-                print(f'\nPrice: {k.book.get_price():,.2f}\tLatency: {td}')  # latency is the timedelta between we receive the update and process it
-                print(f'\nAsks ({len(k.book.asks.values())}):')
-                print_bidlist(asks)
-                print(f'\nQueue: {queue_c} ({k.update_count})')"""
-                time.sleep(1)
-            except Exception as e:
-                traceback.print_exc()
+                bids, asks = k.book.get_depth(count=options['count'], depth=options['depth'])
+                #bids, asks = k.book.get_best(count=10)  # replace line aboce with this to see raw price levels
+                self.print_bids(bids, 'bids', len(k.book.bids.keys()))
+                print(f'\nPrice: {k.book.get_price():,.2f}\n')
+                self.print_bids(asks, 'asks', len(k.book.asks.keys()))
+                print(f'\nStatus: {k.state()}')
+                print()
+                time.sleep(options['interval'])
+            except KeyboardInterrupt:
+                k.stop()
+                self.stdout.write(self.style.SUCCESS('OK, bye.'))
+                break

@@ -46,8 +46,7 @@ if ENVIRONMENT != 'local':
     )
 
 
-ALLOWED_HOSTS = ['localhost', 'api.example.com', 'api-dev.example.com']
-ALLOWED_HOSTS += [gethostbyname(gethostname())]
+ALLOWED_HOSTS = ['*']
 CSRF_TRUSTED_ORIGINS = ['https://example.org', 'https://example.com', 'https://dev.example.com', 'https://api.example.com', 'https://api-dev.example.com']
 CORS_ALLOW_ALL_ORIGINS = True
 

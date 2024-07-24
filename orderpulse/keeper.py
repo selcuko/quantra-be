@@ -2,13 +2,33 @@ import copy
 from datetime import datetime
 from multiprocessing import Queue, synchronize
 import multiprocessing
+import queue
 import threading
-import time
 from orderpulse.manager import BookManager
 from orderpulse.structures import Book
 import typing
+from typing import Callable, Optional
 if typing.TYPE_CHECKING:
     from quantapi.models import MarketSymbol
+
+
+class KeeperPool:
+    manager = BookManager()
+    manager_started = False
+    keepers: dict['MarketSymbol', 'Keeper'] = {}
+
+    @classmethod
+    def get(cls, symbol:'MarketSymbol', callback:Optional[Callable]=None) -> 'Keeper':
+        if not cls.manager_started:
+            cls.manager.start()
+            cls.manager_started = True
+        if symbol not in cls.keepers:
+            cls.keepers[symbol] = Keeper(symbol, cls.manager)
+        keeper = cls.keepers[symbol]
+        if callback:
+            keeper.add_callback(callback)
+        return keeper
+
 
 class Keeper:
     def __init__(self, symbol:'MarketSymbol', manager:BookManager):
@@ -29,6 +49,7 @@ class Keeper:
         self.worker_process = None
         self.dispatch_thread = None
         self.market_thread = None
+        self.started = False
 
     def state(self):
         status = 'undefined'
@@ -39,16 +60,17 @@ class Keeper:
         latency_to = self.last_update
         latency_sec = (latency_to - latency_from).total_seconds() if latency_from and latency_to else None
         since_last_update = f'{latency_sec:.3f}s' if latency_sec else 'never'
+        if not self.started:
+            status = 'initialized'
         if self.received_seq == 0:
-            status = 'waiting snapshot'
+            status = 'snapshotting'
         if self.received_seq == 1:
-            status = 'subscribing to ws'
+            status = 'subscribing'
         elif self.market_thread and self.market_thread.is_alive() and self.worker_process and self.worker_process.is_alive() and self.dispatch_thread and self.dispatch_thread.is_alive():
             status = 'running'
         else:
             status = 'degraded'
-        return f'{status} [{since_last_update}] [Q:{qsize} D:{dispatch} U:{updates}]'
-
+        return f'{status}\t[{since_last_update}]  [Q:{qsize} D:{dispatch} U:{updates}]'
 
     def add_callback(self, callback):
         """Adds a callback to the list of callbacks that will be called when an update is processed (callbacks are blocking, make them fast)"""
@@ -70,6 +92,7 @@ class Keeper:
         self.dispatch_thread.start()
         self.worker_process = multiprocessing.Process(target=Keeper.worker, args=(self.book, self.update_queue, self.dispatch_queue, self.stop_event, self.book_lock, self.last_processed_ts))
         self.worker_process.start()
+        self.started = True
 
     def on_update(self, update:dict):
         """Receives an update from the exchange, adds metadata and queues it for processing"""
@@ -81,21 +104,27 @@ class Keeper:
         self.update_queue.put(update)
 
     @staticmethod
-    def worker(book: Book, queue: Queue, dispatch: Queue, stop_event: synchronize.Event, lock: synchronize.Lock, last_ts):
+    def worker(book: Book, update_queue: Queue, dispatch: Queue, stop_event: synchronize.Event, lock: synchronize.Lock, last_ts):
         """Processes the updates from the queue and applies them to the book"""
         while not stop_event.is_set():
+            try:
+                update = update_queue.get(timeout=0.5)
+            except queue.Empty:
+                continue
+            delta = Book.convert(update)
             with lock:
-                update = queue.get()
-                delta = Book.convert(update)
                 diff_delta = Book.insert(book, delta)
-                diff_delta.processed = datetime.now()
-                dispatch.put(diff_delta)
-                last_ts.value = int(delta.received.timestamp())
+            diff_delta.processed = datetime.now()
+            dispatch.put(diff_delta)
+            last_ts.value = int(update['received'].timestamp())
 
     def dispatch(self):
         """Dispatches the processed updates to the database"""
         while not self.stop_event.is_set():
-            delta = self.dispatch_queue.get()
+            try:
+                delta = self.dispatch_queue.get(timeout=0.5)
+            except queue.Empty:
+                continue
             for callback in self.callbacks:
                 callback(delta)
 
@@ -118,4 +147,4 @@ class Keeper:
             self.worker_process.join()
         if self.dispatch_thread:
             self.dispatch_thread.join()
-        self.manager.shutdown()
+        self.started = False

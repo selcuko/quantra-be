@@ -1,22 +1,22 @@
 import copy
 from datetime import datetime
 from decimal import Decimal
+import math
 from multiprocessing.managers import ValueProxy
-from typing import Any
+from typing import Any, Iterable, Optional
 
 from sortedcontainers import SortedDict
 
 
 class Bid:
-    def __init__(self, price: Decimal, size: Decimal):
+    def __init__(self, price: Decimal, size: Decimal, updated: Optional[datetime]=None):
         assert price > 0,                   'price must be greater than 0'
-        #assert size >= 0,                   'size must be greater than 0'
         assert isinstance(price, Decimal),  'price must be a Decimal'
         assert isinstance(size, Decimal),   'size must be a Decimal'
         self.price = price
         self.size = size
         self.value = price * size
-        self.updated = datetime.now()
+        self.updated = updated or datetime.now()
 
     def __repr__(self):
         return f'Bid(price={self.price}, size={self.size})'
@@ -148,10 +148,63 @@ class Book:
         Book.apply(main, delta)
         return delta
 
-    def get_best(self, count=5):
+    def get_price(self) -> Decimal:
+        try:
+            best_bid = self.bids.peekitem(-1)[1]
+            best_ask = self.asks.peekitem(0)[1]
+        except IndexError:
+            return Decimal(0)
+        return best_bid.price if best_bid.updated > best_ask.updated else best_ask.price
+
+    def get_best(self, bids:Optional[Iterable[Bid]]=None, asks:Optional[Iterable[Bid]]=None, count=5):
         """Returns the best bids and asks"""
+        if not bids:
+            bids = self.bids.values()
+        if not asks:
+            asks = self.asks.values()
         return (
-            list(self.bids.values())[-count:],
-            list(self.asks.values())[:count],
+            list(bids)[-count:],
+            list(asks)[:count],
         )
- 
+
+    def get_depth(self, count=5, depth=1):
+        depth = Depth(self, depth)
+        return self.get_best(bids=depth.bids.values(), asks=depth.asks.values(), count=count)
+
+
+class Depth:
+    def __init__(self, book: Book, depth:float=1):
+        self.book = book
+        self.bids = SortedDict()
+        self.asks = SortedDict()
+        self.depth = Decimal(depth)
+        self.set_depth()
+
+    def set_depth(self):
+        self.set_depth_for_bids(self.book.bids.values(), side='bids')
+        self.set_depth_for_bids(self.book.asks.values(), side='asks')
+
+    def set_depth_for_bids(self, bids:Iterable[Bid], side='bids'):
+        container = self.bids if side == 'bids' else self.asks
+        for bid in bids:
+            depthed_price = self.get_depth_price(bid.price, side)
+            if depthed_price in container:
+                container[depthed_price].size += bid.size
+                container[depthed_price].updated = max(container[depthed_price].updated, bid.updated)
+            else:
+                container[depthed_price] = Bid(depthed_price, bid.size, bid.updated)
+
+    def get_depth_price(self, price, side:str):
+        if self.depth == 0:
+            return price
+        if self.depth == 1:
+            if side == 'bids':
+                return Decimal(math.floor(price))
+            return Decimal(math.ceil(price))
+        if self.depth > 1:
+            if side == 'bids':
+                return Decimal(price // self.depth * self.depth)
+            return Decimal(price // self.depth * self.depth + self.depth)
+        if side == 'bids':
+            return Decimal(math.floor(price / self.depth) * self.depth)
+        return Decimal(math.ceil(price / self.depth) * self.depth)
