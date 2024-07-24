@@ -1,6 +1,6 @@
 from django.urls import path
 
-from aggregator.views import chat_index, room
+from orderpulse.views import chat_index, room
 
 urlpatterns = [
     path('', chat_index),

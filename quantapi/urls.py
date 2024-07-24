@@ -23,5 +23,5 @@ router.register(r'health', HealthViewSet, basename='health')
 
 urlpatterns = [
     path('', include(router.urls)),
-    path('agg/', include('aggregator.urls')),
+    path('agg/', include('orderpulse.urls')),
 ]
