@@ -10,7 +10,7 @@ from sortedcontainers import SortedDict
 
 class Bid:
     def __init__(self, price: Decimal, size: Decimal, updated: Optional[datetime]=None):
-        assert price > 0,                   'price must be greater than 0'
+        assert price >= 0,                  'price must be greater than 0: %s' % price
         assert isinstance(price, Decimal),  'price must be a Decimal'
         assert isinstance(size, Decimal),   'size must be a Decimal'
         self.price = price
@@ -72,11 +72,8 @@ class Book:
                 book.bids[price] = Bid(price, old_bid.size + bid.size)
             else:
                 book.bids[price] = Bid(price, bid.size)
-            try:
-                if book.bids[price].size == 0:
-                    del book.bids[price]
-            except KeyError:
-                print(book.bids, price)
+            if book.bids[price].size == 0:
+                del book.bids[price]
         for price, ask in delta.asks.items():
             if old_ask := book.asks.get(price):
                 book.asks[price] = Bid(price, old_ask.size + ask.size)
@@ -136,7 +133,6 @@ class Book:
     @staticmethod
     def merge(main: 'Book', snapshot: 'Book'):
         """Merges a snapshot into the main book. Values in snapshot are interpreted as deltas"""
-        print('merging', main.sequence.value, snapshot.sequence.value)
         delta = Delta(
             sequence=main.sequence.value + 1,
             received=datetime.now(),
@@ -144,7 +140,6 @@ class Book:
             bids=copy.deepcopy(snapshot.bids),
             asks=copy.deepcopy(snapshot.asks),
         )
-        print('delta to be merged', delta)
         Book.apply(main, delta)
         return delta
 

@@ -388,6 +388,7 @@ class BybitMarket(IMarket):
                 if retries < self.WS_MAX_RETRIES:
                     time.sleep(1)
                     return self.init_orderbook_websocket(symbol, callback, liveloop, retries+1)
+                ws.close()
                 raise MarketAPIError('Failed to connect to websocket')
             update = self.format_orderbook(data['data'])
             if data['data']['seq']:

@@ -364,6 +364,7 @@ class OKXMarket(IMarket):
             }))
             ack = json.loads(ws.recv())
             if ack.get('op') == 'error':
+                ws.close()
                 raise MarketAPIError(f'Failed to subscribe to websocket: {ack}')
             while not self.stop_websocket_stream and not (liveloop and liveloop.should_stop()):
                 try:
@@ -383,7 +384,9 @@ class OKXMarket(IMarket):
                 return self.init_orderbook_websocket(symbol, callback, liveloop, retries+1)
             msg = f'Failed to connect to websocket: {e}'
             logger.error(msg, extra={'market': self.name, 'type': 'MARKET'})
+            ws.close()
             raise MarketAPIError(f'Failed to connect to websocket: {traceback.format_exc()}')
+        ws.close()
 
     def get_equity(self, save=True):
         prices = self.get_current_prices(save=False)

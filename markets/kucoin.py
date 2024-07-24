@@ -571,6 +571,7 @@ class KucoinMarket(IMarket):
         ws.send(json.dumps(sub))
         ack = json.loads(ws.recv())
         if not ack.get('type') == 'ack':
+            ws.close()
             raise ValueError(f'Error while subscribing to {symbol} on {self.name}: {ack}')
         last_ping = datetime.now()
         seq = 0
@@ -591,6 +592,7 @@ class KucoinMarket(IMarket):
             orderbook = self.format_orderbook_update(msg['data']['changes'], seq=seq)
             callback(orderbook)
             seq = msg['data']['sequenceEnd']
+        ws.close()
 
     @authentication_required
     def get_account(self):

@@ -15,19 +15,29 @@ if typing.TYPE_CHECKING:
 class KeeperPool:
     manager = BookManager()
     manager_started = False
-    keepers: dict['MarketSymbol', 'Keeper'] = {}
+    pool: dict['MarketSymbol', 'Keeper'] = {}
 
     @classmethod
-    def get(cls, symbol:'MarketSymbol', callback:Optional[Callable]=None) -> 'Keeper':
-        if not cls.manager_started:
+    def get(cls, symbol:'MarketSymbol', callback:Optional[Callable]=None, manager:Optional[BookManager]=None) -> 'Keeper':
+        if not manager and not cls.manager_started:
             cls.manager.start()
             cls.manager_started = True
-        if symbol not in cls.keepers:
-            cls.keepers[symbol] = Keeper(symbol, cls.manager)
-        keeper = cls.keepers[symbol]
+        manager = manager or cls.manager
+        if symbol not in cls.pool:
+            keeper = Keeper(symbol, manager)
+            keeper.start()
+            cls.pool[symbol] = keeper
+        keeper = cls.pool[symbol]
         if callback:
             keeper.add_callback(callback)
         return keeper
+
+    @classmethod
+    def pop(cls, keeper: 'Keeper'):
+        cls.pool.pop(keeper.symbol)
+        if not cls.pool and cls.manager_started:
+            cls.manager.shutdown()
+            cls.manager_started = False
 
 
 class Keeper:
@@ -62,15 +72,15 @@ class Keeper:
         since_last_update = f'{latency_sec:.3f}s' if latency_sec else 'never'
         if not self.started:
             status = 'initialized'
-        if self.received_seq == 0:
+        elif self.received_seq == 0:
             status = 'snapshotting'
-        if self.received_seq == 1:
+        elif self.received_seq == 1:
             status = 'subscribing'
         elif self.market_thread and self.market_thread.is_alive() and self.worker_process and self.worker_process.is_alive() and self.dispatch_thread and self.dispatch_thread.is_alive():
             status = 'running'
         else:
             status = 'degraded'
-        return f'{status}\t[{since_last_update}]  [Q:{qsize} D:{dispatch} U:{updates}]'
+        return f'{status}  [{since_last_update}]  [Q:{qsize} D:{dispatch} U:{updates}]'
 
     def add_callback(self, callback):
         """Adds a callback to the list of callbacks that will be called when an update is processed (callbacks are blocking, make them fast)"""
@@ -148,3 +158,4 @@ class Keeper:
         if self.dispatch_thread:
             self.dispatch_thread.join()
         self.started = False
+        KeeperPool.pop(self)

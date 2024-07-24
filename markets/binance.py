@@ -376,7 +376,9 @@ class BinanceMarket(IMarket):
                 return self.init_orderbook_websocket(symbol, callback, liveloop, retries)
             msg = f'Cannot start websocket connection for orderbook for {symbol} on {self.name} (tried {retries} times).'
             logger.error(msg, exc_info=True)
+            ws.close()
             raise MarketAPIError(msg)
+        ws.close()
 
     def get_account(self, save=True):
         account = self.client.get_account()

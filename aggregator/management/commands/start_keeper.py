@@ -7,7 +7,6 @@ from orderpulse.keeper import KeeperPool
 class Command(BaseCommand):
 
     def add_arguments(self, parser: CommandParser) -> None:
-        
         depth_choices = [0.01, 0.1, 1, 10, 100]
         parser.add_argument('symbol', type=str, help='Market symbol (e.g. BTC-USDT)')
         parser.add_argument('market', type=str, help='Exchange name (e.g. GATEIO)')
@@ -45,11 +44,11 @@ class Command(BaseCommand):
         while True:
             try:
                 bids, asks = k.book.get_depth(count=options['count'], depth=options['depth'])
-                #bids, asks = k.book.get_best(count=10)  # replace line aboce with this to see raw price levels
+                #bids, asks = k.book.get_best(count=10)  # replace line above with this to see raw price levels
                 self.print_bids(bids, 'bids', len(k.book.bids.keys()))
-                print(f'\nPrice: {k.book.get_price():,.2f}\n')
+                print(f'Price: {k.book.get_price():,.2f}\n')
                 self.print_bids(asks, 'asks', len(k.book.asks.keys()))
-                print(f'\nStatus: {k.state()}')
+                print(f'Status: {k.state()}')
                 print()
                 time.sleep(options['interval'])
             except KeyboardInterrupt:

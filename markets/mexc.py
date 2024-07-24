@@ -238,6 +238,7 @@ class MEXCMarket(IMarket):
                 continue
             orderbook = self.format_orderbook_update(response['d'])
             callback(orderbook)
+        ws.close()
 
     def has_symbol(self, symbol: str) -> bool:
         if not self.symbols:

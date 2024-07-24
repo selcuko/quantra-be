@@ -1,42 +1,52 @@
-from datetime import datetime
 import time
-from django.core.management.base import BaseCommand
-from numpy import size
-from orderpulse.consolidator import AggregatorPool
-
+from django.core.management.base import BaseCommand, CommandParser, CommandError
+from orderpulse.aggregator import AggregatorPool
+from quantapi.models import Market, MarketSymbol
 
 class Command(BaseCommand):
-    def handle(self, *args, **options):
-        markets = ['GATEIO']
-        agg = AggregatorPool.get('BTC-USDT', markets)
-        time.sleep(5)
-        kep = agg.keepers[markets[0]]
+    def add_arguments(self, parser: CommandParser) -> None:
+        depth_choices = [0.01, 0.1, 1, 10, 100]
+        parser.add_argument('symbol', type=str, help='Market symbol (e.g. BTC-USDT)')
+        parser.add_argument('markets', type=str, nargs='+', help='Exchange names (e.g. GATEIO,KUCOIN)')
+        parser.add_argument('--depth', type=int, help='Depth of the order book', default=1, choices=depth_choices)
+        parser.add_argument('--count', type=int, help='Number of bids and asks to display', default=5)
+        parser.add_argument('--interval', type=int, help='Interval in seconds to update the order book', default=1)
 
-        def print_bidlist(bids, keeper_bids):
-            for bid, k_bid in zip(bids, keeper_bids):
-                style = self.style.SUCCESS if bid.price == k_bid.price and bid.size == k_bid.size else self.style.ERROR
-                size_format = f'{bid.size:,.5f}' if bid.size == k_bid.size else f'{bid.size:,.5f} {k_bid.size:,.5f}'
-                delta = datetime.now() - bid.updated
-                self.stdout.write(style(f'{bid.price:,.2f} {k_bid.price:,.2f}\t{size_format}\t[{delta.seconds}s]'))
-        start = time.time()
+    def validate(self, options):
+        options['markets'] = [m.upper() for m in options['markets']]
+        options['symbol'] = options['symbol'].upper().replace('-', '').replace('USDT', '') + '-USDT'
+        available_markets = Market.objects.values_list('exchange_name', flat=True)
+        for market in options['markets']:
+            if not market in available_markets:
+                raise CommandError(f'Exchange {market} not registered, choose from: {available_markets}')
+            if not MarketSymbol.objects.filter(name=options['symbol'], market__exchange_name=market).exists():
+                raise CommandError(f'Market symbol {options["symbol"]} not found in {market}.')
+
+    def print_bids(self, bids, side='bids', length=0):
+        print(f'{side.capitalize()} ({length}):')
+        for bid in bids:
+            print(f'{bid.price:,.2f}\t{bid.size:,.5f}')
+        print()
+
+    def print_stats(self, keepers):
+        for k in keepers:
+            print(f'{k.market}\t{k.state()}')
+        print()
+
+    def handle(self, *args, **options):
+        self.validate(options)
+        agg = AggregatorPool.get(options['symbol'], options['markets'])
+
         while True:
             try:
-                health = { k.market.exchange_name: k.state for k in agg.keepers.values() }
-                qsize = f'{agg.queue.qsize()} ({agg.updates_count})'
-                bids, asks = agg.book.get_depth(count=5, depth=1)
-                #bids, asks = k.book.get_best(count=10)
-                print(f'\nBids ({len(agg.book.bids.values())}):')
-                print_bidlist(bids, kep.book.bids)
-                print(f'\nPrice: {agg.get_price():,.2f}')
-                print(f'\nAsks ({len(agg.book.asks.values())}):')
-                print_bidlist(asks, kep.book.asks)
-                print(f'\nQueue: {qsize}')
-                print()
-                for market, state in health.items():
-                    print(f'{market}\t{state}')
+                bids, asks = agg.book.get_depth(count=options['count'], depth=options['depth'])
+                #bids, asks = k.book.get_best(count=10)  # replace line above with this to see raw price levels
+                self.print_bids(bids, 'bids', len(agg.book.bids.keys()))
+                print(f'Price: {agg.get_price():,.2f}\n')
+                self.print_bids(asks, 'asks', len(agg.book.asks.keys()))
+                self.print_stats(agg.keepers.values())
                 time.sleep(1)
             except KeyboardInterrupt:
                 agg.stop()
+                self.stdout.write(self.style.SUCCESS('OK, bye.'))
                 break
-            if time.time() - start > 1200:
-                agg.stop()
