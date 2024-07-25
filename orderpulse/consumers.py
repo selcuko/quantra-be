@@ -12,7 +12,9 @@ from quantapi.models import Market, MarketSymbol
 
 class OrderbookConsumer(AsyncWebsocketConsumer):
     async def connect(self):
-        self.update = {}
+        self.keeper = None
+        self.count = 5
+        self.depth = 1
         await self.accept()
 
     async def disconnect(self, close_code):
@@ -39,7 +41,6 @@ class OrderbookConsumer(AsyncWebsocketConsumer):
         return KeeperPool.get(symbol)
 
     async def subscribe(self, event):
-        # send ACK frame and start the subscription loop
         try:
             market = event['market']
             symbol = event['symbol']
@@ -48,12 +49,12 @@ class OrderbookConsumer(AsyncWebsocketConsumer):
         except KeyError:
             await self.send(text_data=json.dumps({'error': 'Market and symbol must be specified'}))
             return
-        self.keeper = await sync_to_async(self.get_keeper)(market, symbol)
-        if not self.keeper.is_running():
-            self.keeper.start()
+        self.keeper = await sync_to_async(KeeperPool.get)(market, symbol)
         await self.sub_loop()
 
     async def sub_loop(self):
+        if not self.keeper:
+            raise ValueError('No keeper')
         while True:
             bids, asks = self.keeper.book.get_depth(count=self.count, depth=self.depth)
             await self.send(text_data=json.dumps({
@@ -64,36 +65,3 @@ class OrderbookConsumer(AsyncWebsocketConsumer):
             # sleep until the next second
             ms = datetime.datetime.now().microsecond
             await asyncio.sleep(1 - ms / 1_000_000)
-
-
-
-
-class ChatConsumer(AsyncWebsocketConsumer):
-    # type hinting
-    async def connect(self):
-        self.room_name = self.scope["url_route"]["kwargs"]["room_name"]
-        self.room_group_name = f"chat_{self.room_name}"
-        # Join room group
-        await self.channel_layer.group_add(self.room_group_name, self.channel_name)
-
-        await self.accept()
-
-    async def disconnect(self, close_code):
-        # Leave room group
-        await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
-
-    # Receive message from WebSocket
-    async def receive(self, text_data):
-        text_data_json = json.loads(text_data)
-        message = text_data_json["message"]
-
-        # Send message to room group
-        conn_id = self.scope["client"][1]
-        await self.channel_layer.group_send(self.room_group_name, {"type": "chat.message", "message": f'[{conn_id}]: {message}'})
-
-    # Receive message from room group
-    async def chat_message(self, event):
-        message = event["message"]
-
-        # Send message to WebSocket
-        await self.send(text_data=json.dumps({"message": message}))
