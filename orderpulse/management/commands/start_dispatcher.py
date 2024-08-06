@@ -40,14 +40,21 @@ class Command(BaseCommand):
         except MarketSymbol.DoesNotExist:
             raise CommandError(f'Market symbol {options["symbol"]} not found in {options["market"]}.')
 
-        self.stdout.write(f'Starting keeper for {options["symbol"]} on {options["market"]}')
+        self.stdout.write(f'Starting keeper for {options["symbol"]} on {options["market"]}', ending='\t')
         k = KeeperPool.get(symbol)
         k.start()
-
+        self.stdout.write(self.style.SUCCESS('OK'))
+        self.stdout.write(f'Starting dispatcher for {options["symbol"]} on {options["market"]}', ending='\t')
         d = KeeperDispatch(k)
+        self.stdout.write(self.style.SUCCESS('OK'))
+        self.stdout.write(f'Synchronizing dispatcher for {options["symbol"]} on {options["market"]}', ending='\t')
         d.synchronize()
+        self.stdout.write(self.style.SUCCESS('OK'))
+        self.stdout.write(f'Starting worker for {options["symbol"]} on {options["market"]}', ending='\t')
+        d.start()
+        self.stdout.write(self.style.SUCCESS('OK'))
 
-        def callback(self, delta:Delta):
+        def callback(delta:Delta):
             print(f'[{datetime.now()}] received delta seq={delta.sequence}')
 
         d.add_callback(callback)

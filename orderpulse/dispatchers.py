@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 from queue import Queue
-from threading import Event
+from threading import Event, Thread
 from orderpulse.keeper import Keeper
 from orderpulse.structures import Book, Delta
 
@@ -16,6 +16,7 @@ class KeeperDispatch:
         self.stop_event = Event()
         self.last_sync = None
         self.callbacks = []
+        self.thread = None
 
     def add_callback(self, callback):
         self.callbacks.append(callback)
@@ -37,11 +38,15 @@ class KeeperDispatch:
     def callback(self, delta: Delta):
         self.buffer.put(delta)
 
+    def start(self):
+        self.thread = Thread(target=self.worker, name='KeeperDispatch')
+        self.thread.start()
+
     def worker(self):
         assert self.snapshot and self.last_sync, 'KeeperDispatch must be synchronized before starting the worker'
         while not self.stop_event.is_set():
             now = datetime.now()
-            if (self.last_sync - now > self.interval) and self.delta:
+            if (now - self.last_sync > self.interval) and self.delta:
                 self.second = now.second
                 Book.apply(self.snapshot, self.delta)
                 self.notify()
