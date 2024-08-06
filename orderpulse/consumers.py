@@ -1,12 +1,13 @@
 # myapp/consumers.py
 import asyncio
-import datetime
 import json
 import django
+
+from orderpulse.dispatchers import KeeperDispatchPool
+from orderpulse.structures import Delta
 django.setup()
 from channels.generic.websocket import AsyncWebsocketConsumer
 from asgiref.sync import sync_to_async
-from orderpulse.keeper import KeeperPool
 from quantapi.models import Market, MarketSymbol
 
 
@@ -21,7 +22,11 @@ class OrderbookConsumer(AsyncWebsocketConsumer):
         pass
 
     async def receive(self, text_data):
-        inbound = json.loads(text_data)
+        try:
+            inbound = json.loads(text_data)
+        except json.decoder.JSONDecodeError:
+            await self.send(text_data=json.dumps({'error': 'Invalid JSON'}))
+            return
         message_type = inbound.get('type')
         if not message_type:
             await self.send(text_data=json.dumps({'error': 'No message type specified'}))
@@ -33,12 +38,12 @@ class OrderbookConsumer(AsyncWebsocketConsumer):
         await handler(inbound)
 
     async def default_handler(self, event):
-        await self.send(text_data=json.dumps(event))
+        await self.send(text_data=json.dumps({'error': 'Invalid message type'}))
 
     def get_keeper(self, market, symbol):
         market = Market.objects.get(exchange_name=market)
         symbol = MarketSymbol.objects.get(name=symbol, market=market)
-        return KeeperPool.get(symbol)
+        return KeeperDispatchPool.get(symbol)
 
     async def subscribe(self, event):
         try:
@@ -49,19 +54,15 @@ class OrderbookConsumer(AsyncWebsocketConsumer):
         except KeyError:
             await self.send(text_data=json.dumps({'error': 'Market and symbol must be specified'}))
             return
-        self.keeper = await sync_to_async(KeeperPool.get)(market, symbol)
-        await self.sub_loop()
+        try:
+            self.keeper = await sync_to_async(self.get_keeper)(market, symbol)
+        except Market.DoesNotExist:
+            await self.send(text_data=json.dumps({'error': f'Market {market} not found'}))
+            return
+        except MarketSymbol.DoesNotExist:
+            await self.send(text_data=json.dumps({'error': f'Symbol {symbol} not found in {market}'}))
+            return
+        self.keeper.add_callback(self.callback)
 
-    async def sub_loop(self):
-        if not self.keeper:
-            raise ValueError('No keeper')
-        while True:
-            bids, asks = self.keeper.book.get_depth(count=self.count, depth=self.depth)
-            await self.send(text_data=json.dumps({
-                'bids': bids,
-                'asks': asks,
-                'price': self.keeper.book.get_price(),
-            }, default=str))
-            # sleep until the next second
-            ms = datetime.datetime.now().microsecond
-            await asyncio.sleep(1 - ms / 1_000_000)
+    def callback(self, delta: Delta):
+        asyncio.run(self.send(text_data=delta.json()))

@@ -1,6 +1,7 @@
 import copy
 from datetime import datetime
 from decimal import Decimal
+import json
 import math
 from multiprocessing.managers import ValueProxy
 from typing import Any, Iterable, Optional
@@ -47,6 +48,18 @@ class Delta:
         self.processed=processed
         self.bids.update(other.bids)
         self.asks.update(other.asks)
+
+    def dict(self):
+        return {
+            'sequence': self.sequence,
+            'received': self.received.isoformat(),
+            'processed': self.processed.isoformat() if self.processed else None,
+            'bids': [{str(bid.price): str(bid.size)} for bid in self.bids.values()],
+            'asks': [{str(ask.price): str(ask.size)} for ask in self.asks.values()],
+        }
+
+    def json(self):
+        return json.dumps(self.dict())
 
 
 class Book:

@@ -1,10 +1,9 @@
 from datetime import datetime
 import time
-from orderpulse.dispatchers import KeeperDispatch
+from orderpulse.dispatchers import KeeperDispatchPool
 from orderpulse.structures import Delta
 from quantapi.models import Market, MarketSymbol
 from django.core.management.base import BaseCommand, CommandParser, CommandError
-from orderpulse.keeper import KeeperPool
 
 
 class Command(BaseCommand):
@@ -40,19 +39,10 @@ class Command(BaseCommand):
         except MarketSymbol.DoesNotExist:
             raise CommandError(f'Market symbol {options["symbol"]} not found in {options["market"]}.')
 
-        self.stdout.write(f'Starting keeper for {options["symbol"]} on {options["market"]}', ending='\t')
-        k = KeeperPool.get(symbol)
-        k.start()
-        self.stdout.write(self.style.SUCCESS('OK'))
         self.stdout.write(f'Starting dispatcher for {options["symbol"]} on {options["market"]}', ending='\t')
-        d = KeeperDispatch(k)
+        d = KeeperDispatchPool.get(symbol)
         self.stdout.write(self.style.SUCCESS('OK'))
-        self.stdout.write(f'Synchronizing dispatcher for {options["symbol"]} on {options["market"]}', ending='\t')
-        d.synchronize()
-        self.stdout.write(self.style.SUCCESS('OK'))
-        self.stdout.write(f'Starting worker for {options["symbol"]} on {options["market"]}', ending='\t')
-        d.start()
-        self.stdout.write(self.style.SUCCESS('OK'))
+
 
         def callback(delta:Delta):
             print(f'[{datetime.now()}] received delta seq={delta.sequence}')
@@ -61,15 +51,7 @@ class Command(BaseCommand):
 
         while True:
             try:
-                bids, asks = k.book.get_depth(count=options['count'], depth=options['depth'])
-                #bids, asks = k.book.get_best(count=10)  # replace line above with this to see raw price levels
-                """self.print_bids(bids, 'bids', len(k.book.bids.keys()))
-                print(f'Price: {k.book.get_price():,.2f}\n')
-                self.print_bids(asks, 'asks', len(k.book.asks.keys()))
-                print(f'Status: {k.state()}')
-                print()"""
                 time.sleep(options['interval'])
             except KeyboardInterrupt:
-                k.stop()
                 self.stdout.write(self.style.SUCCESS('OK, bye.'))
                 break

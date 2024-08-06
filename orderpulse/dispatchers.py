@@ -1,8 +1,25 @@
 from datetime import datetime, timedelta
 from queue import Queue
 from threading import Event, Thread
-from orderpulse.keeper import Keeper
+from orderpulse.keeper import Keeper, KeeperPool
 from orderpulse.structures import Book, Delta
+import typing
+if typing.TYPE_CHECKING:
+    from quantapi.models import MarketSymbol
+
+
+class KeeperDispatchPool:
+    pool: dict['MarketSymbol', 'KeeperDispatch'] = {}
+
+    @classmethod
+    def get(cls, symbol: 'MarketSymbol'):
+        keeper = KeeperPool.get(symbol)
+        if symbol not in cls.pool:
+            dispatch = KeeperDispatch(keeper)
+            cls.pool[symbol] = dispatch
+            dispatch.synchronize()
+            dispatch.start()
+        return cls.pool[symbol]
 
 
 class KeeperDispatch:
@@ -17,6 +34,7 @@ class KeeperDispatch:
         self.last_sync = None
         self.callbacks = []
         self.thread = None
+        self.started = False
 
     def add_callback(self, callback):
         self.callbacks.append(callback)
@@ -39,6 +57,9 @@ class KeeperDispatch:
         self.buffer.put(delta)
 
     def start(self):
+        if self.started:
+            return
+        self.started = True
         self.thread = Thread(target=self.worker, name='KeeperDispatch')
         self.thread.start()
 
