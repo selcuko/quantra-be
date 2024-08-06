@@ -39,6 +39,15 @@ class Delta:
     def __repr__(self):
         return f'Delta(sequence={self.sequence}, received={self.received}, processed={self.processed}, bids={len(self.bids.keys())}, asks={len(self.asks.keys())})'
 
+    def merge(self, other):
+        """Merges this Delta with another Delta. The other Delta is assumed to be the newer one."""
+        processed = max(self.processed, other.processed) if self.processed and other.processed else self.processed or other.processed
+        self.sequence=max(self.sequence, other.sequence)
+        self.received=max(self.received, other.received)
+        self.processed=processed
+        self.bids.update(other.bids)
+        self.asks.update(other.asks)
+
 
 class Book:
     def __init__(self, bids:SortedDict, asks:SortedDict, seq:ValueProxy[int]):

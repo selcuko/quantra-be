@@ -87,6 +87,8 @@ class Keeper:
         self.callbacks.append(callback)
 
     def start(self):
+        if self.started:
+            return
         """Gets a snapshot from the exchange, starts the queue processor and the dispatcher"""
         with self.book_lock:
             snapshot = self.interface.get_full_orderbook(self.symbol)
@@ -100,7 +102,11 @@ class Keeper:
         self.market_thread.start()
         self.dispatch_thread = threading.Thread(target=self.dispatch)
         self.dispatch_thread.start()
-        self.worker_process = multiprocessing.Process(target=Keeper.worker, args=(self.book, self.update_queue, self.dispatch_queue, self.stop_event, self.book_lock, self.last_processed_ts))
+        self.worker_process = multiprocessing.Process(
+            target=Keeper.worker, 
+            args=(self.book, self.update_queue, self.dispatch_queue, self.stop_event, self.book_lock, self.last_processed_ts),
+            name='KeeperWorker'
+        )
         self.worker_process.start()
         self.started = True
 
