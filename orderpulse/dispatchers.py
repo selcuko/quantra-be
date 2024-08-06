@@ -47,11 +47,11 @@ class KeeperDispatch:
         while not self.stop_event.is_set():
             now = datetime.now()
             if (now - self.last_sync > self.interval) and self.delta:
+                self.last_sync = now
                 self.second = now.second
                 Book.apply(self.snapshot, self.delta)
                 self.notify()
                 self.delta = None
-                self.last_sync = now
             delta = self.buffer.get()
             if delta.sequence <= self.snapshot.sequence.value:
                 continue
