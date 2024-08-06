@@ -1,1 +1,1 @@
-web: gunicorn quant.wsgi
+web: uvicorn quant.asgi:application

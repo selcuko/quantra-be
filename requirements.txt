@@ -22,3 +22,4 @@ drf-spectacular
 sentry-sdk[django]==2.9.0
 channels
 sortedcontainers
+uvicorn
