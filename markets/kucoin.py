@@ -9,7 +9,7 @@ if typing.TYPE_CHECKING:
     from quantapi.models import MarketSymbol, Order, MarketAccount
     from loops.liveloop import LiveLoop
     from loops.loopgroup import LoopGroup
-    
+
 
 import pytz
 from kucoin.client import Market, Trade, User
@@ -29,19 +29,18 @@ from websockets.sync.client import ClientConnection
 class KucoinMarket(IMarket):
     name = 'KuCoin'
     
-    def __init__(self, config:dict, account:'MarketAccount') -> None:
-        from quantapi.models import Market as MarketModel
+    def __init__(self, config:dict, account:'MarketAccount|None', market:'Market|None'=None) -> None:
         if not config:
             config = {}
         self.authenticated = bool(config.get('API_KEY') and config.get('API_SECRET') and config.get('API_PASSPHRASE'))
+        self.private = self.authenticated
         self.testnet = False  # KuCoin does not offer a TestNet at the moment (2023-09-22)
         self.spot_trading_enabled = False
         self.capital = 0
         self.assets = {}
         self.account = account
-        self.market = self.account.market
+        self.market = self.account.market if self.account else market  # type: ignore
         self.commission = {}
-        
         try:
             if self.authenticated:
                 self.kmarket = Market(
@@ -57,7 +56,7 @@ class KucoinMarket(IMarket):
                     secret=config['API_SECRET'], 
                     passphrase=config['API_PASSPHRASE']) 
             else:
-                self.kmarket = Market()               
+                self.kmarket = Market()
         except:
             logger.fatal(f'Error while initializing {self.name}', exc_info=True)
             raise
@@ -66,6 +65,7 @@ class KucoinMarket(IMarket):
 
         if self.authenticated:
             self.get_account()
+        self.get_symbols()
 
         self.stop_websocket_stream = False
 
@@ -524,7 +524,10 @@ class KucoinMarket(IMarket):
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         try:
-            orderbook = self.kmarket.get_aggregated_orderv3(symbol.name)
+            if self.private:
+                orderbook = self.kmarket.get_aggregated_orderv3(symbol.name)
+            else:
+                orderbook = self.kmarket.get_part_order(100, symbol.name)
             if not orderbook:
                 raise ValueError(f'Error while getting full orderbook for {symbol} on {self.name}')
             return self.format_orderbook_snapshot(orderbook)
@@ -550,7 +553,11 @@ class KucoinMarket(IMarket):
         token = self.get_websocket_token()
         conn_id = uuid.uuid4().hex
         ws_uri = f'wss://ws-api-spot.kucoin.com/?token={token}&[connectId={conn_id}]'
-        ws = connect(ws_uri)
+        try:
+            ws = connect(ws_uri)
+        except TimeoutError:
+            time.sleep(5)
+            return self.init_orderbook_websocket(symbol, callback)
         welcome = ws.recv()
         if not json.loads(welcome)['type'] == 'welcome':
             raise ValueError(f'Error while initializing websocket for {self.name}: {welcome}')
@@ -564,17 +571,20 @@ class KucoinMarket(IMarket):
         ws.send(json.dumps(sub))
         ack = json.loads(ws.recv())
         if not ack.get('type') == 'ack':
+            ws.close()
             raise ValueError(f'Error while subscribing to {symbol} on {self.name}: {ack}')
         last_ping = datetime.now()
         seq = 0
         while not self.stop_websocket_stream:
-            if last_ping < datetime.now() - timedelta(seconds=30):
-                ws.send(json.dumps({'id': str(uuid.uuid4()), 'type': 'ping'}))
-                last_ping = datetime.now()
             try:
+                if last_ping < datetime.now() - timedelta(seconds=30):
+                    ws.send(json.dumps({'id': str(uuid.uuid4()), 'type': 'ping'}))
+                    last_ping = datetime.now()
                 msg = json.loads(ws.recv(timeout=10))
             except TimeoutError:
                 continue
+            except ConnectionClosed:
+                return self.init_orderbook_websocket(symbol, callback)
             if msg.get('type') == 'pong':
                 continue
             if not msg.get('subject') == 'trade.l2update':
@@ -582,6 +592,7 @@ class KucoinMarket(IMarket):
             orderbook = self.format_orderbook_update(msg['data']['changes'], seq=seq)
             callback(orderbook)
             seq = msg['data']['sequenceEnd']
+        ws.close()
 
     @authentication_required
     def get_account(self):

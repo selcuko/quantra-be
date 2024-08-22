@@ -25,13 +25,13 @@ from models import interval_to_minutes
 if typing.TYPE_CHECKING:
     from loops.liveloop import LiveLoop
     from loops.loopgroup import LoopGroup
-    from quantapi.models import MarketAccount, MarketSymbol, Order
+    from quantapi.models import MarketAccount, MarketSymbol, Order, Market
 
 
 class MEXCMarket(IMarket):
     name = 'MEXC'
 
-    def __init__(self, config: dict, account: 'MarketAccount') -> None:
+    def __init__(self, config: dict, account: 'MarketAccount|None', market:'Market|None'=None) -> None:
         self.authenticated = False
         self.session = requests.Session()
         self.url = 'https://api.mexc.com'
@@ -43,7 +43,7 @@ class MEXCMarket(IMarket):
                 'X-MEXC-APIKEY': config['ACCESS_KEY'],
             })
         self.account = account
-        self.market = account.market
+        self.market = account.market if account else market  # type: ignore
 
         self.symbols = {}
         self.capital = 0
@@ -209,7 +209,11 @@ class MEXCMarket(IMarket):
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         ws_uri = 'wss://wbs.mexc.com/ws'
-        ws = connect(ws_uri)
+        try:
+            ws = connect(ws_uri)
+        except TimeoutError:
+            time.sleep(5)
+            return self.init_orderbook_websocket(symbol, callback)
         topic = f'spot@public.increase.depth.v3.api@{self._format_symbol(symbol.name)}'
         sub = {
             'method': 'SUBSCRIPTION',
@@ -221,10 +225,10 @@ class MEXCMarket(IMarket):
             raise Exception(f'Error while subscribing to {topic}: {ack}')
         last_ping = datetime.now()
         while not self.stop_websocket_stream:
-            if (datetime.now() - last_ping).seconds > 30:
-                ws.send('{"method": "PING"}')
-                last_ping = datetime.now()
             try:
+                if (datetime.now() - last_ping).seconds > 30:
+                    ws.send('{"method": "PING"}')
+                    last_ping = datetime.now()
                 response = json.loads(ws.recv(timeout=10))
             except TimeoutError:
                 continue
@@ -234,6 +238,7 @@ class MEXCMarket(IMarket):
                 continue
             orderbook = self.format_orderbook_update(response['d'])
             callback(orderbook)
+        ws.close()
 
     def has_symbol(self, symbol: str) -> bool:
         if not self.symbols:
@@ -305,6 +310,8 @@ class MEXCMarket(IMarket):
         return self._get_klines(symbol, interval, start, end, limit, retry=retry)
 
     def get_account(self, save=True):
+        if not self.authenticated or not self.account:
+            return
         uri = f'{self.url}/api/v3/account'
         request_query = self._prep_payload()
         response = self.session.get(uri, params=request_query)
@@ -359,7 +366,7 @@ class MEXCMarket(IMarket):
     def _prep_symbol(self, symbol):
         from quantapi.models import MarketSymbol
         return MarketSymbol(
-            market=self.account.market,
+            market=self.market,
             name=self._standardize_symbol(symbol['symbol']),
             base=symbol['baseAsset'],
             quote=symbol['quoteAsset'],

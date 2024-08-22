@@ -12,7 +12,6 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 
 import os
 from pathlib import Path
-from socket import gethostbyname, gethostname
 import sys
 import sentry_sdk
 
@@ -46,8 +45,7 @@ if ENVIRONMENT != 'local':
     )
 
 
-ALLOWED_HOSTS = ['localhost', 'api.example.com', 'api-dev.example.com']
-ALLOWED_HOSTS += [gethostbyname(gethostname())]
+ALLOWED_HOSTS = ['*']
 CSRF_TRUSTED_ORIGINS = ['https://example.org', 'https://example.com', 'https://dev.example.com', 'https://api.example.com', 'https://api-dev.example.com']
 CORS_ALLOW_ALL_ORIGINS = True
 
@@ -64,6 +62,7 @@ INSTALLED_APPS = [
     'channels',
     'quantapi',
     'relay',
+    'orderpulse',
     'silk',
     'rest_framework',
     'django_filters',
@@ -85,8 +84,11 @@ MIDDLEWARE = [
 ]
 
 CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels.layers.InMemoryChannelLayer',
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [("127.0.0.1", 6379)],
+        },
     },
 }
 
@@ -97,7 +99,7 @@ ROOT_URLCONF = 'quant.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': ['templates'],
+        'DIRS': ['aggregator/templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [

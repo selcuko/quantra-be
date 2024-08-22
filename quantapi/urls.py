@@ -22,5 +22,6 @@ router.register(r'threads', ThreadViewSet, basename='threads')
 router.register(r'health', HealthViewSet, basename='health')
 
 urlpatterns = [
-    path('', include(router.urls))
+    path('', include(router.urls)),
+    path('agg/', include('orderpulse.urls')),
 ]
