@@ -31,9 +31,6 @@ class OrderbookConsumer(AsyncWebsocketConsumer):
         if not message_type:
             await self.send(text_data=json.dumps({'error': 'No message type specified'}))
             return
-        if not self.channel_layer:
-            await self.send(text_data=json.dumps({'error': 'No channel layer'}))
-            return
         handler = getattr(self, message_type, self.default_handler)
         await handler(inbound)
 

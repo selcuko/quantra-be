@@ -83,15 +83,6 @@ MIDDLEWARE = [
     'silk.middleware.SilkyMiddleware'
 ]
 
-CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels_redis.core.RedisChannelLayer",
-        "CONFIG": {
-            "hosts": [("127.0.0.1", 6379)],
-        },
-    },
-}
-
 LOGIN_REDIRECT_URL = '/'
 
 ROOT_URLCONF = 'quant.urls'

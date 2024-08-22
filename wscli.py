@@ -2,7 +2,7 @@ import json
 from pprint import pprint
 from websockets.sync.client import connect
 
-ws = connect('ws://localhost:8000/ws/orderbook/')
+ws = connect('ws://api.example.com/ws/orderbook/')
 ws.send(json.dumps({
     'type': 'subscribe',
     'market': 'BYBIT',
