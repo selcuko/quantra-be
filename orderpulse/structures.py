@@ -51,6 +51,7 @@ class Delta:
 
     def dict(self):
         return {
+            'type': 'delta',
             'sequence': self.sequence,
             'received': self.received.isoformat(),
             'processed': self.processed.isoformat() if self.processed else None,
@@ -187,6 +188,17 @@ class Book:
     def get_depth(self, count=5, depth=1):
         depth = Depth(self, depth)
         return self.get_best(bids=depth.bids.values(), asks=depth.asks.values(), count=count)
+
+    def dict(self):
+        return {
+            'type': 'book',
+            'sequence': self.sequence.value,
+            'bids': [{str(bid.price): str(bid.size)} for bid in self.bids.values()],
+            'asks': [{str(ask.price): str(ask.size)} for ask in self.asks.values()],
+        }
+
+    def json(self):
+        return json.dumps(self.dict())
 
 
 class Depth:

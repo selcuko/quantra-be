@@ -17,9 +17,13 @@ class OrderbookConsumer(AsyncWebsocketConsumer):
         self.count = 5
         self.depth = 1
         await self.accept()
+        self.connected = True
 
     async def disconnect(self, close_code):
-        pass
+        self.close_code = close_code
+        self.connected = False
+        if self.keeper and self.callback in self.keeper.callbacks:
+            self.keeper.callbacks.remove(self.callback)
 
     async def receive(self, text_data):
         try:
@@ -61,5 +65,17 @@ class OrderbookConsumer(AsyncWebsocketConsumer):
             return
         self.keeper.add_callback(self.callback)
 
+    async def snapshot(self, event):
+        if not self.keeper:
+            return
+        if not self.keeper:
+            return
+        snapshot = await sync_to_async(self.keeper.keeper.snapshot)()
+        payload = await sync_to_async(snapshot.json)()
+        await self.send(text_data=payload)
+
     def callback(self, delta: Delta):
+        if not self.connected:
+            print('Channel name not set, cannot send message', self.close_code)
+            return
         asyncio.run(self.send(text_data=delta.json()))

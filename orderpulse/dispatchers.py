@@ -84,3 +84,10 @@ class KeeperDispatch:
     def notify(self):
         for callback in self.callbacks:
             callback(self.delta)
+
+    def stop(self):
+        self.stop_event.set()
+        if self.thread:
+            self.thread.join()
+        if self.keeper:
+            self.keeper.stop()
