@@ -1,7 +1,5 @@
-
-
 from datetime import timedelta
-from typing import Callable
+from typing import Callable, Optional
 from django.utils import timezone
 import pytz
 
@@ -24,11 +22,12 @@ def get_start_end_dates(ts, interval):
 
 
 class MatchEngine:
-    def __init__(self, interval:str, callback:Callable):
+    def __init__(self, interval:str, candle_callback:Callable, ticker_callback:Optional[Callable]=None):
         self.price = None
         self.candle = {}
         self.interval = interval_to_minutes(interval)
-        self.callback = callback
+        self.candle_callback = candle_callback
+        self.ticker_callback = ticker_callback
         self.candle_started_processing = timezone.now()
         self.last_price = None
         self.last_price_ts = None
@@ -36,7 +35,7 @@ class MatchEngine:
     def close_candle(self, corrupt=False):
         self.candle_started_processing = timezone.now()
         self.candle['corrupt'] = self.candle.get('corrupt', False) or corrupt  # if already corrupt, keep it corrupt
-        self.callback(self.candle)
+        self.candle_callback(self.candle)
         self.candle = {}
 
     def update_candle(self, data):
@@ -88,8 +87,10 @@ class MatchEngine:
                 # sanity check. force candle to close if it's been open longer than interval
                 self.close_candle(corrupt=True)
 
-    def on_match(self, data):
+    def on_match(self, data:dict):
         self.update_candle(data)
+        if self.ticker_callback:
+            self.ticker_callback(data)
 
 
 if __name__ == '__main__':

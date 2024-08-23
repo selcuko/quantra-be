@@ -183,10 +183,10 @@ class KucoinMarket(IMarket):
             raise ValueError(f'Error while subscribing to {symbol} on {self.name}: {ack}')
         return ws
 
-    def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable, liveloop:'LiveLoop|LoopGroup', raw_callback=None):
+    def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable, liveloop:'LiveLoop|LoopGroup', raw_callback=None, ticker_callback=None):
         ws = self.get_match_engine_socket(symbol)
         last_ping = datetime.now()
-        engine = MatchEngine(interval, callback)
+        engine = MatchEngine(interval, callback, ticker_callback)
         retries = 0
 
         while not self.stop_websocket_stream:

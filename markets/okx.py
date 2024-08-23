@@ -227,9 +227,9 @@ class OKXMarket(IMarket):
                 raise MarketAPIError(f'Failed to subscribe to websocket: {ack}')
             return ws
 
-    def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable, liveloop:'LiveLoop|LoopGroup|None', raw_callback:'typing.Optional[typing.Callable]'=None):
+    def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable, liveloop:'LiveLoop|LoopGroup|None', raw_callback:'typing.Optional[typing.Callable]'=None, ticker_callback:'typing.Optional[typing.Callable]'=None):
         ws = self.get_match_engine_socket(symbol)
-        engine = MatchEngine(interval, callback)
+        engine = MatchEngine(interval, callback, ticker_callback)
         retries = 30
         while not self.stop_websocket_stream and not (liveloop and liveloop.should_stop()):
             try:

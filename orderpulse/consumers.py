@@ -1,6 +1,7 @@
 # myapp/consumers.py
 import asyncio
 import json
+import threading
 import django
 
 from orderpulse.dispatchers import KeeperDispatchPool
@@ -79,3 +80,35 @@ class OrderbookConsumer(AsyncWebsocketConsumer):
             print('Channel name not set, cannot send message', self.close_code)
             return
         asyncio.run(self.send(text_data=delta.json()))
+
+
+class CandleConsumer(AsyncWebsocketConsumer):
+    def get_symbol(self):
+        try:
+            symbol = self.scope['url_route']['kwargs']['symbol'].upper()
+            market = self.scope['url_route']['kwargs']['market'].upper()
+            self.symbol = MarketSymbol.objects.get(name=symbol, market__exchange_name=market)
+            self.interface = self.symbol.market.get_interface()
+            return self.symbol
+        except MarketSymbol.DoesNotExist:
+            raise Exception(f'Symbol {symbol} not found in {market}.')
+        except KeyError:
+            raise Exception('Market and symbol must be specified in the URI.')
+
+    async def connect(self):
+        await self.accept()
+        try:
+            await sync_to_async(self.get_symbol)()
+        except Exception as e:
+            await self.send(text_data=json.dumps({'error': str(e)}))
+            await self.close()
+        threading.Thread(target=self.interface.init_match_engine, args=(self.symbol.name, '1 min', self.callback, None, None, self.callback)).start()
+
+    async def disconnect(self, close_code):
+        pass
+
+    async def receive(self, text_data):
+        pass
+
+    def callback(self, candle: dict):
+        asyncio.run(self.send(text_data=json.dumps(candle, default=str)))

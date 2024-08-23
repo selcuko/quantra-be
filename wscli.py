@@ -2,20 +2,9 @@ import json
 from pprint import pprint
 from websockets.sync.client import connect
 
-ws = connect('ws://localhost:8000/ws/orderbook/')
-ws.send(json.dumps({
-    'type': 'subscribe',
-    'market': 'BYBIT',
-    'symbol': 'BTC-USDT',
-    'depth': 1,
-    'count': 5
-}))
-ws.send(json.dumps({'type': 'snapshot'}))
+ws = connect('ws://localhost:8000/ws/candles/BYBIT/BTC-USDT/')
 while True:
     payload = json.loads(ws.recv())
-    if isinstance(payload, str):
-        print('RECV', payload)
-        continue
-    print('RECV', payload.get('type', 'NOTYPE'), payload.get('sequence', 'NOSEQ'))
+    pprint(payload)
     if payload.get('error'):
         break

@@ -361,3 +361,27 @@ class ThreadViewSet(viewsets.ViewSet):
             return Response({'detail': 'Thread not found, ensure it\'s an alive thread.'}, status=404)
         serializer = ThreadSerializer(thread)
         return Response(serializer.data)
+
+
+class CandlesViewSet(viewsets.ViewSet):
+    def list(self, request):
+        return Response({'detail': 'Specify market, symbol and interval in the URI.'})
+    def get(self, request, market, symbol, interval):
+        market = Market.objects.get(exchange_name=market.upper())
+        symbol = MarketSymbol.objects.get(name=symbol.upper(), market=market)
+        interface = symbol.market.get_interface()
+
+        interval = interval.replace('min', ' min').replace('hour', ' hour').replace('day', ' day').replace('week', ' week').replace('month', ' month')
+
+        candles = interface.get_last_klines(symbol, interval)
+        payload = [interface.format_candle(candle) for candle in candles]
+        payload = sorted(payload, key=lambda x: x['time'])
+        return Response({
+            'market': market.exchange_name,
+            'symbol': symbol.name,
+            'interval': interval,
+            'count': len(payload),
+            'start': payload[0]['time'],
+            'end': payload[-1]['time'],
+            'candles': payload,
+        })
