@@ -91,7 +91,7 @@ class MarketSymbolViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         return MarketSymbol.objects.select_related('market', 'symbol').all()
 
-    @action(detail=False, methods=['get'], url_path='(?P<market>[^/.]+)', url_name='market')
+    @action(detail=False, methods=['get'], url_path='market/(?P<market>[^/.]+)', url_name='market')
     def market(self, request, market):
         """Return all symbols for a given market."""
         symbols = MarketSymbol.objects.filter(market__exchange_name=market.upper())
