@@ -98,6 +98,13 @@ class MarketSymbolViewSet(viewsets.ReadOnlyModelViewSet):
         serializer = MarketSymbolSerializer(symbols, many=True, context={'request': request})
         return Response(serializer.data)
 
+    @action(detail=False, methods=['get'], url_path='(?P<market>[^/.]+)/(?P<symbol>[^/.]+)', url_name='symbol')
+    def symbol(self, request, market, symbol):
+        """Return a specific symbol for a given market."""
+        symbol = MarketSymbol.objects.get(market__exchange_name=market.upper(), name=symbol.upper())
+        serializer = MarketSymbolSerializer(symbol, context={'request': request})
+        return Response(serializer.data)
+
 
 class GlobalSymbolViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = GlobalSymbol.objects.all()
