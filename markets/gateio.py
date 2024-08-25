@@ -294,24 +294,31 @@ class GateIOMarket(IMarket):
         order = self.prep_order(data)
         return order
 
-    def get_full_orderbook(self, symbol:'MarketSymbol|str', limit=5000) -> dict:
+    def get_full_orderbook(self, symbol:'MarketSymbol|str', limit=5000, futures=False) -> dict:
         symbol_object = self.get_symbol_from_name(symbol) if isinstance(symbol, str) else symbol
         if not symbol_object:
             raise ValueError(f'Symbol not found: {symbol}')
-        path = f'/api/v4/spot/order_book'
+        path = f'/api/v4/spot/order_book' if not futures else f'/api/v4/futures/usdt/order_book'
         url = f'{self.url}{path}'
-        payload = {
-            'currency_pair': self.format_symbol(symbol_object.name),
-            'interval': 0,
-            'limit': limit
-        }
+        if not futures:
+            payload = {
+                'currency_pair': self.format_symbol(symbol_object.name),
+                'interval': 0,
+                'limit': limit
+            }
+        else:
+            payload = {
+                'contract': self.format_symbol(symbol_object.name),
+                'interval': 0,
+                'limit': min(limit, 300)
+            }
         query = self.sign(payload, path)
         url = f'{url}?{query}'
         response = self.session.get(url)
         data = response.json()
         try:
             pre_ob = { 'asks': data['asks'], 'bids': data['bids'] }
-            orderbook = self.format_orderbook_snapshot(pre_ob)
+            orderbook = self.format_orderbook_snapshot(pre_ob) if not futures else self.format_futures_orderbook_snapshot(pre_ob)
         except Exception as e:
             raise MarketAPIError(f'Failed to process orderbook: {traceback.format_exc()}')
         return orderbook
@@ -321,6 +328,12 @@ class GateIOMarket(IMarket):
             'bids': [{ 'price': Decimal(price), 'size': Decimal(size), 'count': 1 } for price, size in orderbook['bids']],
             'asks': [{ 'price': Decimal(price), 'size': Decimal(size), 'count': 1 } for price, size in orderbook['asks']],
         }
+    
+    def format_futures_orderbook_snapshot(self, orderbook:dict) -> dict:
+        return {
+            'bids': [{ 'price': Decimal(ps['p']), 'size': Decimal(ps['s']), 'count': 1 } for ps in orderbook['bids']],
+            'asks': [{ 'price': Decimal(ps['p']), 'size': Decimal(ps['s']), 'count': 1 } for ps in orderbook['asks']],
+        }
 
     def format_orderbook_update(self, orderbook:dict) -> dict:
         return {
@@ -328,19 +341,26 @@ class GateIOMarket(IMarket):
             'asks': [{ 'price': Decimal(price), 'size': Decimal(size), 'count': 1 } for price, size in orderbook['asks']],
         }
 
-    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:typing.Callable, liveloop:'LiveLoop|None'=None, retries:int=30):
+    def format_futures_orderbook_update(self, orderbook:dict) -> dict:
+        return {
+            'bids': [{ 'price': Decimal(ps['p']), 'size': Decimal(ps['s']), 'count': 1 } for ps in orderbook['bids']],
+            'asks': [{ 'price': Decimal(ps['p']), 'size': Decimal(ps['s']), 'count': 1 } for ps in orderbook['asks']],
+        }
+
+    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:typing.Callable, liveloop:'LiveLoop|None'=None, retries:int=30, futures=False):
         if isinstance(symbol, str):
             symbol_obj = self.get_symbol_from_name(symbol)
         else:
             symbol_obj = symbol
         if not symbol_obj:
             raise ValueError(f'Symbol not found: {symbol}')
-        ws_uri = 'wss://api.gateio.ws/ws/v4/'
+
+        ws_uri = 'wss://api.gateio.ws/ws/v4/' if not futures else 'wss://fx-ws.gateio.ws/v4/ws/usdt/'
         try:
             ws = connect(ws_uri)
             ws.send(json.dumps({
                 'time': self.format_timestamp(timezone.now()),
-                'channel': 'spot.order_book_update',
+                'channel': 'spot.order_book_update' if not futures else 'futures.order_book_update',
                 'event': 'subscribe',
                 'payload': [self.format_symbol(symbol_obj.name), '100ms']
             }))
@@ -354,16 +374,16 @@ class GateIOMarket(IMarket):
                     logger.warning(f'Received a message in an unrecognized format from {self.name} websocket: {data}', extra={'market': self, 'type': 'MARKET'})
                     continue
                 pre_ob = { 'asks': data['result']['a'], 'bids': data['result']['b']}
-                orderbook = self.format_orderbook_update(pre_ob)
+                orderbook = self.format_orderbook_update(pre_ob) if not futures else self.format_futures_orderbook_update(pre_ob)
                 callback(orderbook)
         except TimeoutError:
             time.sleep(3)
-            return self.init_orderbook_websocket(symbol, callback, liveloop, retries)
+            return self.init_orderbook_websocket(symbol, callback, liveloop, retries, futures)
         except Exception as e:
             if retries < self.WS_MAX_RETRIES:
                 time.sleep(1)
                 retries += 1
-                return self.init_orderbook_websocket(symbol, callback, liveloop, retries+1)
+                return self.init_orderbook_websocket(symbol, callback, liveloop, retries+1, futures)
             msg = f'Failed to connect to websocket: {e}'
             logger.error(msg, extra={'market': self.name, 'type': 'MARKET'})
             ws.close()

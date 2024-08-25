@@ -13,6 +13,7 @@ if typing.TYPE_CHECKING:
 
 import pytz
 from kucoin.client import Market, Trade, User
+from kucoin_futures.client import Market as FuturesMarket
 import requests
 
 from logger import logger
@@ -54,9 +55,10 @@ class KucoinMarket(IMarket):
                 self.user = User(
                     key=config['API_KEY'], 
                     secret=config['API_SECRET'], 
-                    passphrase=config['API_PASSPHRASE']) 
+                    passphrase=config['API_PASSPHRASE'])
             else:
                 self.kmarket = Market()
+            self.fmarket = FuturesMarket()
         except:
             logger.fatal(f'Error while initializing {self.name}', exc_info=True)
             raise
@@ -520,14 +522,17 @@ class KucoinMarket(IMarket):
             logger.error(f'Error while cancelling all orders on {self.name}', exc_info=True)
             raise
 
-    def get_full_orderbook(self, symbol:'MarketSymbol|str') -> dict:
+    def get_full_orderbook(self, symbol:'MarketSymbol|str', futures=False) -> dict:
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         try:
-            if self.private:
-                orderbook = self.kmarket.get_aggregated_orderv3(symbol.name)
+            if not futures:
+                if self.private:
+                    orderbook = self.kmarket.get_aggregated_orderv3(symbol.name)
+                else:
+                    orderbook = self.kmarket.get_part_order(100, symbol.name)
             else:
-                orderbook = self.kmarket.get_part_order(100, symbol.name)
+                orderbook = self.fmarket.l2_order_book(symbol.name.split('-')[0] + symbol.name.split('-')[1]+'M')
             if not orderbook:
                 raise ValueError(f'Error while getting full orderbook for {symbol} on {self.name}')
             return self.format_orderbook_snapshot(orderbook)
@@ -547,24 +552,38 @@ class KucoinMarket(IMarket):
             'asks': [ { 'price': Decimal(ask[0]), 'size': Decimal(ask[1]), 'count': 1 } for ask in update['asks'] if int(ask[2]) > seq],
         }
 
-    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:typing.Callable):
+    def format_futures_orderbook_update(self, update):
+        price, side, size = update['change'].split(',')
+        if side == 'buy':
+            return {
+                'bids': [ { 'price': Decimal(price), 'size': Decimal(size), 'count': 1 } ],
+                'asks': [],
+            }
+        else:
+            return {
+                'bids': [],
+                'asks': [ { 'price': Decimal(price), 'size': Decimal(size), 'count': 1 } ],
+            }
+
+    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:typing.Callable, futures=False):
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         token = self.get_websocket_token()
         conn_id = uuid.uuid4().hex
         ws_uri = f'wss://ws-api-spot.kucoin.com/?token={token}&[connectId={conn_id}]'
+
         try:
             ws = connect(ws_uri)
         except TimeoutError:
             time.sleep(5)
-            return self.init_orderbook_websocket(symbol, callback)
+            return self.init_orderbook_websocket(symbol, callback, futures)
         welcome = ws.recv()
         if not json.loads(welcome)['type'] == 'welcome':
             raise ValueError(f'Error while initializing websocket for {self.name}: {welcome}')
         sub = {
             "id": str(uuid.uuid4()),
             "type": "subscribe",
-            "topic": f'/market/level2:{symbol.name}',
+            "topic": f'/market/level2:{symbol.name}' if not futures else f'/contractMarket/level2:{symbol.name.split("-")[0]}USDTM',
             "privateChannel": False,
             "response": True 
         }
@@ -584,14 +603,18 @@ class KucoinMarket(IMarket):
             except TimeoutError:
                 continue
             except ConnectionClosed:
-                return self.init_orderbook_websocket(symbol, callback)
+                return self.init_orderbook_websocket(symbol, callback, futures)
             if msg.get('type') == 'pong':
                 continue
-            if not msg.get('subject') == 'trade.l2update':
+            if msg.get('subject') not in ['trade.l2update', 'level2']:
                 continue
-            orderbook = self.format_orderbook_update(msg['data']['changes'], seq=seq)
+            
+            if not futures:
+                orderbook = self.format_orderbook_update(msg['data']['changes'], seq=seq) 
+            else:
+                orderbook = self.format_futures_orderbook_update(msg['data'])
             callback(orderbook)
-            seq = msg['data']['sequenceEnd']
+            seq = msg['data']['sequenceEnd'] if not futures else 0
         ws.close()
 
     @authentication_required
