@@ -116,10 +116,10 @@ class MEXCMarket(IMarket):
             raise Exception(f'Error while subscribing to {topic}: {ack}')
         return ws
 
-    def init_match_engine(self, symbol:str, interval:str, callback:Callable, liveloop:'LiveLoop|LoopGroup', raw_callback:Optional[Callable]=None):
+    def init_match_engine(self, symbol:str, interval:str, callback:Callable, liveloop:'LiveLoop|LoopGroup', raw_callback:Optional[Callable]=None, ticker_callback:Optional[Callable]=None):
         ws = self.get_match_engine_ws(symbol)
         last_ping = datetime.now()
-        me = MatchEngine(interval, callback)
+        me = MatchEngine(interval, callback, ticker_callback)
         retries = 0
         while not self.stop_websocket_stream:
             if liveloop.should_stop():

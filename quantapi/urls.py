@@ -1,7 +1,7 @@
 from django.urls import include, path
 from rest_framework import routers
 
-from quantapi.viewsets import (GlobalSymbolViewSet, GroupOrderViewSet, HealthViewSet, LiveLoopViewSet, LoopGroupViewSet, MarketAccountViewSet, MarketSymbolViewSet,
+from quantapi.viewsets import (CandlesViewSet, GlobalSymbolViewSet, GroupOrderViewSet, HealthViewSet, LiveLoopViewSet, LoopGroupViewSet, MarketAccountViewSet, MarketSymbolViewSet,
                                MarketViewSet, OrderViewSet, SessionGroupViewSet, SessionViewSet, SignalViewSet, StrategyViewSet, ThreadViewSet)
 
 
@@ -23,5 +23,6 @@ router.register(r'health', HealthViewSet, basename='health')
 
 urlpatterns = [
     path('', include(router.urls)),
+    path('candles/<str:market>/<str:symbol>/<str:interval>/', CandlesViewSet.as_view({'get': 'get'})),
     path('agg/', include('orderpulse.urls')),
 ]

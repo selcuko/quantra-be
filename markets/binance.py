@@ -79,10 +79,10 @@ class BinanceMarket(IMarket):
             'maker': data['m'],
         }
 
-    def init_match_engine(self, symbol:str, interval:str, callback:Callable, liveloop:'LiveLoop|LoopGroup|None', raw_callback:Optional[Callable]=None):
+    def init_match_engine(self, symbol:str, interval:str, callback:Callable, liveloop:'LiveLoop|LoopGroup|None', raw_callback:Optional[Callable]=None, ticker_callback:Optional[Callable]=None):
         ws_uri = f'wss://stream.binance.com:9443/ws/{self._format_symbol(symbol).lower()}@trade'
         ws = connect(ws_uri)
-        me = MatchEngine(interval, callback)
+        me = MatchEngine(interval, callback, ticker_callback)
         last_ping = datetime.now()
         retries = 0
         while not self.stop_websocket_stream:

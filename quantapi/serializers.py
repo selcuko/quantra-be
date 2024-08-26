@@ -101,13 +101,13 @@ class InlineMarketAccountSerializer(serializers.HyperlinkedModelSerializer):
 
 
 class MarketSymbolSerializer(serializers.HyperlinkedModelSerializer):
-    market = serializers.CharField(source='market.exchange_name')
+    exchange_name = serializers.CharField(source='market.exchange_name')
     icon = serializers.URLField(source='symbol.image', allow_null=True)
     price = serializers.SerializerMethodField()
     price_updated = serializers.DateTimeField(source='market.prices_updated', allow_null=True)
     class Meta:
         model = MarketSymbol
-        fields = ['symbol', 'market', 'name', 'base', 'quote', 'base_precision', 'quote_precision', 
+        fields = ['symbol', 'market', 'exchange_name', 'name', 'base', 'quote', 'base_precision', 'quote_precision', 
                   'spot_trading_enabled', 'icon', 'price', 'price_updated', 'id', 'url']
 
     def get_price(self, obj):
