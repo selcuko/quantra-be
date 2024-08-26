@@ -27,6 +27,15 @@ class Bid:
             return False
         return self.price == other.price and self.size == other.size
 
+    def dict(self):
+        return {
+            'price': str(self.price),
+            'size': str(self.size),
+        }
+
+    def json(self):
+        return json.dumps(self.dict())
+
 
 class Delta:
     def __init__(self, sequence: int|None, received: datetime, processed: datetime|None, bids: dict[Decimal, Bid]|None=None, asks: dict[Decimal, Bid]|None=None, market:str=''):
@@ -55,8 +64,8 @@ class Delta:
             'sequence': self.sequence,
             'received': self.received.isoformat(),
             'processed': self.processed.isoformat() if self.processed else None,
-            'bids': [{str(bid.price): str(bid.size)} for bid in self.bids.values()],
-            'asks': [{str(ask.price): str(ask.size)} for ask in self.asks.values()],
+            'bids': [ (str(bid.price), str(bid.size)) for bid in self.bids.values() ],
+            'asks': [ (str(ask.price), str(ask.size)) for ask in self.asks.values() ],
         }
 
     def json(self):
@@ -193,8 +202,8 @@ class Book:
         return {
             'type': 'book',
             'sequence': self.sequence.value,
-            'bids': [{str(bid.price): str(bid.size)} for bid in self.bids.values()],
-            'asks': [{str(ask.price): str(ask.size)} for ask in self.asks.values()],
+            'bids': [ (str(bid.price), str(bid.size)) for bid in self.bids.values()],
+            'asks': [ (str(ask.price), str(ask.size)) for ask in self.asks.values()],
         }
 
     def json(self):

@@ -4,7 +4,7 @@ import json
 import threading
 import django
 
-from orderpulse.dispatchers import KeeperDispatchPool
+from orderpulse.keeper import Keeper, KeeperPool
 from orderpulse.structures import Delta
 django.setup()
 from channels.generic.websocket import AsyncWebsocketConsumer
@@ -14,10 +14,12 @@ from quantapi.models import Market, MarketSymbol
 
 class OrderbookConsumer(AsyncWebsocketConsumer):
     async def connect(self):
+        self.connected = False
         self.keeper = None
         self.count = 5
         self.depth = 1
         await self.accept()
+        await self.subscribe({'market': self.scope['url_route']['kwargs']['market'], 'symbol': self.scope['url_route']['kwargs']['symbol']})
         self.connected = True
 
     async def disconnect(self, close_code):
@@ -42,12 +44,15 @@ class OrderbookConsumer(AsyncWebsocketConsumer):
     async def default_handler(self, event):
         await self.send(text_data=json.dumps({'error': 'Invalid message type'}))
 
-    def get_keeper(self, market, symbol):
+    def get_keeper(self, market, symbol) -> Keeper:
         market = Market.objects.get(exchange_name=market)
         symbol = MarketSymbol.objects.get(name=symbol, market=market)
-        return KeeperDispatchPool.get(symbol)
+        return KeeperPool.get(symbol)
 
     async def subscribe(self, event):
+        if self.connected:
+            await self.send(text_data=json.dumps({'error': 'Already connected'}))
+            return
         try:
             market = event['market']
             symbol = event['symbol']
@@ -71,7 +76,7 @@ class OrderbookConsumer(AsyncWebsocketConsumer):
             return
         if not self.keeper:
             return
-        snapshot = await sync_to_async(self.keeper.keeper.snapshot)()
+        snapshot = await sync_to_async(self.keeper.snapshot)()
         payload = await sync_to_async(snapshot.json)()
         await self.send(text_data=payload)
 
@@ -80,6 +85,79 @@ class OrderbookConsumer(AsyncWebsocketConsumer):
             print('Channel name not set, cannot send message', self.close_code)
             return
         asyncio.run(self.send(text_data=delta.json()))
+
+
+class MiniOrderbookConsumer(AsyncWebsocketConsumer):
+    async def connect(self):
+        self.connected = False
+        self.keeper = None
+        self.count = 5
+        self.depth = 1
+        await self.accept()
+        print('Connected')
+        await self.subscribe({'market': self.scope['url_route']['kwargs']['market'], 'symbol': self.scope['url_route']['kwargs']['symbol']})
+        print('Subscribed')
+        self.connected = True
+
+    async def disconnect(self, close_code):
+        self.close_code = close_code
+        self.connected = False
+        if self.keeper and self.callback in self.keeper.callbacks:
+            self.keeper.callbacks.remove(self.callback)
+
+    async def receive(self, text_data):
+        try:
+            inbound = json.loads(text_data)
+        except json.decoder.JSONDecodeError:
+            await self.send(text_data=json.dumps({'error': 'Invalid JSON'}))
+            return
+        message_type = inbound.get('type')
+        if not message_type:
+            await self.send(text_data=json.dumps({'error': 'No message type specified'}))
+            return
+        handler = getattr(self, message_type, self.default_handler)
+        await handler(inbound)
+
+    async def default_handler(self, event):
+        await self.send(text_data=json.dumps({'error': 'Invalid message type'}))
+
+    def get_keeper(self, market, symbol) -> Keeper:
+        market = Market.objects.get(exchange_name=market)
+        symbol = MarketSymbol.objects.get(name=symbol, market=market)
+        return KeeperPool.get(symbol)
+
+    async def subscribe(self, event):
+        if self.connected:
+            await self.send(text_data=json.dumps({'error': 'Already connected'}))
+            return
+        try:
+            market = event['market']
+            symbol = event['symbol']
+            self.depth = event.get('depth', 1)
+            self.count = event.get('count', 10)
+        except KeyError:
+            await self.send(text_data=json.dumps({'error': 'Market and symbol must be specified'}))
+            return
+        try:
+            self.keeper = await sync_to_async(self.get_keeper)(market, symbol)
+            self.keeper.add_callback(self.callback)
+        except Market.DoesNotExist:
+            await self.send(text_data=json.dumps({'error': f'Market {market} not found'}))
+            return
+        except MarketSymbol.DoesNotExist:
+            await self.send(text_data=json.dumps({'error': f'Symbol {symbol} not found in {market}'}))
+            return
+        # start update loop
+
+    def callback(self, delta: Delta):
+        if self.keeper and self.connected:
+            bids, asks = self.keeper.book.get_depth(self.count, self.depth)
+            payload = json.dumps({
+                'bids': [bid.dict() for bid in bids],
+                'asks': [ask.dict() for ask in asks],
+                'price': str(self.keeper.book.get_price())
+            })
+            asyncio.run(self.send(text_data=payload))
 
 
 class CandleConsumer(AsyncWebsocketConsumer):

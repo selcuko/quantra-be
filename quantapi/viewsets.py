@@ -380,7 +380,7 @@ class CandlesViewSet(viewsets.ViewSet):
 
         interval = interval.replace('min', ' min').replace('hour', ' hour').replace('day', ' day').replace('week', ' week').replace('month', ' month')
 
-        candles = interface.get_last_klines(symbol, interval)
+        candles = interface.get_last_klines(symbol, interval, limit=1000)
         payload = [interface.format_candle(candle) for candle in candles]
         payload = sorted(payload, key=lambda x: x['time'])
         return Response({
