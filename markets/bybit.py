@@ -328,13 +328,13 @@ class BybitMarket(IMarket):
             raise OrderPostProcessingError(f'Failed to process order: {e}')
         return order
 
-    def get_full_orderbook(self, symbol:'MarketSymbol|str', limit:int=5000) -> dict:
+    def get_full_orderbook(self, symbol:'MarketSymbol|str', limit:int=5000, futures=False) -> dict:
         symbol_object = self.get_symbol_from_name(symbol) if isinstance(symbol, str) else symbol
         if not symbol_object:
             raise ValueError(f'Symbol not found: {symbol}')
         url = f'{self.url}/v5/market/orderbook'
         payload = {
-            'category': 'spot',
+            'category': 'spot' if not futures else 'linear',
             'symbol': self.format_symbol(symbol_object.name),
             'limit': limit
         }
@@ -357,7 +357,7 @@ class BybitMarket(IMarket):
             'asks': [ { 'price': Decimal(ask[0]), 'size': Decimal(ask[1]), 'count': 1 } for ask in data['a'] ]
         }
 
-    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:typing.Callable, liveloop:'LiveLoop|LoopGroup|None'=None, retries:int=0):
+    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:typing.Callable, liveloop:'LiveLoop|LoopGroup|None'=None, retries:int=0, futures=False):
         ws_uri = 'wss://stream.bybit.com/v5/public/spot'
         symbol_object = self.get_symbol_from_name(symbol) if isinstance(symbol, str) else symbol
         if not symbol_object:
@@ -366,7 +366,7 @@ class BybitMarket(IMarket):
             ws = connect(ws_uri)
         except TimeoutError:
             time.sleep(5)
-            return self.init_orderbook_websocket(symbol, callback, liveloop, retries)
+            return self.init_orderbook_websocket(symbol, callback, liveloop, retries, futures)
         ws.send(json.dumps({
             'op': 'subscribe',
             'args': [f'orderbook.200.{self.format_symbol(symbol_object.name)}']
@@ -382,12 +382,12 @@ class BybitMarket(IMarket):
             except (ConnectionClosed, ConnectionClosedOK):
                 if retries < self.WS_MAX_RETRIES:
                     time.sleep(1)
-                    return self.init_orderbook_websocket(symbol, callback, liveloop, retries+1)
+                    return self.init_orderbook_websocket(symbol, callback, liveloop, retries+1, futures)
                 raise MarketAPIError('Failed to connect to websocket')
             except:
                 if retries < self.WS_MAX_RETRIES:
                     time.sleep(1)
-                    return self.init_orderbook_websocket(symbol, callback, liveloop, retries+1)
+                    return self.init_orderbook_websocket(symbol, callback, liveloop, retries+1, futures)
                 ws.close()
                 raise MarketAPIError('Failed to connect to websocket')
             update = self.format_orderbook(data['data'])

@@ -178,7 +178,7 @@ class IMarket:
         """
         raise NotImplementedError
 
-    def get_full_orderbook(self, symbol:'MarketSymbol|str', limit:int=5000) -> dict:
+    def get_full_orderbook(self, symbol:'MarketSymbol|str', limit:int=5000, futures:bool=False) -> dict:
         """Get full orderbook for given symbol
 
         Args:
@@ -190,7 +190,7 @@ class IMarket:
         """
         raise NotImplementedError
 
-    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:Callable, liveloop:'LiveLoop|LoopGroup|None'=None, retries:int=0):
+    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:Callable, liveloop:'LiveLoop|LoopGroup|None'=None, retries:int=0, futures:bool=False):
         """Initialize orderbook websocket for given symbol
 
         Args:

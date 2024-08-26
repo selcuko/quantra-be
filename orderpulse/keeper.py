@@ -18,13 +18,13 @@ class KeeperPool:
     pool: dict['MarketSymbol', 'Keeper'] = {}
 
     @classmethod
-    def get(cls, symbol:'MarketSymbol', callback:Optional[Callable]=None, manager:Optional[BookManager]=None) -> 'Keeper':
+    def get(cls, symbol:'MarketSymbol', callback:Optional[Callable]=None, manager:Optional[BookManager]=None, futures:bool=False) -> 'Keeper':
         if not manager and not cls.manager_started:
             cls.manager.start()
             cls.manager_started = True
         manager = manager or cls.manager
         if symbol not in cls.pool:
-            keeper = Keeper(symbol, manager)
+            keeper = Keeper(symbol, manager, futures=futures)
             keeper.start()
             cls.pool[symbol] = keeper
         keeper = cls.pool[symbol]
@@ -41,7 +41,7 @@ class KeeperPool:
 
 
 class Keeper:
-    def __init__(self, symbol:'MarketSymbol', manager:BookManager):
+    def __init__(self, symbol:'MarketSymbol', manager:BookManager, futures:bool=False):
         self.symbol = symbol
         self.market = symbol.market.exchange_name
         self.interface = symbol.market.get_interface()
@@ -60,6 +60,7 @@ class Keeper:
         self.dispatch_thread = None
         self.market_thread = None
         self.started = False
+        self.futures = futures
 
     def state(self):
         status = 'undefined'
@@ -91,14 +92,14 @@ class Keeper:
             return
         """Gets a snapshot from the exchange, starts the queue processor and the dispatcher"""
         with self.book_lock:
-            snapshot = self.interface.get_full_orderbook(self.symbol)
+            snapshot = self.interface.get_full_orderbook(self.symbol, futures=self.futures)
             self.received_seq += 1
             snapshot['received'] = datetime.now()
             snapshot['market'] = self.symbol.market.exchange_name
             snapshot['sequence'] = self.received_seq
             delta = Book.convert(snapshot)
             Book.apply(self.book, delta)
-        self.market_thread = threading.Thread(target=self.interface.init_orderbook_websocket, args=(self.symbol, self.on_update))
+        self.market_thread = threading.Thread(target=self.interface.init_orderbook_websocket, args=(self.symbol, self.on_update), kwargs={'futures': self.futures})
         self.market_thread.start()
         self.dispatch_thread = threading.Thread(target=self.dispatch)
         self.dispatch_thread.start()

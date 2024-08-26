@@ -315,11 +315,14 @@ class OKXMarket(IMarket):
             raise OrderPostProcessingError(f'Failed to process order: {e}')
         return order
 
-    def get_full_orderbook(self, symbol:'MarketSymbol|str', limit=5000) -> dict:
+    def get_full_orderbook(self, symbol:'MarketSymbol|str', limit=5000, futures=False) -> dict:
         symbol_object = self.get_symbol_from_name(symbol) if isinstance(symbol, str) else symbol
         if not symbol_object:
             raise ValueError(f'Symbol not found: {symbol}')
-        path = f'/api/v5/market/books-full?instId={self.format_symbol(symbol_object.name)}&sz={limit}'
+        if futures:
+            path = f'/api/v5/market/books-full?instId={self.format_symbol(symbol_object.name)}-SWAP&sz={limit}'
+        else:
+            path = f'/api/v5/market/books-full?instId={self.format_symbol(symbol_object.name)}&sz={limit}'
         url = f'{self.url}{path}'
         self.sign({}, path)
         response = self.session.get(url)
@@ -345,7 +348,7 @@ class OKXMarket(IMarket):
             'asks': [{ 'price': Decimal(price), 'size': Decimal(size), 'count': int(count) } for price, size, _, count in orderbook['asks']],
         }
 
-    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:typing.Callable, liveloop:'LiveLoop|None'=None, retries:int=30):
+    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:typing.Callable, liveloop:'LiveLoop|None'=None, retries:int=30, futures=False):
         if isinstance(symbol, str):
             symbol_obj = self.get_symbol_from_name(symbol)
         else:
@@ -359,7 +362,7 @@ class OKXMarket(IMarket):
                 'op': 'subscribe',
                 'args': [{
                     'channel': 'books',
-                    'instId': self.format_symbol(symbol_obj.name),
+                    'instId': self.format_symbol(symbol_obj.name) + ('-SWAP' if futures else ''),
                 }]
             }))
             ack = json.loads(ws.recv())
@@ -381,7 +384,7 @@ class OKXMarket(IMarket):
             if retries < self.WS_MAX_RETRIES:
                 time.sleep(1)
                 retries += 1
-                return self.init_orderbook_websocket(symbol, callback, liveloop, retries+1)
+                return self.init_orderbook_websocket(symbol, callback, liveloop, retries+1, futures)
             msg = f'Failed to connect to websocket: {e}'
             logger.error(msg, extra={'market': self.name, 'type': 'MARKET'})
             ws.close()

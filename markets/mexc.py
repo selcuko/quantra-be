@@ -35,6 +35,7 @@ class MEXCMarket(IMarket):
         self.authenticated = False
         self.session = requests.Session()
         self.url = 'https://api.mexc.com'
+        self.furl = 'https://contract.mexc.com'
         if config:
             self.authenticated = True
             self.api_secret = config['API_SECRET']
@@ -181,16 +182,21 @@ class MEXCMarket(IMarket):
             if not last_kline:
                 last_kline = candle['end']
 
-    def get_full_orderbook(self, symbol:'MarketSymbol|str', limit=5000):
+    def get_full_orderbook(self, symbol:'MarketSymbol|str', limit=500, futures=False):
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         try:
-            uri = f'{self.url}/api/v3/depth?symbol={self._format_symbol(symbol.name)}&limit={limit}'
+            if not futures:
+                uri = f'{self.url}/api/v3/depth?symbol={self._format_symbol(symbol.name)}&limit={limit}' 
+            else:
+                uri = f'{self.furl}/api/v1/contract/depth/{symbol.name.replace("-","_")}'
             response = requests.get(uri)
             orderbook = response.json()
         except:
             logger.error(f'Error while fetching orderbook for {self.name}', exc_info=True)
             raise
+        if futures:
+            orderbook = orderbook['data']
         return self.format_orderbook_snapshot(orderbook)
 
     def format_orderbook_snapshot(self, orderbook):
@@ -205,23 +211,35 @@ class MEXCMarket(IMarket):
             'asks': [ { 'price': Decimal(ask['p']), 'size': Decimal(ask['v']), 'count': 1 } for ask in update.get('asks', []) ],
         }
 
-    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:Callable):
+    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:Callable, futures=False):
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
-        ws_uri = 'wss://wbs.mexc.com/ws'
+        if  not futures:
+            ws_uri = 'wss://wbs.mexc.com/ws'
+        else:
+            ws_uri = 'wss://contract.mexc.com/edge'
         try:
             ws = connect(ws_uri)
         except TimeoutError:
             time.sleep(5)
-            return self.init_orderbook_websocket(symbol, callback)
+            return self.init_orderbook_websocket(symbol, callback, futures=futures)
+
         topic = f'spot@public.increase.depth.v3.api@{self._format_symbol(symbol.name)}'
-        sub = {
-            'method': 'SUBSCRIPTION',
-            'params': [topic]
-        }
+        if not futures:
+            sub = {
+                'method': 'SUBSCRIPTION',
+                'params': [topic]
+            }
+        else:
+            sub = {
+                "method": "sub.depth",
+                "param": {
+                    "symbol": symbol.name.replace('-','_')
+                }
+            }
         ws.send(json.dumps(sub))
         ack = json.loads(ws.recv())
-        if not ack.get('msg') == topic and not ack.get('c') == topic:
+        if not futures and not ack.get('msg') == topic and not ack.get('c') == topic:
             raise Exception(f'Error while subscribing to {topic}: {ack}')
         last_ping = datetime.now()
         while not self.stop_websocket_stream:
@@ -233,10 +251,11 @@ class MEXCMarket(IMarket):
             except TimeoutError:
                 continue
             except ConnectionClosed:
-                return self.init_orderbook_websocket(symbol, callback)
+                return self.init_orderbook_websocket(symbol, callback, futures=futures)
             if response.get('msg') == 'PONG':
                 continue
-            orderbook = self.format_orderbook_update(response['d'])
+            response = response['d'] if not futures else response['data']
+            orderbook = self.format_orderbook_update(response) if not futures else self.format_orderbook_snapshot(response)
             callback(orderbook)
         ws.close()
 
@@ -255,16 +274,16 @@ class MEXCMarket(IMarket):
             float(kline[5]),
         ] for kline in klines ]
         return klines
-    
+
     @staticmethod
     def _standardize_symbol(symbol):
         return symbol.replace('USDT', '-USDT')
-    
+
     @staticmethod
     def _format_symbol(symbol):
         assert '-' in symbol, f'Symbol must be in the format BASE-QUOTE, you provided: {symbol}'
         return symbol.replace('-', '').upper()
-    
+
     @staticmethod
     def _format_interval(interval):
         return {

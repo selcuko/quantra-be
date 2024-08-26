@@ -10,14 +10,15 @@ class Command(BaseCommand):
         depth_choices = [0.01, 0.1, 1, 10, 100]
         parser.add_argument('symbol', type=str, help='Market symbol (e.g. BTC-USDT)')
         parser.add_argument('market', type=str, help='Exchange name (e.g. GATEIO)')
-        parser.add_argument('--depth', type=int, help='Depth of the order book', default=1, choices=depth_choices)
+        parser.add_argument('--depth', type=float, help='Depth of the order book', default=1, choices=depth_choices)
         parser.add_argument('--count', type=int, help='Number of bids and asks to display', default=5)
         parser.add_argument('--interval', type=int, help='Interval in seconds to update the order book', default=1)
+        parser.add_argument('--futures', action='store_true', help='Use futures market', default=False)
 
     def print_bids(self, bids, side='bids', length=0):
         print(f'{side.capitalize()} ({length}):')
         for bid in bids:
-            print(f'{bid.price:,.2f}\t{bid.size:,.5f}')
+            print(f'{bid.price:,.5f}\t{bid.size:,.5f}')
         print()
 
     def validate(self, options):
@@ -38,7 +39,8 @@ class Command(BaseCommand):
             raise CommandError(f'Market symbol {options["symbol"]} not found in {options["market"]}.')
 
         self.stdout.write(f'Starting keeper for {options["symbol"]} on {options["market"]}')
-        k = KeeperPool.get(symbol)
+        futures = options['futures']
+        k = KeeperPool.get(symbol, futures=futures)
         k.start()
 
         while True:
@@ -46,7 +48,7 @@ class Command(BaseCommand):
                 bids, asks = k.book.get_depth(count=options['count'], depth=options['depth'])
                 #bids, asks = k.book.get_best(count=10)  # replace line above with this to see raw price levels
                 self.print_bids(bids, 'bids', len(k.book.bids.keys()))
-                print(f'Price: {k.book.get_price():,.2f}\n')
+                print(f'Price: {k.book.get_price():,.5f}\n')
                 self.print_bids(asks, 'asks', len(k.book.asks.keys()))
                 print(f'Status: {k.state()}')
                 print()

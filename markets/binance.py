@@ -336,11 +336,14 @@ class BinanceMarket(IMarket):
             logger.error(f'Error while getting order on {self.name}', exc_info=True)
             raise
 
-    def get_full_orderbook(self, symbol:'MarketSymbol|str', limit:int=5000) -> dict:
+    def get_full_orderbook(self, symbol:'MarketSymbol|str', limit:int=5000, futures=False) -> dict:
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         try:
-            orderbook = self.client.get_order_book(symbol=self._format_symbol(symbol.name), limit=limit)
+            if not futures:
+                orderbook = self.client.get_order_book(symbol=self._format_symbol(symbol.name), limit=limit)
+            else:
+                orderbook = self.client.futures_order_book(symbol=self._format_symbol(symbol.name))
             return {
                 'bids': [ { 'price': Decimal(item[0]), 'size': Decimal(item[1]), 'count': 1 } for item in orderbook['bids'] ],
                 'asks': [ { 'price': Decimal(item[0]), 'size': Decimal(item[1]), 'count': 1 } for item in orderbook['asks'] ],
@@ -349,10 +352,13 @@ class BinanceMarket(IMarket):
             logger.error(f'Error while fetching orderbook for {symbol} on {self.name}', exc_info=True)
             return {}
 
-    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:Callable, liveloop:'LiveLoop|LoopGroup|None'=None, retries: int = 0):
+    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:Callable, liveloop:'LiveLoop|LoopGroup|None'=None, retries: int = 0, futures=False):
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
-        ws_uri = f'wss://stream.binance.com:9443/ws/{self._format_symbol(symbol.name).lower()}@depth@100ms'
+        if not futures:
+            ws_uri = f'wss://stream.binance.com:9443/ws/{self._format_symbol(symbol.name).lower()}@depth@100ms'
+        else:
+            ws_uri = f'wss://fstream.binance.com/ws/{self._format_symbol(symbol.name).lower()}@depth@100ms'
         last_pong = datetime.now()
         try:
             ws = connect(ws_uri)
@@ -373,7 +379,7 @@ class BinanceMarket(IMarket):
             if retries < self.WS_MAX_RETRIES:
                 retries += 1
                 time.sleep(5)
-                return self.init_orderbook_websocket(symbol, callback, liveloop, retries)
+                return self.init_orderbook_websocket(symbol, callback, liveloop, retries, futures)
             msg = f'Cannot start websocket connection for orderbook for {symbol} on {self.name} (tried {retries} times).'
             logger.error(msg, exc_info=True)
             ws.close()
