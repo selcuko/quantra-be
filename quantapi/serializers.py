@@ -14,16 +14,15 @@ class MarketSerializer(serializers.HyperlinkedModelSerializer):
     tradable_symbols = serializers.SerializerMethodField()
 
     def get_tradable_symbols(self, market):
-        return MarketSymbol.objects.filter(market=market, spot_trading_enabled=True).count()
+        return getattr(market, 'tradable_symbols_count', None)
 
     class Meta:
         model = Market
         fields = ['id', 'exchange_name', 'prices_updated', 'prices', 'icon', 'accounts', 'tradable_symbols']
 
-
 class MarketAccountSerializer(serializers.HyperlinkedModelSerializer):
     assets = serializers.SerializerMethodField()
-    market = MarketSerializer()
+    exchange_name = serializers.CharField(source='market.exchange_name')
     owner = serializers.CharField(source='credentials.owner')
     active = serializers.BooleanField(source='credentials.active')
     internal = serializers.BooleanField(source='credentials.internal')
@@ -32,17 +31,19 @@ class MarketAccountSerializer(serializers.HyperlinkedModelSerializer):
 
     class Meta:
         model = MarketAccount
-        fields = ['id', 'market', 'equity', 'capital', 'assets', 'last_cache', 
+        fields = ['id', 'market', 'exchange_name', 'equity', 'capital', 'assets', 'last_cache', 
                   'owner', 'active', 'internal', 'prices_updated', 'url', 'credentials_expires_at']
 
     def get_assets(self, obj):
-        # XXX: this serializer method is hacky. come back here to optimize.
         assets = json.loads(obj.assets or '{}')
         prices = json.loads(obj.market.prices or '{}')
         payload = {}
+
         symbols_map = {
-            symbol.base: symbol.symbol.image if symbol.symbol else None for symbol in obj.market.symbols.all()
+            symbol.base: symbol.symbol.image if symbol.symbol else None 
+            for symbol in obj.market.symbols.all()
         }
+
         for k, v in assets.items():
             price = prices.get(f'{k}-USDT', 0)
             if k == 'USDT' or v <= 0:
@@ -160,18 +161,18 @@ class SessionSerializer(serializers.HyperlinkedModelSerializer):
                   'initial_assets', 'buy_enabled', 'sell_enabled', 'account', 
                   'equity', 'orders', 'signals', 'thread', 'health', 'url']
 
-
     def get_thread(self, obj):
-        if not obj.thread:
-            return {}
-        return ThreadSerializer(obj.thread).data
+        if obj.thread:
+            return ThreadSerializer(obj.thread).data
+        return {}
 
     def validate(self, data):
         instance = self.instance
         symbol = data.get('symbol', instance.symbol if instance else None)
         account = data.get('account', instance.account if instance else None)
-        market = account.market
-        validate_symbol_against_market(symbol, market)
+        market = account.market if account else None
+        if symbol and market:
+            validate_symbol_against_market(symbol, market)
         return data
 
 

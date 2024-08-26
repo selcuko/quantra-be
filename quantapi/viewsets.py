@@ -1,7 +1,7 @@
 import json
 import threading
 
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Count, Q
 from django_filters.rest_framework import DjangoFilterBackend
 from pytest import mark
 from rest_framework import viewsets
@@ -49,6 +49,11 @@ class MarketViewSet(viewsets.ReadOnlyModelViewSet):
         fields = market.fields()
         return Response(fields)
 
+    def get_queryset(self):
+        return Market.objects.annotate(
+            tradable_symbols_count=Count('symbols', filter=Q(symbols__spot_trading_enabled=True))
+        ).prefetch_related('symbols', 'accounts')
+
 
 class MarketAccountViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = MarketAccount.objects.all()
@@ -60,7 +65,10 @@ class MarketAccountViewSet(viewsets.ReadOnlyModelViewSet):
         return MarketAccount.objects.select_related(
             'market', 'credentials'
         ).prefetch_related(
-            Prefetch('market__symbols', queryset=MarketSymbol.objects.select_related('symbol'))
+            Prefetch(
+                'market__symbols', 
+                queryset=MarketSymbol.objects.select_related('symbol')
+            )
         )
 
     @action(detail=True, methods=['get', 'post'])
@@ -262,7 +270,7 @@ class SessionGroupViewSet(viewsets.ModelViewSet):
     filterset_class = SessionGroupFilter
 
     def get_queryset(self):
-        return SessionGroup.objects.select_related('symbol', 'interface').all()
+        return SessionGroup.objects.select_related('symbol', 'interface').prefetch_related('sessions__orders', 'sessions__signals')
 
     @action(detail=True, methods=['get'])
     def sessions(self, request, pk=None):
