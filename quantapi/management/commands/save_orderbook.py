@@ -4,8 +4,10 @@ import os
 from django.core.management.base import BaseCommand, CommandError, CommandParser
 from django.utils import timezone
 
-from liveloop import LiveLoop
-from quantapi.models import Market, MarketAccount, MarketSymbol
+from loops.liveloop import LiveLoop
+from quantapi.models import Market, MarketSymbol
+from queue import Queue
+from threading import Thread
 
 
 class MockLiveLoop(LiveLoop):
@@ -29,9 +31,9 @@ class Command(BaseCommand):
     def add_arguments(self, parser: CommandParser):
         parser.add_argument('--symbol', required=True, type=str, help='Name of the trading pair (e.g. BTC-USDT)')
         parser.add_argument('--market', required=True, type=str, help='Name of the exchange (e.g. BINANCE)')
-        parser.add_argument('--account', required=False, type=str, help='Optional MarketAccount ID to be used as the interface')
         parser.add_argument('--output', required=True, type=str, help='Output file path')
         parser.add_argument('--overwrite', action='store_true', help='Overwrite the file if it already exists')
+        parser.add_argument('--futures', action='store_true', help='Use futures interface instead of spot', default=False)
 
     def handle(self, *args, **options):
         self.options = options
@@ -44,24 +46,16 @@ class Command(BaseCommand):
             self.symbol = MarketSymbol.objects.get(market=self.market, base=symbol)
         except MarketSymbol.DoesNotExist:
             raise CommandError(f'Symbol {symbol} not found in {self.market.exchange_name}.')
-        if self.options.get('account'):
-            try:
-                self.account = MarketAccount.objects.get(id=self.options['account'])
-            except MarketAccount.DoesNotExist:
-                raise CommandError(f'MarketAccount ID={self.options["account"]} not found.')
-            if self.account.market != self.market:
-                raise CommandError(f'MarketAccount ID={self.options["account"]} does not belong to {self.market.exchange_name}.')
-        else:
-            self.account = MarketAccount.objects.filter(market=self.market).first()
-            if not self.account:
-                raise CommandError(f'No MarketAccount found for {self.market.exchange_name}.')
+        self.buffer = Queue()
         self.prep_file()
-        self.interface = self.account.get_interface()
+        self.interface = self.market.get_interface()
         self.prep_snapshot()
+        worker_thread = Thread(target=self.worker)
+        worker_thread.start()
         self.interface.init_orderbook_websocket(
             self.symbol,
             self.on_update,
-            MockLiveLoop()
+            futures=self.options['futures'],
         )
 
     def prep_file(self):
@@ -80,21 +74,27 @@ class Command(BaseCommand):
                     'id': self.symbol.pk,
                 },
                 'market': self.market.exchange_name,
-                'account.id': self.account.pk if self.account else None, 
             }
             f.write(json.dumps(header_payload) + '\n')
 
     def prep_snapshot(self):
-        full_ob = self.interface.get_full_orderbook(self.symbol)
+        full_ob = self.interface.get_full_orderbook(self.symbol, futures=self.options['futures'])
+        full_ob['time'] = timezone.now().timestamp()
+        full_ob['type'] = 'snapshot'
         with open(self.options['output'], 'a') as f:
             f.write(json.dumps(full_ob, cls=DecimalEncoder) + '\n')
 
     def on_update(self, payload):
         payload['time'] = timezone.now().timestamp()
-        self.stdout.write(f'[{timezone.now().isoformat()}] Writing', ending='\t')
-        try:
-            with open(self.options['output'], 'a') as f:
-                f.write(json.dumps(payload, cls=DecimalEncoder) + '\n')
-            self.stdout.write(self.style.SUCCESS('OK'))
-        except Exception as e:
-            self.stdout.write(self.style.ERROR(f'Error writing update: {e}'))
+        self.buffer.put(payload)
+
+    def worker(self):
+        while True:
+            payload = self.buffer.get()
+            self.stdout.write(f'[{timezone.now().isoformat()}] Writing (Queue: {self.buffer.qsize()})', ending='\t')
+            try:
+                with open(self.options['output'], 'a') as f:
+                    f.write(json.dumps(payload, cls=DecimalEncoder) + '\n')
+                self.stdout.write(self.style.SUCCESS('OK'))
+            except Exception as e:
+                self.stdout.write(self.style.ERROR(f'Error writing update: {e}'))
