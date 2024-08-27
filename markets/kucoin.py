@@ -185,14 +185,14 @@ class KucoinMarket(IMarket):
             raise ValueError(f'Error while subscribing to {symbol} on {self.name}: {ack}')
         return ws
 
-    def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable, liveloop:'LiveLoop|LoopGroup', raw_callback=None, ticker_callback=None):
+    def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable, liveloop:'LiveLoop|LoopGroup|None', raw_callback=None, ticker_callback=None):
         ws = self.get_match_engine_socket(symbol)
         last_ping = datetime.now()
         engine = MatchEngine(interval, callback, ticker_callback)
         retries = 0
 
         while not self.stop_websocket_stream:
-            if liveloop.should_stop():
+            if liveloop and liveloop.should_stop():
                 self.stop_websocket_stream = True
                 break
             if last_ping < datetime.now() - timedelta(seconds=30):
@@ -244,7 +244,7 @@ class KucoinMarket(IMarket):
     @staticmethod
     def _standardize_symbol(symbol:str) -> str:
         return symbol
-    
+
     def _standardize_datetime(self, dt:int|str) -> "datetime|None":
         try:
             return datetime.fromtimestamp(int(dt), tz=pytz.UTC)
@@ -301,8 +301,10 @@ class KucoinMarket(IMarket):
             client_oid=order.get('clientOid'),
             details=json.dumps(order),
         )
-    
-    def _get_klines(self, symbol:str, interval:str, start:datetime, end:"datetime|None"=None, limit=1000, retry=0) -> list[list]:
+
+    def _get_klines(self, symbol:'str|MarketSymbol', interval:str, start:datetime, end:"datetime|None"=None, limit=1000, retry=0) -> list[list]:
+        if not isinstance(symbol, str):
+            symbol = symbol.name
         if not self.has_symbol(symbol):
             raise SymbolNotInMarket(f'Symbol {symbol} is not available in {self.name}')
         if end:

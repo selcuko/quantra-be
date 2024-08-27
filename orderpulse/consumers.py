@@ -157,7 +157,8 @@ class MiniOrderbookConsumer(AsyncWebsocketConsumer):
                 'asks': [ask.dict() for ask in asks],
                 'price': str(self.keeper.book.get_price())
             })
-            asyncio.run(self.send(text_data=payload))
+            if self.connected:
+                asyncio.run(self.send(text_data=payload))
 
 
 class CandleConsumer(AsyncWebsocketConsumer):
@@ -175,6 +176,7 @@ class CandleConsumer(AsyncWebsocketConsumer):
 
     async def connect(self):
         await self.accept()
+        self.connected = True
         try:
             await sync_to_async(self.get_symbol)()
         except Exception as e:
@@ -183,10 +185,12 @@ class CandleConsumer(AsyncWebsocketConsumer):
         threading.Thread(target=self.interface.init_match_engine, args=(self.symbol.name, '1 min', self.callback, None, None, self.callback)).start()
 
     async def disconnect(self, close_code):
-        pass
+        self.connected = False
 
     async def receive(self, text_data):
         pass
 
     def callback(self, candle: dict):
+        if not self.connected:
+            return
         asyncio.run(self.send(text_data=json.dumps(candle, default=str)))

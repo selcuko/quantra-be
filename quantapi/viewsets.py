@@ -387,6 +387,7 @@ class ThreadViewSet(viewsets.ViewSet):
 class CandlesViewSet(viewsets.ViewSet):
     def list(self, request):
         return Response({'detail': 'Specify market, symbol and interval in the URI.'})
+
     def get(self, request, market, symbol, interval):
         market = Market.objects.get(exchange_name=market.upper())
         symbol = MarketSymbol.objects.get(name=symbol.upper(), market=market)
@@ -394,7 +395,7 @@ class CandlesViewSet(viewsets.ViewSet):
 
         interval = interval.replace('min', ' min').replace('hour', ' hour').replace('day', ' day').replace('week', ' week').replace('month', ' month')
 
-        candles = interface.get_last_klines(symbol, interval, limit=1000)
+        candles = interface.get_last_klines(symbol, interval, limit=500)
         payload = [interface.format_candle(candle) for candle in candles]
         payload = sorted(payload, key=lambda x: x['time'])
         return Response({

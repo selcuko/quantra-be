@@ -116,13 +116,13 @@ class MEXCMarket(IMarket):
             raise Exception(f'Error while subscribing to {topic}: {ack}')
         return ws
 
-    def init_match_engine(self, symbol:str, interval:str, callback:Callable, liveloop:'LiveLoop|LoopGroup', raw_callback:Optional[Callable]=None, ticker_callback:Optional[Callable]=None):
+    def init_match_engine(self, symbol:str, interval:str, callback:Callable, liveloop:'LiveLoop|LoopGroup|None', raw_callback:Optional[Callable]=None, ticker_callback:Optional[Callable]=None):
         ws = self.get_match_engine_ws(symbol)
         last_ping = datetime.now()
         me = MatchEngine(interval, callback, ticker_callback)
         retries = 0
         while not self.stop_websocket_stream:
-            if liveloop.should_stop():
+            if liveloop and liveloop.should_stop():
                 self.stop_websocket_stream = True
                 break
             if (datetime.now() - last_ping).seconds > 30:
@@ -352,6 +352,8 @@ class MEXCMarket(IMarket):
             self.account.save()
 
     def _get_klines(self, symbol, interval, start=None, end=None, limit=1000, retry=3):
+        if not isinstance(symbol, str):
+            symbol = symbol.name
         if not end and not start:
             raise InvalidUsage('Either start or end must be provided')
         if limit > 1000:
@@ -430,7 +432,7 @@ class MEXCMarket(IMarket):
             logger.warning(error)
             raise KlineFetchFailed(error)
         return klines
-    
+
     def _get_symbol_from_name(self, name):
         if name not in self.symbols:
             raise ValueError(f'Symbol {name} is not available on {self.name}')
