@@ -123,6 +123,12 @@ class GlobalSymbolViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         return GlobalSymbol.objects.prefetch_related('tags', 'symbols').all()
 
+    @action(detail=True, methods=['get', 'post'])
+    def refresh(self, request, pk):
+        symbol: GlobalSymbol = self.get_object()
+        symbol.refresh()
+        return Response(GlobalSymbolSerializer(symbol, context={'request': request}).data)
+
 
 class StrategyViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Strategy.objects.all()

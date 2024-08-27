@@ -12,6 +12,7 @@ from django.contrib.auth.models import User
 from django.contrib.contenttypes.fields import GenericRelation
 from django.db import models
 
+from coingecko import CoinGecko
 from errors import SessionCannotContinue
 from logger import logger
 from cache import get_loopgroup
@@ -923,6 +924,13 @@ class GlobalSymbol(models.Model):
             'markets': self.markets,
             'price': self.price,
         }
+
+    def refresh(self):
+        cg = CoinGecko()
+        coin = cg.coin_by_cid(self.cid)
+        for field, value in cg.full_payload_to_dict(coin).items():
+            setattr(self, field, value)
+        self.save()
 
 
 class Tag(models.Model):
