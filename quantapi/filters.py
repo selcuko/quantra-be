@@ -21,15 +21,21 @@ class MarketAccountFilter(filters.FilterSet):
 
 
 class MarketSymbolFilter(filters.FilterSet):
+    sort = filters.OrderingFilter(
+        fields=(
+            ('name', 'name'),
+            ('market__exchange_name', 'market'),
+            ('symbol__market_cap', 'market_cap'),
+        ))
     market = filters.CharFilter(field_name='market__exchange_name', lookup_expr='iexact')
-    name = filters.CharFilter(field_name='name', lookup_expr='icontains')
-    base = filters.CharFilter(field_name='base', lookup_expr='iexact')
+    name = filters.CharFilter(field_name='name', lookup_expr='startswith')
+    base = filters.CharFilter(field_name='base', lookup_expr='startswith')
     quote = filters.CharFilter(field_name='quote', lookup_expr='iexact')
     spot_enabled = filters.BooleanFilter(field_name='spot_trading_enabled')
 
     class Meta:
         model = MarketSymbol
-        fields = ['market', 'name', 'base', 'quote']
+        fields = ['market', 'name', 'base', 'quote', 'sort']
 
 
 class SessionFilter(filters.FilterSet):
@@ -44,7 +50,7 @@ class SessionFilter(filters.FilterSet):
     class Meta:
         model = Session
         fields = ['status', 'source', 'strategy', 'market', 'account', 'symbol', 'created_after']
-    
+
     def filter_status(self, queryset, name, value):
         query = Q()
         for status in value.split(","):
@@ -83,7 +89,7 @@ class GlobalSymbolFilter(filters.FilterSet):
     category = filters.CharFilter(method='filter_category')
     market = filters.CharFilter(method='filter_market')
     is_favorite = filters.BooleanFilter(field_name='favorite')
-    is_stablecoin = filters.BooleanFilter(field_name='stablecoin')
+    is_stablecoin = filters.BooleanFilter(field_name='is_stablecoin')
     ath__gte = filters.NumberFilter(field_name='ath', lookup_expr='gte')
     ath__lte = filters.NumberFilter(field_name='ath', lookup_expr='lte')
     atl__gte = filters.NumberFilter(field_name='atl', lookup_expr='gte')

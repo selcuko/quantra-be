@@ -106,6 +106,10 @@ class Market(models.Model):
     def __str__(self):
         return self.exchange_name
 
+    @property
+    def display_name(self):
+        return self.Exchange(self.exchange_name).label
+
 
 def three_months_later():
     return datetime.now(pytz.utc) + timedelta(days=90)
@@ -823,7 +827,7 @@ class GlobalSymbol(models.Model):
     @property
     def markets(self):
         return json.loads(self.available_markets)
-    
+
     @property
     def markets_display(self):
         return ', '.join(self.markets)
@@ -866,7 +870,7 @@ class GlobalSymbol(models.Model):
             market_symbols = MarketSymbol.objects.filter(symbol=self)
         current_markets = self.markets
         for ms in market_symbols:
-            if ms.market.exchange_name not in current_markets and ms.spot_trading_enabled:
+            if ms.market.exchange_name not in current_markets:
                 current_markets.append(ms.market.exchange_name)
         self.markets = current_markets
         if save:

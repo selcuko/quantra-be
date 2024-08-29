@@ -18,7 +18,7 @@ class MarketSerializer(serializers.HyperlinkedModelSerializer):
 
     class Meta:
         model = Market
-        fields = ['id', 'exchange_name', 'prices_updated', 'prices', 'icon', 'accounts', 'tradable_symbols']
+        fields = ['id', 'exchange_name', 'prices_updated', 'prices', 'icon', 'accounts', 'tradable_symbols', 'display_name']
 
 class MarketAccountSerializer(serializers.HyperlinkedModelSerializer):
     assets = serializers.SerializerMethodField()
@@ -102,14 +102,16 @@ class InlineMarketAccountSerializer(serializers.HyperlinkedModelSerializer):
 
 
 class MarketSymbolSerializer(serializers.HyperlinkedModelSerializer):
+    market = MarketSerializer()
     exchange_name = serializers.CharField(source='market.exchange_name')
     icon = serializers.URLField(source='symbol.image', allow_null=True)
     price = serializers.SerializerMethodField()
     price_updated = serializers.DateTimeField(source='market.prices_updated', allow_null=True)
+    cid = serializers.CharField(source='symbol.cid', allow_null=True)
     class Meta:
         model = MarketSymbol
         fields = ['symbol', 'market', 'exchange_name', 'name', 'base', 'quote', 'base_precision', 'quote_precision', 
-                  'spot_trading_enabled', 'icon', 'price', 'price_updated', 'id', 'url']
+                  'spot_trading_enabled', 'icon', 'price', 'price_updated', 'id', 'url', 'cid']
 
     def get_price(self, obj):
         prices = json.loads(obj.market.prices or '{}')
@@ -118,7 +120,7 @@ class MarketSymbolSerializer(serializers.HyperlinkedModelSerializer):
 
 class InlineMarketSymbolSerializer(serializers.HyperlinkedModelSerializer):
     icon = serializers.URLField(source='symbol.image', allow_null=True)
-    market = serializers.CharField(source='market.exchange_name')
+    market = MarketSerializer()
     class Meta:
         model = MarketSymbol
         fields = ['id', 'url', 'icon', 'name', 'base', 'quote', 'market']
@@ -132,7 +134,7 @@ class GlobalSymbolSerializer(serializers.HyperlinkedModelSerializer):
                   'circulating_supply', 'max_supply', 'total_supply', 'last_updated', 'price', 
                   'supply_ratio', 'ath_prox', 'atl_prox', 'volume24h_to_mcap', 'image', 'url']
     tags = serializers.StringRelatedField(many=True)
-    symbols = serializers.HyperlinkedRelatedField(many=True, read_only=True, view_name='marketsymbol-detail')
+    symbols = InlineMarketSymbolSerializer(many=True)
 
 
 class StrategySerializer(serializers.HyperlinkedModelSerializer):
