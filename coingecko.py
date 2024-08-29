@@ -92,7 +92,7 @@ class CoinGecko:
         return {
             'name': coin['symbol'].upper().replace('-USD', '') + '-USD',
             'base': coin['symbol'].upper().replace('-USD', ''),
-            'image': coin.get('image'),
+            'image': coin.get('image', {}).get('large'),
             'market_cap': coin.get('market_data').get('market_cap').get('usd'),
             'volume': coin.get('market_data').get('total_volume').get('usd'),
             'high_24h': coin.get('market_data').get('high_24h').get('usd'),
