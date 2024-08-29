@@ -955,3 +955,14 @@ class Tag(models.Model):
 
     class Meta:
         verbose_name_plural = 'Tags'
+
+
+class ContactForm(models.Model):
+    name = models.CharField(max_length=100)
+    email = models.EmailField()
+    message = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    user_agent = models.CharField(max_length=256, null=True, blank=True)
+
+    def __str__(self):
+        return f'{self.name} <{self.email}>'

@@ -2,7 +2,7 @@ import json
 from os import read
 from django.urls import reverse
 from rest_framework import serializers
-from quantapi.models import (GlobalSymbol, GroupOrder, Market, MarketAccount, MarketCredentials, 
+from quantapi.models import (ContactForm, GlobalSymbol, GroupOrder, Market, MarketAccount, MarketCredentials, 
                              MarketSymbol, Order, Session, SessionGroup, 
                              Signal, Strategy, Subscription)
 from quantapi.validations import validate_order_payload, validate_symbol_against_market
@@ -318,3 +318,9 @@ class LoopGroupSerializer(serializers.Serializer):
     group = serializers.HyperlinkedRelatedField(view_name='sessiongroup-detail', read_only=True)
     session = serializers.HyperlinkedRelatedField(view_name='session-detail', read_only=True)
     thread = ThreadSerializer()
+
+
+class ContactFormSerializer(serializers.HyperlinkedModelSerializer):
+    class Meta:
+        model = ContactForm
+        fields = ['name', 'email', 'message', 'user_agent']

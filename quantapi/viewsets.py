@@ -15,11 +15,11 @@ from markets.errors import OrderPlacementError
 from order import OrderManager
 from quantapi.filters import (GlobalSymbolFilter, MarketAccountFilter, MarketSymbolFilter,
                               SessionFilter, SessionGroupFilter)
-from quantapi.models import (GlobalSymbol, GroupOrder, Market,
+from quantapi.models import (ContactForm, GlobalSymbol, GroupOrder, Market,
                              MarketAccount, MarketSymbol, Order,
                              Session, SessionGroup, Signal, Strategy,
                              Subscription)
-from quantapi.serializers import (DraftSessionSerializer,
+from quantapi.serializers import (ContactFormSerializer, DraftSessionSerializer,
                                   GlobalSymbolSerializer, GroupOrderSerializer,
                                   LiveLoopSerializer,
                                   LoopGroupSerializer, MarketAccountSerializer,
@@ -407,3 +407,9 @@ class CandlesViewSet(viewsets.ViewSet):
             'end': payload[-1]['time'],
             'candles': payload,
         })
+
+
+class ContactFormViewSet(viewsets.ModelViewSet):
+    queryset = ContactForm.objects.all()
+    serializer_class = ContactFormSerializer
+    http_method_names = ['post']

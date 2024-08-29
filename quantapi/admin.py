@@ -211,6 +211,13 @@ class TagAdmin(admin.ModelAdmin):
         return super().get_queryset(request).prefetch_related('symbols')
 
 
+class ContactFormAdmin(admin.ModelAdmin):
+    list_display = ('name', 'email', 'message', 'user_agent', 'created_at')
+    search_fields = ('name', 'email', 'message', 'user_agent')
+    list_filter = ('created_at', )
+    readonly_fields = ('name', 'email', 'message', 'user_agent', 'created_at')
+
+
 admin.site.register(SessionGroup, SessionGroupAdmin)
 admin.site.register(GlobalSymbol, GlobalSymbolAdmin)
 admin.site.register(Market, MarketAdmin)
@@ -224,3 +231,4 @@ admin.site.register(Subscription)
 admin.site.register(Backtest, BacktestAdmin)
 admin.site.register(Strategy)
 admin.site.register(Tag, TagAdmin)
+admin.site.register(ContactForm, ContactFormAdmin)
