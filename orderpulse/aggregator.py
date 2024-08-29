@@ -44,10 +44,17 @@ class Aggregator:
         self.recv_seq:dict[str, int] = {}
         self.queue_processor = multiprocessing.Process(target=Aggregator.worker, args=(self.book, self.update_queue, self.stop_event))
         self.queue_processor.start()
+        self.callbacks = []
 
     def __hash__(self):
         unique = '+'.join(self.keepers.keys())
         return hash(unique)
+
+    def add_callback(self, callback):
+        self.callbacks.append(callback)
+
+    def remove_callback(self, callback):
+        self.callbacks.remove(callback)
 
     def add_markets(self, names: list[str]):
         def wrapped():
@@ -82,6 +89,8 @@ class Aggregator:
             return
         self.recv_seq[delta.market] = delta.sequence
         self.update_queue.put(delta)
+        for callback in self.callbacks:
+            callback(delta)
 
     @staticmethod
     def worker(book: Book, queue: Queue, stop_event: synchronize.Event):

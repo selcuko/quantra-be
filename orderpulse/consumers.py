@@ -4,6 +4,7 @@ import json
 import threading
 import django
 
+from orderpulse.aggregator import Aggregator, AggregatorPool
 from orderpulse.keeper import Keeper, KeeperPool
 from orderpulse.structures import Delta
 django.setup()
@@ -159,6 +160,141 @@ class MiniOrderbookConsumer(AsyncWebsocketConsumer):
             })
             if self.connected:
                 asyncio.run(self.send(text_data=payload))
+
+
+class AggregatorConsumer(AsyncWebsocketConsumer):
+    async def connect(self):
+        self.connected = False
+        self.aggregator = None
+        self.count = 5
+        self.depth = 1
+        await self.accept()
+        await self.subscribe({'market': self.scope['url_route']['kwargs']['market'], 'symbol': self.scope['url_route']['kwargs']['symbol']})
+        self.connected = True
+
+    async def disconnect(self, close_code):
+        self.close_code = close_code
+        self.connected = False
+        # if self.aggregator and self.callback in self.aggregator.callbacks:
+        #     self.aggregator.callbacks.remove(self.callback)
+
+    async def receive(self, text_data):
+        try:
+            inbound = json.loads(text_data)
+        except json.decoder.JSONDecodeError:
+            await self.send(text_data=json.dumps({'error': 'Invalid JSON'}))
+            return
+        message_type = inbound.get('type')
+        if not message_type:
+            await self.send(text_data=json.dumps({'error': 'No message type specified'}))
+            return
+        handler = getattr(self, message_type, self.default_handler)
+        await handler(inbound)
+
+    async def default_handler(self, event):
+        await self.send(text_data=json.dumps({'error': 'Invalid message type'}))
+
+    def get_aggregator(self, symbol, markets) -> Aggregator:
+        return AggregatorPool.get(symbol, markets)
+
+    async def subscribe(self, event):
+        if self.connected:
+            await self.send(text_data=json.dumps({'error': 'Already connected'}))
+            return
+        try:
+            symbol = event['symbol']
+            markets = event['markets']
+            self.depth = event.get('depth', 1)
+            self.count = event.get('count', 10)
+        except KeyError:
+            await self.send(text_data=json.dumps({'error': 'Market and symbol must be specified'}))
+            return
+        try:
+            self.aggregator = await sync_to_async(self.get_aggregator)(symbol, markets)
+            self.aggregator.add_callback(self.callback)
+        except Market.DoesNotExist:
+            await self.send(text_data=json.dumps({'error': f'Market {markets} not found'}))
+            return
+        except MarketSymbol.DoesNotExist:
+            await self.send(text_data=json.dumps({'error': f'Symbol {symbol} not found in {markets}'}))
+            return
+
+    def callback(self, delta: Delta):
+        if not self.connected:
+            print('Channel name not set, cannot send message', self.close_code)
+            return
+        asyncio.run(self.send(text_data=delta.json()))
+
+
+class MiniAggregatorConsumer(AsyncWebsocketConsumer):
+    async def connect(self):
+        self.connected = False
+        self.aggregator = None
+        self.count = 5
+        self.depth = 1
+        await self.accept()
+        await self.subscribe({'markets': self.scope['url_route']['kwargs']['markets'], 'symbol': self.scope['url_route']['kwargs']['symbol']})
+        self.connected = True
+    
+    async def disconnect(self, close_code):
+        self.close_code = close_code
+        self.connected = False
+        if self.aggregator and self.callback in self.aggregator.callbacks:
+            self.aggregator.callbacks.remove(self.callback)
+    
+    async def receive(self, text_data):
+        try:
+            inbound = json.loads(text_data)
+        except json.decoder.JSONDecodeError:
+            await self.send(text_data=json.dumps({'error': 'Invalid JSON'}))
+            return
+        message_type = inbound.get('type')
+        if not message_type:
+            await self.send(text_data=json.dumps({'error': 'No message type specified'}))
+            return
+        handler = getattr(self, message_type, self.default_handler)
+        await handler(inbound)
+
+    async def default_handler(self, event):
+        await self.send(text_data=json.dumps({'error': 'Invalid message type'}))
+
+    def get_aggregator(self, symbol, markets) -> Aggregator:
+        return AggregatorPool.get(symbol, markets)
+
+    async def subscribe(self, event):
+        if self.connected:
+            await self.send(text_data=json.dumps({'error': 'Already connected'}))
+            return
+        try:
+            symbol = event['symbol']
+            markets = event['markets'].split(',')
+            self.depth = event.get('depth', 1)
+            self.count = event.get('count', 10)
+        except KeyError:
+            await self.send(text_data=json.dumps({'error': 'Market and symbol must be specified'}))
+            return
+        try:
+            self.aggregator = await sync_to_async(self.get_aggregator)(symbol, markets)
+            self.aggregator.add_callback(self.callback)
+        except Market.DoesNotExist:
+            await self.send(text_data=json.dumps({'error': f'Market {markets} not found'}))
+            return
+        except MarketSymbol.DoesNotExist:
+            await self.send(text_data=json.dumps({'error': f'Symbol {symbol} not found in {markets}'}))
+            return
+
+    def callback(self, delta: Delta):
+        if self.aggregator and self.connected:
+            bids, asks = self.aggregator.book.get_depth(self.count, self.depth)
+            payload = json.dumps({
+                'bids': [bid.dict() for bid in bids],
+                'asks': [ask.dict() for ask in asks],
+                'price': str(self.aggregator.book.get_price())
+            })
+            try:
+                asyncio.run(self.send(text_data=payload))
+            except Exception as e:
+                self.connected = False
 
 
 class CandleConsumer(AsyncWebsocketConsumer):
