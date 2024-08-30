@@ -2,6 +2,7 @@
 import asyncio
 import json
 import threading
+from urllib.parse import parse_qs
 import django
 
 from orderpulse.aggregator import Aggregator, AggregatorPool
@@ -22,6 +23,10 @@ class OrderbookConsumer(AsyncWebsocketConsumer):
         await self.accept()
         await self.subscribe({'market': self.scope['url_route']['kwargs']['market'], 'symbol': self.scope['url_route']['kwargs']['symbol']})
         self.connected = True
+
+        query_params = parse_qs(self.scope['query_string'].decode('utf-8'))
+        contract = query_params.get('contract', [None])[0]
+        self.futures = True if contract == 'FUTURES' else False
 
     async def disconnect(self, close_code):
         self.close_code = close_code
@@ -48,7 +53,7 @@ class OrderbookConsumer(AsyncWebsocketConsumer):
     def get_keeper(self, market, symbol) -> Keeper:
         market = Market.objects.get(exchange_name=market)
         symbol = MarketSymbol.objects.get(name=symbol, market=market)
-        return KeeperPool.get(symbol)
+        return KeeperPool.get(symbol, futures=self.futures)
 
     async def subscribe(self, event):
         if self.connected:
@@ -100,6 +105,10 @@ class MiniOrderbookConsumer(AsyncWebsocketConsumer):
         print('Subscribed')
         self.connected = True
 
+        query_params = parse_qs(self.scope['query_string'].decode('utf-8'))
+        contract = query_params.get('contract', [None])[0]
+        self.futures = True if contract == 'FUTURES' else False
+
     async def disconnect(self, close_code):
         self.close_code = close_code
         self.connected = False
@@ -125,7 +134,7 @@ class MiniOrderbookConsumer(AsyncWebsocketConsumer):
     def get_keeper(self, market, symbol) -> Keeper:
         market = Market.objects.get(exchange_name=market)
         symbol = MarketSymbol.objects.get(name=symbol, market=market)
-        return KeeperPool.get(symbol)
+        return KeeperPool.get(symbol, futures=self.futures)
 
     async def subscribe(self, event):
         if self.connected:
@@ -172,6 +181,10 @@ class AggregatorConsumer(AsyncWebsocketConsumer):
         await self.subscribe({'market': self.scope['url_route']['kwargs']['market'], 'symbol': self.scope['url_route']['kwargs']['symbol']})
         self.connected = True
 
+        query_params = parse_qs(self.scope['query_string'].decode('utf-8'))
+        contract = query_params.get('contract', [None])[0]
+        self.futures = True if contract == 'FUTURES' else False
+
     async def disconnect(self, close_code):
         self.close_code = close_code
         self.connected = False
@@ -195,7 +208,7 @@ class AggregatorConsumer(AsyncWebsocketConsumer):
         await self.send(text_data=json.dumps({'error': 'Invalid message type'}))
 
     def get_aggregator(self, symbol, markets) -> Aggregator:
-        return AggregatorPool.get(symbol, markets)
+        return AggregatorPool.get(symbol, markets, futures=self.futures)
 
     async def subscribe(self, event):
         if self.connected:
@@ -235,6 +248,10 @@ class MiniAggregatorConsumer(AsyncWebsocketConsumer):
         await self.accept()
         await self.subscribe({'markets': self.scope['url_route']['kwargs']['markets'], 'symbol': self.scope['url_route']['kwargs']['symbol']})
         self.connected = True
+
+        query_params = parse_qs(self.scope['query_string'].decode('utf-8'))
+        contract = query_params.get('contract', [None])[0]
+        self.futures = True if contract == 'FUTURES' else False
     
     async def disconnect(self, close_code):
         self.close_code = close_code
@@ -259,7 +276,7 @@ class MiniAggregatorConsumer(AsyncWebsocketConsumer):
         await self.send(text_data=json.dumps({'error': 'Invalid message type'}))
 
     def get_aggregator(self, symbol, markets) -> Aggregator:
-        return AggregatorPool.get(symbol, markets)
+        return AggregatorPool.get(symbol, markets, futures=self.futures)
 
     async def subscribe(self, event):
         if self.connected:

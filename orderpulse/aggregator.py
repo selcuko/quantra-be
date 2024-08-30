@@ -12,13 +12,13 @@ class AggregatorPool:
     manager_started = False
 
     @classmethod
-    def get(cls, symbol:str, markets: list[str]) -> 'Aggregator':
+    def get(cls, symbol:str, markets: list[str], futures=False) -> 'Aggregator':
         if not cls.manager_started:
             cls.manager.start()
             cls.manager_started = True
         unique = hash('+'.join(markets))
         if not unique in cls.pool:
-            aggregator = Aggregator(symbol, cls.manager)
+            aggregator = Aggregator(symbol, cls.manager, futures=futures)
             aggregator.add_markets(markets)
             cls.pool[unique] = aggregator
         return cls.pool[unique]
@@ -33,7 +33,7 @@ class AggregatorPool:
 
 
 class Aggregator:
-    def __init__(self, symbol: str, manager: BookManager):
+    def __init__(self, symbol: str, manager: BookManager, futures=False):
         self.symbol = symbol
         self.manager = manager
         self.book = manager.create_book()
@@ -45,6 +45,7 @@ class Aggregator:
         self.queue_processor = multiprocessing.Process(target=Aggregator.worker, args=(self.book, self.update_queue, self.stop_event))
         self.queue_processor.start()
         self.callbacks = []
+        self.futures = futures
 
     def __hash__(self):
         unique = '+'.join(self.keepers.keys())
@@ -66,7 +67,7 @@ class Aggregator:
         from quantapi.models import Market, MarketSymbol
         market = Market.objects.get(exchange_name=name)
         symbol = MarketSymbol.objects.get(market=market, name=self.symbol)
-        keeper = KeeperPool.get(symbol)
+        keeper = KeeperPool.get(symbol, futures=self.futures)
         self.add_keeper(keeper)
 
     def add_keeper(self, keeper: Keeper):
