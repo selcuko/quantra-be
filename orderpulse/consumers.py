@@ -20,13 +20,12 @@ class OrderbookConsumer(AsyncWebsocketConsumer):
         self.keeper = None
         self.count = 5
         self.depth = 1
-        await self.accept()
-        await self.subscribe({'market': self.scope['url_route']['kwargs']['market'], 'symbol': self.scope['url_route']['kwargs']['symbol']})
-        self.connected = True
-
         query_params = parse_qs(self.scope['query_string'].decode('utf-8'))
         contract = query_params.get('contract', [None])[0]
         self.futures = True if contract == 'FUTURES' else False
+        await self.accept()
+        await self.subscribe({'market': self.scope['url_route']['kwargs']['market'], 'symbol': self.scope['url_route']['kwargs']['symbol']})
+        self.connected = True
 
     async def disconnect(self, close_code):
         self.close_code = close_code
@@ -99,15 +98,14 @@ class MiniOrderbookConsumer(AsyncWebsocketConsumer):
         self.keeper = None
         self.count = 5
         self.depth = 1
+        query_params = parse_qs(self.scope['query_string'].decode('utf-8'))
+        contract = query_params.get('contract', [None])[0]
+        self.futures = True if contract == 'FUTURES' else False
         await self.accept()
         print('Connected')
         await self.subscribe({'market': self.scope['url_route']['kwargs']['market'], 'symbol': self.scope['url_route']['kwargs']['symbol']})
         print('Subscribed')
         self.connected = True
-
-        query_params = parse_qs(self.scope['query_string'].decode('utf-8'))
-        contract = query_params.get('contract', [None])[0]
-        self.futures = True if contract == 'FUTURES' else False
 
     async def disconnect(self, close_code):
         self.close_code = close_code
@@ -177,13 +175,12 @@ class AggregatorConsumer(AsyncWebsocketConsumer):
         self.aggregator = None
         self.count = 5
         self.depth = 1
-        await self.accept()
-        await self.subscribe({'market': self.scope['url_route']['kwargs']['market'], 'symbol': self.scope['url_route']['kwargs']['symbol']})
-        self.connected = True
-
         query_params = parse_qs(self.scope['query_string'].decode('utf-8'))
         contract = query_params.get('contract', [None])[0]
         self.futures = True if contract == 'FUTURES' else False
+        await self.accept()
+        await self.subscribe({'market': self.scope['url_route']['kwargs']['market'], 'symbol': self.scope['url_route']['kwargs']['symbol']})
+        self.connected = True
 
     async def disconnect(self, close_code):
         self.close_code = close_code
@@ -245,14 +242,13 @@ class MiniAggregatorConsumer(AsyncWebsocketConsumer):
         self.aggregator = None
         self.count = 5
         self.depth = 1
+        query_params = parse_qs(self.scope['query_string'].decode('utf-8'))
+        contract = query_params.get('contract', [None])[0]
+        self.futures = True if contract == 'FUTURES' else False
         await self.accept()
         await self.subscribe({'markets': self.scope['url_route']['kwargs']['markets'], 'symbol': self.scope['url_route']['kwargs']['symbol']})
         self.connected = True
 
-        query_params = parse_qs(self.scope['query_string'].decode('utf-8'))
-        contract = query_params.get('contract', [None])[0]
-        self.futures = True if contract == 'FUTURES' else False
-    
     async def disconnect(self, close_code):
         self.close_code = close_code
         self.connected = False
