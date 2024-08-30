@@ -111,7 +111,7 @@ class MarketSymbolSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = MarketSymbol
         fields = ['symbol', 'market', 'exchange_name', 'name', 'base', 'quote', 'base_precision', 'quote_precision', 
-                  'spot_trading_enabled', 'icon', 'price', 'price_updated', 'id', 'url', 'cid']
+                  'spot_trading_enabled', 'icon', 'price', 'price_updated', 'id', 'url', 'cid', 'contract_type']
 
     def get_price(self, obj):
         prices = json.loads(obj.market.prices or '{}')

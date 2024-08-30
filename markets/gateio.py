@@ -86,12 +86,31 @@ class GateIOMarket(IMarket):
             if save:
                 self.account.save()
 
-    def get_symbols(self):
+    def get_future_symbols(self) -> dict[str, 'MarketSymbol']:
+        path = '/api/v4/futures/usdt/contracts'
+        url = f'{self.url}{path}'
+        self.sign({}, path)
+        response = self.session.get(url)
+        data = response.json()
+        symbols = { self.standardize_symbol(symbol['name']): self.prep_future_symbol(symbol) for symbol in data }
+        if self.market:
+            from quantapi.models import MarketSymbol
+            MarketSymbol.objects.bulk_create(symbols.values(), update_conflicts=True, update_fields=[
+                'spot_trading_enabled', 
+                'margin_trading_enabled', 
+                'details',
+                'base_precision',
+                'quote_precision',
+            ], unique_fields=['name', 'market', 'contract_type'], batch_size=50)
+        return symbols
+
+    def get_symbols(self) -> dict[str, 'MarketSymbol']:
         path = '/api/v4/spot/currency_pairs'
         url = f'{self.url}{path}'
         self.sign({}, path)
         response = self.session.get(url)
         data = response.json()
+
         self.symbols = { self.standardize_symbol(symbol['id']): self.prep_symbol(symbol) for symbol in data if symbol['id'].endswith('USDT') }
         if self.market:
             from quantapi.models import MarketSymbol
@@ -101,7 +120,8 @@ class GateIOMarket(IMarket):
                 'details',
                 'base_precision',
                 'quote_precision',
-            ], unique_fields=['name', 'market'], batch_size=50)
+            ], unique_fields=['name', 'market', 'contract_type'], batch_size=50)
+        self.futures_symbols = self.get_future_symbols()
         return self.symbols
 
     def get_current_prices(self, save=True):
@@ -431,7 +451,23 @@ class GateIOMarket(IMarket):
             base_precision=float(symbol.get('amoun_precision', 0)),
             quote_precision=float(symbol.get('precision', 0)),
             spot_trading_enabled=symbol['trade_status'] == 'tradable',
-            details=json.dumps(symbol, indent=2)
+            details=json.dumps(symbol, indent=2),
+            contract_type=MarketSymbol.ContractType.SPOT,
+        )
+        return symbol_object
+
+    def prep_future_symbol(self, symbol:dict) -> 'MarketSymbol':
+        from quantapi.models import MarketSymbol
+        symbol_object = MarketSymbol(
+            market=self.market,
+            name=self.standardize_symbol(symbol['name']),
+            base=self.standardize_symbol(symbol['name']).split('-')[0],
+            quote=self.standardize_symbol(symbol['name']).split('-')[1],
+            base_precision=0,
+            quote_precision=0,
+            spot_trading_enabled=True,
+            details=json.dumps(symbol, indent=2),
+            contract_type=MarketSymbol.ContractType.FUTURES,
         )
         return symbol_object
 

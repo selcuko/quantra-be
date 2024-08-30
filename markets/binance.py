@@ -200,6 +200,16 @@ class BinanceMarket(IMarket):
             logger.error(f'Symbol {symbol_name} is not present in {self.name}: {self.symbols.keys()}')
             raise ValueError(f'Symbol {symbol_name} is not present in {self.name}')
 
+    def _map_contract_type(self, contract_type:str) -> 'MarketSymbol.ContractType | None':
+        from quantapi.models import MarketSymbol
+        mapping = {
+            '': MarketSymbol.ContractType.SPOT,
+            None: MarketSymbol.ContractType.SPOT,
+            'SPOT': MarketSymbol.ContractType.SPOT,
+            'PERPETUAL': MarketSymbol.ContractType.FUTURES,
+        }
+        return mapping.get(contract_type, None)
+
     def _prep_symbol(self, symbol:dict) -> 'MarketSymbol':
         from quantapi.models import MarketSymbol
         exc_symbol = MarketSymbol(
@@ -209,9 +219,11 @@ class BinanceMarket(IMarket):
                 quote=symbol['quoteAsset'],
                 base_precision=symbol['baseAssetPrecision'],
                 quote_precision=symbol['quotePrecision'],
-                spot_trading_enabled=symbol['isSpotTradingAllowed'],
+                spot_trading_enabled=symbol.get('isSpotTradingAllowed', False),
                 margin_trading_enabled=symbol.get('isMarginTradingAllowed', False),
-                details=json.dumps(symbol))
+                details=json.dumps(symbol),
+                contract_type=self._map_contract_type(symbol.get('contractType', None)),
+            )
         return exc_symbol
 
     def _prep_order(self, order:dict) -> 'Order':
@@ -294,7 +306,20 @@ class BinanceMarket(IMarket):
                 'details',
                 'base_precision',
                 'quote_precision',
-            ], unique_fields=['name', 'market'])
+            ], unique_fields=['name', 'market', 'contract_type'])
+
+        futures_exchange_info = self.client.futures_exchange_info()
+        self.futures_symbols = { self._standardize_symbol(symbol['symbol']) + '.F': self._prep_symbol(symbol) for symbol in futures_exchange_info.get('symbols', []) }
+        self.futures_symbols = { key: value for key, value in self.futures_symbols.items() if value.quote == 'USDT' and value.contract_type}
+        if self.market: 
+            MarketSymbol.objects.bulk_create(self.futures_symbols.values(), update_conflicts=True, update_fields=[
+                'spot_trading_enabled', 
+                'margin_trading_enabled', 
+                'details',
+                'base_precision',
+                'quote_precision',
+            ], unique_fields=['name', 'market', 'contract_type'])
+
         return self.symbols
 
     def place_market_order(self, symbol:'MarketSymbol|str', side:Literal['buy', 'sell'], funds:Optional[str]=None, quantity:Optional[str]=None, validate=True) -> 'Order':

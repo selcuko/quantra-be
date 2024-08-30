@@ -89,6 +89,28 @@ class OKXMarket(IMarket):
                 self.account.save()
         return data
 
+    def get_futures_symbols(self):
+        path = '/api/v5/public/instruments?instType=SWAP'
+        url = f'{self.url}{path}'
+        self.sign({}, path)
+        response = self.session.get(url)
+        response.raise_for_status()
+        data = response.json()
+        data = data['data']
+
+        self.futures_symbols = { self.standardize_symbol(symbol['instFamily']) + '.F': self.prep_futures_symbol(symbol) for symbol in data if symbol['settleCcy'] == 'USDT' }
+        print(len(self.futures_symbols))
+        if self.market:
+            from quantapi.models import MarketSymbol
+            x = MarketSymbol.objects.bulk_create(self.futures_symbols.values(), update_conflicts=True, update_fields=[
+                'spot_trading_enabled', 
+                'margin_trading_enabled', 
+                'details',
+                'base_precision',
+                'quote_precision',
+            ], unique_fields=['name', 'market', 'contract_type'])
+        return self.futures_symbols
+
     def get_symbols(self):
         path = '/api/v5/public/instruments?instType=SPOT'
         url = f'{self.url}{path}'
@@ -106,8 +128,9 @@ class OKXMarket(IMarket):
                 'details',
                 'base_precision',
                 'quote_precision',
-            ], unique_fields=['name', 'market'], batch_size=50)
-        return response.json()
+            ], unique_fields=['name', 'market', 'contract_type'], batch_size=50)
+        self.futures_symbols = self.get_futures_symbols()
+        return self.symbols, self.futures_symbols
 
     def get_current_prices(self, save=True):
         path = '/api/v5/market/tickers?instType=SPOT'
@@ -428,7 +451,23 @@ class OKXMarket(IMarket):
             base_precision=float(symbol.get('tickSz', 0)),
             quote_precision=float(symbol.get('lotSz', 0)),
             spot_trading_enabled=symbol['state'] == 'live',
-            details=json.dumps(symbol, indent=2)
+            details=json.dumps(symbol, indent=2),
+            contract_type=MarketSymbol.ContractType.SPOT
+        )
+        return symbol_object
+    
+    def prep_futures_symbol(self, symbol:dict) -> 'MarketSymbol':
+        from quantapi.models import MarketSymbol
+        symbol_object = MarketSymbol(
+            market=self.market,
+            name=self.standardize_symbol(symbol['instFamily']),
+            base=symbol['ctValCcy'],
+            quote=symbol['settleCcy'],
+            base_precision=float(symbol.get('tickSz', 0)),
+            quote_precision=float(symbol.get('lotSz', 0)),
+            spot_trading_enabled=symbol['state'] == 'live',
+            details=json.dumps(symbol, indent=2),
+            contract_type=MarketSymbol.ContractType.FUTURES
         )
         return symbol_object
 
