@@ -32,7 +32,7 @@ class Command(BaseCommand):
         self.validate(options)
         try:
             market = Market.objects.get(exchange_name=options['market'])
-            symbol = MarketSymbol.objects.get(name=options['symbol'], market=market)
+            symbol = MarketSymbol.objects.get(contract_type=MarketSymbol.ContractType.SPOT, name=options['symbol'], market=market)
         except Market.DoesNotExist:
             raise CommandError(f'Market {options["market"]} not found.')
         except MarketSymbol.DoesNotExist:

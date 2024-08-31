@@ -39,7 +39,7 @@ class LiveLoop:
         self.capital_limit = capital_limit
         self.asset_limit = asset_limit
         self.use_heikin_ashi = use_heikin_ashi
-        self.symbol = MarketSymbol.objects.get(name=symbol, market=self.market)
+        self.symbol = MarketSymbol.objects.get(contract_type=MarketSymbol.ContractType.SPOT, name=symbol, market=self.market)
 
         self.thread = None
         self.running = False

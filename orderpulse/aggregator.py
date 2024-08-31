@@ -66,7 +66,7 @@ class Aggregator:
     def add_market(self, name: str):
         from quantapi.models import Market, MarketSymbol
         market = Market.objects.get(exchange_name=name)
-        symbol = MarketSymbol.objects.get(market=market, name=self.symbol)
+        symbol = MarketSymbol.objects.get(contract_type=MarketSymbol.ContractType.SPOT, market=market, name=self.symbol)
         keeper = KeeperPool.get(symbol, futures=self.futures)
         self.add_keeper(keeper)
 

@@ -23,8 +23,8 @@ def print_stats(keepers: dict[str, Keeper]):
 
 class Command(BaseCommand):
     def handle(self, *args, **options):
-        symbol = MarketSymbol.objects.get(market__exchange_name='MEXC', name='BTC-USDT')
-        s2 = MarketSymbol.objects.get(market__exchange_name='MEXC', name='BTC-USDT')
+        symbol = MarketSymbol.objects.get(contract_type=MarketSymbol.ContractType.SPOT, market__exchange_name='MEXC', name='BTC-USDT')
+        s2 = MarketSymbol.objects.get(contract_type=MarketSymbol.ContractType.SPOT, market__exchange_name='MEXC', name='BTC-USDT')
         manager = BookManager()
         manager.start()
         keeper = Keeper(symbol, manager)

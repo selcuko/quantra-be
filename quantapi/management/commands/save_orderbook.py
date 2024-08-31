@@ -43,7 +43,7 @@ class Command(BaseCommand):
             raise CommandError(f'Market {self.options["market"]} not found.')
         try:
             symbol = self.options['symbol'].lower().replace('-', '').replace('usdt', '').upper()
-            self.symbol = MarketSymbol.objects.get(market=self.market, base=symbol)
+            self.symbol = MarketSymbol.objects.get(contract_type=MarketSymbol.ContractType.SPOT, market=self.market, base=symbol)
         except MarketSymbol.DoesNotExist:
             raise CommandError(f'Symbol {symbol} not found in {self.market.exchange_name}.')
         self.buffer = Queue()

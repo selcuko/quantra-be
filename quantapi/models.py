@@ -478,7 +478,7 @@ class SessionGroup(models.Model):
                 return session
         if validate:
             try:
-                ms = MarketSymbol.objects.get(name=self.symbol.name, market=account.market)
+                ms = MarketSymbol.objects.get(contract_type=MarketSymbol.ContractType.SPOT, name=self.symbol.name, market=account.market)
                 if not ms.spot_trading_enabled:
                     raise ValueError(f'Spot trading is not enabled for {ms.name} in {account.market}')
             except MarketSymbol.DoesNotExist:

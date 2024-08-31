@@ -16,7 +16,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         market = Market.objects.get(exchange_name='GATEIO')
         market.get_interface()
-        symbol = MarketSymbol.objects.get(name='BTC-USDT', market=market)
+        symbol = MarketSymbol.objects.get(contract_type=MarketSymbol.ContractType.SPOT, name='BTC-USDT', market=market)
         k = KeeperPool.get(symbol)
         k.start()
         time.sleep(2)

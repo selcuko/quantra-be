@@ -39,7 +39,7 @@ class Command(BaseCommand):
             )
             return delta
 
-        symbol = MarketSymbol.objects.get(market__exchange_name='OKX', name='BTC-USDT')
+        symbol = MarketSymbol.objects.get(contract_type=MarketSymbol.ContractType.SPOT, market__exchange_name='OKX', name='BTC-USDT')
         keeper = KeeperPool.get(symbol)
         keeper.start()
 
