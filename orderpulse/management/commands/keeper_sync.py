@@ -27,7 +27,7 @@ class Command(BaseCommand):
             print(f'Bids: {bids[0].price:,.2f} {bids[0].size:,.5f}', end='\t')
             print(f'Asks: {asks[0].price:,.2f} {asks[0].size:,.5f}')
 
-        symbol = MarketSymbol.objects.get(market__exchange_name='OKX', name='BTC-USDT')
+        symbol = MarketSymbol.objects.get(contract_type=MarketSymbol.ContractType.SPOT, market__exchange_name='OKX', name='BTC-USDT')
         keeper = KeeperPool.get(symbol)
         keeper.add_callback(callback)
         keeper.start()

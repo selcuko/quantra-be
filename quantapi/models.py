@@ -219,9 +219,12 @@ class MarketAccount(models.Model):
 
 
 class MarketSymbol(models.Model):
+    class ContractType(models.TextChoices):
+        SPOT = 'SPOT', 'Spot'
+        FUTURES = 'FUTURES', 'Futures'
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=['name', 'market'], name='unique_symbol')
+            models.UniqueConstraint(fields=['name', 'market', 'contract_type'], name='unique_symbol')
         ]
     symbol = models.ForeignKey('GlobalSymbol', on_delete=models.PROTECT, related_name='symbols', null=True, blank=True)
     market = models.ForeignKey(Market, on_delete=models.PROTECT, related_name='symbols')
@@ -234,6 +237,7 @@ class MarketSymbol(models.Model):
     margin_trading_enabled = models.BooleanField(default=False, help_text='Margin trading enabled for this symbol in related market')
     details = models.TextField(null=True, blank=True, help_text='JSON string of symbol detail from market')
     sessions: models.QuerySet['Session']
+    contract_type = models.CharField(max_length=30, choices=ContractType.choices, default=ContractType.SPOT)
 
     hour4_volume = models.FloatField(null=True, blank=True, help_text='Volume in the last 4 hours')
     hour4_volume_date = models.DateTimeField(null=True, blank=True, help_text='Start date of the candle used for last 4 hour volume')
@@ -474,7 +478,7 @@ class SessionGroup(models.Model):
                 return session
         if validate:
             try:
-                ms = MarketSymbol.objects.get(name=self.symbol.name, market=account.market)
+                ms = MarketSymbol.objects.get(contract_type=MarketSymbol.ContractType.SPOT, name=self.symbol.name, market=account.market)
                 if not ms.spot_trading_enabled:
                     raise ValueError(f'Spot trading is not enabled for {ms.name} in {account.market}')
             except MarketSymbol.DoesNotExist:

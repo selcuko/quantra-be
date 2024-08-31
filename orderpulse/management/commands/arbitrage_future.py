@@ -9,7 +9,7 @@ from quantapi.models import Market, MarketSymbol
 
 class Command(BaseCommand):
     def handle(self, *args, **kwargs):
-        symbol_binance = MarketSymbol.objects.get(base='AVAX', market__exchange_name='OKX')
+        symbol_binance = MarketSymbol.objects.get(contract_type=MarketSymbol.ContractType.SPOT, base='AVAX', market__exchange_name='OKX')
         
         keeper_futures = KeeperPool.get(symbol_binance, futures=True)
         keeper_spot = KeeperPool.get(symbol_binance)

@@ -9,8 +9,8 @@ from quantapi.models import Market, MarketSymbol
 
 class Command(BaseCommand):
     def handle(self, *args, **kwargs):
-        symbol_mexc = MarketSymbol.objects.get(base='AVAX', market__exchange_name='BYBIT')
-        symbol_binance = MarketSymbol.objects.get(base='AVAX', market__exchange_name='OKX')
+        symbol_mexc = MarketSymbol.objects.get(contract_type=MarketSymbol.ContractType.SPOT, base='AVAX', market__exchange_name='BYBIT')
+        symbol_binance = MarketSymbol.objects.get(contract_type=MarketSymbol.ContractType.SPOT, base='AVAX', market__exchange_name='OKX')
         
         keeper_mexc = KeeperPool.get(symbol_mexc)
         keeper_binance = KeeperPool.get(symbol_binance)

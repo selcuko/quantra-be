@@ -51,7 +51,7 @@ class OrderbookConsumer(AsyncWebsocketConsumer):
 
     def get_keeper(self, market, symbol) -> Keeper:
         market = Market.objects.get(exchange_name=market)
-        symbol = MarketSymbol.objects.get(name=symbol, market=market)
+        symbol = MarketSymbol.objects.get(contract_type=MarketSymbol.ContractType.SPOT, name=symbol, market=market)
         return KeeperPool.get(symbol, futures=self.futures)
 
     async def subscribe(self, event):
@@ -131,7 +131,7 @@ class MiniOrderbookConsumer(AsyncWebsocketConsumer):
 
     def get_keeper(self, market, symbol) -> Keeper:
         market = Market.objects.get(exchange_name=market)
-        symbol = MarketSymbol.objects.get(name=symbol, market=market)
+        symbol = MarketSymbol.objects.get(contract_type=MarketSymbol.ContractType.SPOT, name=symbol, market=market)
         return KeeperPool.get(symbol, futures=self.futures)
 
     async def subscribe(self, event):
@@ -315,7 +315,7 @@ class CandleConsumer(AsyncWebsocketConsumer):
         try:
             symbol = self.scope['url_route']['kwargs']['symbol'].upper()
             market = self.scope['url_route']['kwargs']['market'].upper()
-            self.symbol = MarketSymbol.objects.get(name=symbol, market__exchange_name=market)
+            self.symbol = MarketSymbol.objects.get(contract_type=MarketSymbol.ContractType.SPOT, name=symbol, market__exchange_name=market)
             self.interface = self.symbol.market.get_interface()
             return self.symbol
         except MarketSymbol.DoesNotExist:

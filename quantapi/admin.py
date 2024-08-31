@@ -50,9 +50,9 @@ class MarketAccountAdmin(admin.ModelAdmin):
 
 
 class MarketSymbolAdmin(admin.ModelAdmin):
-    list_display = ('name', 'market', 'base', 'quote', 'spot_trading_enabled', 'margin_trading_enabled')
+    list_display = ('name', 'market', 'base', 'quote', 'spot_trading_enabled', 'margin_trading_enabled', 'contract_type')
     search_fields = ('name', 'base', 'quote')
-    list_filter = ('market__exchange_name', 'quote', 'spot_trading_enabled', 'margin_trading_enabled')
+    list_filter = ('market__exchange_name', 'quote', 'spot_trading_enabled', 'margin_trading_enabled', 'contract_type')
 
 
 class SessionAdmin(admin.ModelAdmin):

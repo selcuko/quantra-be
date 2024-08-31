@@ -96,6 +96,33 @@ class BybitMarket(IMarket):
             if save:
                 self.account.save()
 
+    def get_future_symbols(self) -> dict[str, 'MarketSymbol']:
+        url = f'{self.url}/v5/market/instruments-info'
+        payload = {
+            'category': 'linear'
+        }
+        query = self.sign(payload)
+        uri = f'{url}?{query}'
+        response = self.session.get(uri)
+        response.raise_for_status()
+        data = response.json()
+
+        if data.get('retMsg') not in ['OK', 'success']:
+            raise ValueError(data)
+        data = data['result']['list']
+
+        self.futures_symbols = { self.standardize_symbol(symbol['symbol']) + '.F': self.prep_symbol(symbol) for symbol in data if symbol['symbol'].endswith('USDT') }
+        if self.market:
+            from quantapi.models import MarketSymbol
+            MarketSymbol.objects.bulk_create(self.futures_symbols.values(), update_conflicts=True, update_fields=[
+                'spot_trading_enabled', 
+                'margin_trading_enabled', 
+                'details',
+                'base_precision',
+                'quote_precision',
+            ], unique_fields=['name', 'market', 'contract_type'], batch_size=50)
+        return self.futures_symbols
+
     def get_symbols(self) -> dict[str, 'MarketSymbol']:
         url = f'{self.url}/v5/market/instruments-info'
         payload = {
@@ -118,7 +145,8 @@ class BybitMarket(IMarket):
                 'details',
                 'base_precision',
                 'quote_precision',
-            ], unique_fields=['name', 'market'], batch_size=50)
+            ], unique_fields=['name', 'market', 'contract_type'], batch_size=50)
+        self.future_symbols = self.get_future_symbols()
         return self.symbols
 
     def get_current_prices(self, save=True) -> dict:
@@ -427,6 +455,16 @@ class BybitMarket(IMarket):
             key = str(e)
             raise MarketAPIUnrecognizedResponse(key, order)
 
+    def _map_contract_type(self, contract_type:str) -> 'MarketSymbol.ContractType | None':
+        from quantapi.models import MarketSymbol
+        mapping = {
+            "": MarketSymbol.ContractType.SPOT,
+            None: MarketSymbol.ContractType.SPOT,
+            'SPOT': MarketSymbol.ContractType.SPOT,
+            'LinearPerpetual': MarketSymbol.ContractType.FUTURES,
+        }
+        return mapping.get(contract_type, None)
+
     def prep_symbol(self, symbol:dict) -> 'MarketSymbol':
         from quantapi.models import MarketSymbol
         symbol_object = MarketSymbol(
@@ -435,10 +473,11 @@ class BybitMarket(IMarket):
             base=symbol['baseCoin'],
             quote=symbol['quoteCoin'],
             base_precision=float(symbol['lotSizeFilter'].get('basePrecision', 0)),
-            quote_precision=float(symbol['priceFilter'].get('quotePrecision', 0)),
+            quote_precision=float(symbol['lotSizeFilter'].get('quotePrecision', 0)),
             spot_trading_enabled=symbol['status'] == 'Trading',
-            margin_trading_enabled=symbol['marginTrading'] != 'none',
-            details=json.dumps(symbol, indent=2)
+            margin_trading_enabled=symbol.get('marginTrading', 'none') != 'none',
+            details=json.dumps(symbol, indent=2),
+            contract_type=self._map_contract_type(symbol.get('contractType', None)),
         )
         return symbol_object
 

@@ -109,7 +109,7 @@ class MarketSymbolViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=['get'], url_path='(?P<market>[^/.]+)/(?P<symbol>[^/.]+)', url_name='symbol')
     def symbol(self, request, market, symbol):
         """Return a specific symbol for a given market."""
-        symbol = MarketSymbol.objects.get(market__exchange_name=market.upper(), name=symbol.upper())
+        symbol = MarketSymbol.objects.get(contract_type=MarketSymbol.ContractType.SPOT, market__exchange_name=market.upper(), name=symbol.upper())
         serializer = MarketSymbolSerializer(symbol, context={'request': request})
         return Response(serializer.data)
 
@@ -390,7 +390,7 @@ class CandlesViewSet(viewsets.ViewSet):
 
     def get(self, request, market, symbol, interval):
         market = Market.objects.get(exchange_name=market.upper())
-        symbol = MarketSymbol.objects.get(name=symbol.upper(), market=market)
+        symbol = MarketSymbol.objects.get(contract_type=MarketSymbol.ContractType.SPOT, name=symbol.upper(), market=market)
         interface = symbol.market.get_interface()
 
         interval = interval.replace('min', ' min').replace('hour', ' hour').replace('day', ' day').replace('week', ' week').replace('month', ' month')

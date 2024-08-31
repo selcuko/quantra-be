@@ -50,7 +50,7 @@ class MockIMarket(Mock, IMarket):
         if not self.account:
             raise ValueError('Account not found.')
         if isinstance(symbol, str):
-            symbol = MarketSymbol.objects.get(name=symbol, market=self.market)
+            symbol = MarketSymbol.objects.get(contract_type=MarketSymbol.ContractType.SPOT, name=symbol, market=self.market)
         if side == 'buy' and (self.account.capital or 0) < float(funds or 0):
             raise InsufficientBalance
         assets = json.loads(self.account.assets or '{}')

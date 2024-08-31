@@ -245,6 +245,10 @@ class KucoinMarket(IMarket):
     def _standardize_symbol(symbol:str) -> str:
         return symbol
 
+    @staticmethod
+    def _standardize_future_symbol(symbol:dict) -> str:
+        return symbol.get('baseCurrency','') + '-' + symbol.get('quoteCurrency','')
+
     def _standardize_datetime(self, dt:int|str) -> "datetime|None":
         try:
             return datetime.fromtimestamp(int(dt), tz=pytz.UTC)
@@ -284,8 +288,21 @@ class KucoinMarket(IMarket):
             quote_precision=symbol['quoteIncrement'],
             spot_trading_enabled=symbol['enableTrading'],
             margin_trading_enabled=symbol['isMarginEnabled'],
-            details=json.dumps(symbol))
+            details=json.dumps(symbol),
+            contract_type=MarketSymbol.ContractType.SPOT
+            )
 
+    def _prep_future_symbol(self, symbol:dict) -> 'MarketSymbol':
+        from quantapi.models import MarketSymbol
+        return MarketSymbol(
+            market=self.market,
+            name=self._standardize_future_symbol(symbol),
+            base=symbol['baseCurrency'],
+            quote=symbol['quoteCurrency'],
+            details=json.dumps(symbol),
+            contract_type=MarketSymbol.ContractType.FUTURES,
+            )
+    
     def _prep_order(self, order:dict) -> 'Order':
         from quantapi.models import Order
         oid = order.get('orderId') or order.get('id')
@@ -348,7 +365,22 @@ class KucoinMarket(IMarket):
             if not silent:
                 raise ValueError(error)
         return klines
-    
+
+    def get_future_symbols(self) -> dict[str, 'MarketSymbol']:
+        from quantapi.models import MarketSymbol
+        symbol_list = self.fmarket.get_contracts_list()
+        with open('kucoin_futures.json', 'w') as f:
+            json.dump(symbol_list, f)
+        if not symbol_list:
+            logger.error(f'No symbols found on {self.name}')
+            return {}
+        self.futures_symbols = { self._standardize_future_symbol(symbol) + '.F': self._prep_future_symbol(symbol) for symbol in symbol_list }
+        self.futures_symbols = { key: value for key, value in self.futures_symbols.items() if value.quote == 'USDT'}
+        MarketSymbol.objects.bulk_create(self.futures_symbols.values(), update_conflicts=True, update_fields=[
+                'details',
+            ], unique_fields=['name', 'market', 'contract_type'])
+        return self.futures_symbols
+
     def get_symbols(self) -> dict[str, 'MarketSymbol']:
         from quantapi.models import MarketSymbol
         symbol_list = self.kmarket.get_symbol_list_v2()
@@ -363,7 +395,8 @@ class KucoinMarket(IMarket):
                 'details',
                 'base_precision',
                 'quote_precision',
-            ], unique_fields=['name', 'market'])
+            ], unique_fields=['name', 'market', 'contract_type'])
+        self.futures_symbols = self.get_future_symbols()
         return self.symbols
 
     @authentication_required

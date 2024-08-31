@@ -10,12 +10,12 @@ from quantapi.models import Market, MarketSymbol
 class Command(BaseCommand):
     def handle(self, *args, **kwargs):
         symbols = [
-            MarketSymbol.objects.get(base='IMX', market__exchange_name='MEXC'),
-            MarketSymbol.objects.get(base='IMX', market__exchange_name='BINANCE'),
-            MarketSymbol.objects.get(base='IMX', market__exchange_name='OKX'),
-            MarketSymbol.objects.get(base='IMX', market__exchange_name='KUCOIN'),
-            MarketSymbol.objects.get(base='IMX', market__exchange_name='BYBIT'),
-            MarketSymbol.objects.get(base='IMX', market__exchange_name='GATEIO'),
+            MarketSymbol.objects.get(contract_type=MarketSymbol.ContractType.SPOT, base='IMX', market__exchange_name='MEXC'),
+            MarketSymbol.objects.get(contract_type=MarketSymbol.ContractType.SPOT, base='IMX', market__exchange_name='BINANCE'),
+            MarketSymbol.objects.get(contract_type=MarketSymbol.ContractType.SPOT, base='IMX', market__exchange_name='OKX'),
+            MarketSymbol.objects.get(contract_type=MarketSymbol.ContractType.SPOT, base='IMX', market__exchange_name='KUCOIN'),
+            MarketSymbol.objects.get(contract_type=MarketSymbol.ContractType.SPOT, base='IMX', market__exchange_name='BYBIT'),
+            MarketSymbol.objects.get(contract_type=MarketSymbol.ContractType.SPOT, base='IMX', market__exchange_name='GATEIO'),
         ]
 
         # Generate all unique pairs (combinations) of symbols
