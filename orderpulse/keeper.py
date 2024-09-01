@@ -83,7 +83,7 @@ class Keeper:
 
     @property
     def key(self):
-        return f'{self.symbol.base}-{self.symbol.market.exchange_name}-{self.symbol.contract_type}'
+        return f'{self.symbol.base}-{self.symbol.market.exchange_name}-{self.symbol.contract_type}'.lower()
 
     def state(self):
         status = 'undefined'
