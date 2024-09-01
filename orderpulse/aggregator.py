@@ -46,6 +46,7 @@ class Aggregator:
         self.queue_processor.start()
         self.callbacks = []
         self.futures = futures
+        self.contract_type = 'FUTURES' if futures else 'SPOT'
 
     def __hash__(self):
         unique = '+'.join(self.keepers.keys())
@@ -66,8 +67,8 @@ class Aggregator:
     def add_market(self, name: str):
         from quantapi.models import Market, MarketSymbol
         market = Market.objects.get(exchange_name=name)
-        symbol = MarketSymbol.objects.get(contract_type=MarketSymbol.ContractType.SPOT, market=market, name=self.symbol)
-        keeper = KeeperPool.get(symbol, futures=self.futures)
+        symbol = MarketSymbol.objects.get(contract_type=self.contract_type, market=market, name=self.symbol)
+        keeper = KeeperPool.get(symbol)
         self.add_keeper(keeper)
 
     def add_keeper(self, keeper: Keeper):

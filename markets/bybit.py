@@ -356,13 +356,23 @@ class BybitMarket(IMarket):
             raise OrderPostProcessingError(f'Failed to process order: {e}')
         return order
 
-    def get_full_orderbook(self, symbol:'MarketSymbol|str', limit:int=5000, futures=False) -> dict:
+    def _format_category(self, symbol:'MarketSymbol|str') -> str:
+        symbol_object = self.get_symbol_from_name(symbol) if isinstance(symbol, str) else symbol
+        if symbol_object is None:
+            return 'spot'
+        mapping = {
+            'SPOT': 'spot', 
+            'FUTURES': 'linear',
+        }
+        return mapping.get(symbol_object.contract_type, 'spot')  
+
+    def get_full_orderbook(self, symbol:'MarketSymbol|str', limit:int=5000) -> dict:
         symbol_object = self.get_symbol_from_name(symbol) if isinstance(symbol, str) else symbol
         if not symbol_object:
             raise ValueError(f'Symbol not found: {symbol}')
         url = f'{self.url}/v5/market/orderbook'
         payload = {
-            'category': 'spot' if not futures else 'linear',
+            'category': self._format_category(symbol_object),
             'symbol': self.format_symbol(symbol_object.name),
             'limit': limit
         }
@@ -385,37 +395,41 @@ class BybitMarket(IMarket):
             'asks': [ { 'price': Decimal(ask[0]), 'size': Decimal(ask[1]), 'count': 1 } for ask in data['a'] ]
         }
 
-    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:typing.Callable, liveloop:'LiveLoop|LoopGroup|None'=None, retries:int=0, futures=False):
-        ws_uri = 'wss://stream.bybit.com/v5/public/spot'
+    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:typing.Callable, liveloop:'LiveLoop|LoopGroup|None'=None, retries:int=0):
         symbol_object = self.get_symbol_from_name(symbol) if isinstance(symbol, str) else symbol
         if not symbol_object:
             raise ValueError(f'Symbol not found: {symbol}')
+        if symbol_object.contract_type == symbol_object.ContractType.FUTURES:
+            ws_uri = 'wss://stream.bybit.com/v5/public/linear'
+            limit = 500
+        elif symbol_object.contract_type == symbol_object.ContractType.SPOT:
+            ws_uri = 'wss://stream.bybit.com/v5/public/spot'
+            limit = 200
         try:
             ws = connect(ws_uri)
         except TimeoutError:
             time.sleep(5)
-            return self.init_orderbook_websocket(symbol, callback, liveloop, retries, futures)
+            return self.init_orderbook_websocket(symbol, callback, liveloop, retries)
         ws.send(json.dumps({
             'op': 'subscribe',
-            'args': [f'orderbook.200.{self.format_symbol(symbol_object.name)}']
+            'args': [f'orderbook.{limit}.{self.format_symbol(symbol_object.name)}']
         }))
-        ack = json.loads(ws.recv())
-        if not ack.get('success'):
-            raise MarketAPIError(f'Failed to subscribe to websocket: {ack}')
         while not self.stop_websocket_stream:
             try:
                 data = json.loads(ws.recv())
                 if data.get('op') == 'pong':
                     continue
+                if data.get('type') not in ['snapshot', 'delta']:
+                    continue
             except (ConnectionClosed, ConnectionClosedOK):
                 if retries < self.WS_MAX_RETRIES:
                     time.sleep(1)
-                    return self.init_orderbook_websocket(symbol, callback, liveloop, retries+1, futures)
+                    return self.init_orderbook_websocket(symbol, callback, liveloop, retries+1)
                 raise MarketAPIError('Failed to connect to websocket')
             except:
                 if retries < self.WS_MAX_RETRIES:
                     time.sleep(1)
-                    return self.init_orderbook_websocket(symbol, callback, liveloop, retries+1, futures)
+                    return self.init_orderbook_websocket(symbol, callback, liveloop, retries+1)
                 ws.close()
                 raise MarketAPIError('Failed to connect to websocket')
             update = self.format_orderbook(data['data'])

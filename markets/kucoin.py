@@ -557,17 +557,19 @@ class KucoinMarket(IMarket):
             logger.error(f'Error while cancelling all orders on {self.name}', exc_info=True)
             raise
 
-    def get_full_orderbook(self, symbol:'MarketSymbol|str', futures=False) -> dict:
+    def get_full_orderbook(self, symbol:'MarketSymbol|str') -> dict:
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         try:
-            if not futures:
-                if self.private:
+            if symbol.contract_type == symbol.ContractType.SPOT:
+                if self.private or 1:
                     orderbook = self.kmarket.get_aggregated_orderv3(symbol.name)
                 else:
                     orderbook = self.kmarket.get_part_order(100, symbol.name)
-            else:
+            elif symbol.contract_type == symbol.ContractType.FUTURES:
                 orderbook = self.fmarket.l2_order_book(symbol.name.split('-')[0] + symbol.name.split('-')[1]+'M')
+            else:
+                raise ValueError(f'Unknown contract type for symbol {symbol.name}')
             if not orderbook:
                 raise ValueError(f'Error while getting full orderbook for {symbol} on {self.name}')
             return self.format_orderbook_snapshot(orderbook)
@@ -600,7 +602,14 @@ class KucoinMarket(IMarket):
                 'asks': [ { 'price': Decimal(price), 'size': Decimal(size), 'count': 1 } ],
             }
 
-    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:typing.Callable, futures=False):
+    def _format_topic(self, symbol:'MarketSymbol') -> str:
+        mapping = {
+            'SPOT': f'/market/level2:{symbol.name}',
+            'FUTURES': f'/contractMarket/level2:{symbol.name.split("-")[0]}USDTM',
+        }
+        return mapping.get(symbol.contract_type, '')
+
+    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:typing.Callable):
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         token = self.get_websocket_token()
@@ -611,14 +620,14 @@ class KucoinMarket(IMarket):
             ws = connect(ws_uri)
         except TimeoutError:
             time.sleep(5)
-            return self.init_orderbook_websocket(symbol, callback, futures)
+            return self.init_orderbook_websocket(symbol, callback)
         welcome = ws.recv()
         if not json.loads(welcome)['type'] == 'welcome':
             raise ValueError(f'Error while initializing websocket for {self.name}: {welcome}')
         sub = {
             "id": str(uuid.uuid4()),
             "type": "subscribe",
-            "topic": f'/market/level2:{symbol.name}' if not futures else f'/contractMarket/level2:{symbol.name.split("-")[0]}USDTM',
+            "topic": self._format_topic(symbol),
             "privateChannel": False,
             "response": True 
         }
@@ -638,18 +647,20 @@ class KucoinMarket(IMarket):
             except TimeoutError:
                 continue
             except ConnectionClosed:
-                return self.init_orderbook_websocket(symbol, callback, futures)
+                return self.init_orderbook_websocket(symbol, callback)
             if msg.get('type') == 'pong':
                 continue
             if msg.get('subject') not in ['trade.l2update', 'level2']:
                 continue
-            
-            if not futures:
+            if symbol.contract_type == symbol.ContractType.SPOT:
                 orderbook = self.format_orderbook_update(msg['data']['changes'], seq=seq) 
-            else:
+            elif symbol.contract_type == symbol.ContractType.FUTURES:
                 orderbook = self.format_futures_orderbook_update(msg['data'])
             callback(orderbook)
-            seq = msg['data']['sequenceEnd'] if not futures else 0
+            if symbol.contract_type == symbol.ContractType.SPOT:
+                seq = msg['data']['sequenceEnd']
+            elif symbol.contract_type == symbol.ContractType.FUTURES:
+                seq = 0
         ws.close()
 
     @authentication_required
