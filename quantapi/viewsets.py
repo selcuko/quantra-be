@@ -18,7 +18,7 @@ from quantapi.filters import (GlobalSymbolFilter, MarketAccountFilter, MarketSym
 from quantapi.models import (ContactForm, GlobalSymbol, GroupOrder, Market,
                              MarketAccount, MarketSymbol, Order,
                              Session, SessionGroup, Signal, Strategy,
-                             Subscription)
+                             Subscription, Tag)
 from quantapi.serializers import (ContactFormSerializer, DraftSessionSerializer,
                                   GlobalSymbolSerializer, GroupOrderSerializer,
                                   LiveLoopSerializer,
@@ -29,7 +29,7 @@ from quantapi.serializers import (ContactFormSerializer, DraftSessionSerializer,
                                   SessionOrderPlacementSerializer,
                                   SessionSerializer, SessionUpdateSerializer,
                                   SignalSerializer, StrategySerializer,
-                                  SubscriptionSerializer, ThreadSerializer)
+                                  SubscriptionSerializer, TagSerializer, ThreadSerializer)
 from quantapi.validations import validate_session_can_start
 
 
@@ -409,7 +409,13 @@ class CandlesViewSet(viewsets.ViewSet):
         })
 
 
-class ContactFormViewSet(viewsets.ModelViewSet):
+class ContactFormViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = ContactForm.objects.all()
     serializer_class = ContactFormSerializer
     http_method_names = ['post']
+
+
+class TagViewSet(viewsets.ModelViewSet):
+    queryset = Tag.objects.all()
+    serializer_class = TagSerializer
+    pagination_class = None

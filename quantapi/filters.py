@@ -82,11 +82,11 @@ class GlobalSymbolFilter(filters.FilterSet):
             ('atl_date', 'atl_date'),
             ('atl_prox', 'atl_prox'),
             ('atl_ratio', 'atl_ratio'),
-            ('volume24h_to_market_cap', 'volume24h_to_market_cap'),
+            ('volume24h_to_mcap', 'volume24h_to_mcap'),
         )
     )
     name = filters.CharFilter(field_name='name', lookup_expr='icontains')
-    category = filters.CharFilter(method='filter_category')
+    tags = filters.CharFilter(method='filter_tags')
     market = filters.CharFilter(method='filter_market')
     is_favorite = filters.BooleanFilter(field_name='favorite')
     is_stablecoin = filters.BooleanFilter(field_name='is_stablecoin')
@@ -114,8 +114,10 @@ class GlobalSymbolFilter(filters.FilterSet):
     market_cap__lte = filters.NumberFilter(field_name='market_cap', lookup_expr='lte')
     price_change__gte = filters.NumberFilter(field_name='price_change_percentage_24h', lookup_expr='gte')
     price_change__lte = filters.NumberFilter(field_name='price_change_percentage_24h', lookup_expr='lte')
-    volume24h_to_mcap__gte = filters.NumberFilter(field_name='volume24h_to_market_cap', lookup_expr='gte')
-    volume24h_to_mcap__lte = filters.NumberFilter(field_name='volume24h_to_market_cap', lookup_expr='lte')
+    price_change_percentage_24h__gte = filters.NumberFilter(field_name='price_change_percentage_24h', lookup_expr='gte')
+    price_change_percentage_24h__lte = filters.NumberFilter(field_name='price_change_percentage_24h', lookup_expr='lte')
+    volume24h_to_mcap__gte = filters.NumberFilter(field_name='volume24h_to_mcap', lookup_expr='gte')
+    volume24h_to_mcap__lte = filters.NumberFilter(field_name='volume24h_to_mcap', lookup_expr='lte')
 
     def filter_market(self, queryset, name, value):
         query = Q()
@@ -125,7 +127,7 @@ class GlobalSymbolFilter(filters.FilterSet):
             query &= Q(available_markets__icontains=market)
         return queryset.filter(query)
 
-    def filter_category(self, queryset, name, value):
+    def filter_tags(self, queryset, name, value):
         query = Q()
         for tag in value.split(","):
             query &= Q(tags_flat__icontains=tag)

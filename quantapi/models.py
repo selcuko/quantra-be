@@ -26,6 +26,8 @@ if typing.TYPE_CHECKING:
 
 
 class Market(models.Model):
+    class Meta:
+        ordering = ['exchange_name']
     class Exchange(models.TextChoices):
         BINANCE = 'BINANCE', 'Binance'
         BYBIT = 'BYBIT', 'Bybit'
@@ -226,6 +228,7 @@ class MarketSymbol(models.Model):
         constraints = [
             models.UniqueConstraint(fields=['name', 'market', 'contract_type'], name='unique_symbol')
         ]
+        ordering = ['market__exchange_name', 'name']
     symbol = models.ForeignKey('GlobalSymbol', on_delete=models.PROTECT, related_name='symbols', null=True, blank=True)
     market = models.ForeignKey(Market, on_delete=models.PROTECT, related_name='symbols')
     base = models.CharField(max_length=30)
@@ -270,6 +273,9 @@ class MarketSymbol(models.Model):
 
     def filters(self):
         return self.market.filters(self)
+
+    def available_contracts(self):
+        return MarketSymbol.objects.filter(name=self.name, market=self.market).values_list('contract_type', flat=True)
 
 
 class Session(models.Model):
@@ -948,6 +954,8 @@ class Tag(models.Model):
     is_ecosystem = models.BooleanField(default=False)
     is_chain = models.BooleanField(default=False)
     is_portfolio = models.BooleanField(default=False)
+    weight = models.IntegerField(default=0)
+    symbols: models.QuerySet[GlobalSymbol]
 
     def __str__(self):
         return self.name
@@ -959,10 +967,13 @@ class Tag(models.Model):
             self.is_chain = True
         if self.name.endswith('-portfolio'):
             self.is_portfolio = True
+        if not self.weight:
+            self.weight = self.symbols.count()
         super().save(*args, **kwargs)
 
     class Meta:
         verbose_name_plural = 'Tags'
+        ordering = ['-weight', 'name']
 
 
 class ContactForm(models.Model):

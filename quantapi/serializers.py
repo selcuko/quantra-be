@@ -1,10 +1,8 @@
 import json
-from os import read
-from django.urls import reverse
 from rest_framework import serializers
 from quantapi.models import (ContactForm, GlobalSymbol, GroupOrder, Market, MarketAccount, MarketCredentials, 
                              MarketSymbol, Order, Session, SessionGroup, 
-                             Signal, Strategy, Subscription)
+                             Signal, Strategy, Subscription, Tag)
 from quantapi.validations import validate_order_payload, validate_symbol_against_market
 
 
@@ -111,7 +109,7 @@ class MarketSymbolSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = MarketSymbol
         fields = ['symbol', 'market', 'exchange_name', 'name', 'base', 'quote', 'base_precision', 'quote_precision', 
-                  'spot_trading_enabled', 'icon', 'price', 'price_updated', 'id', 'url', 'cid', 'contract_type']
+                  'spot_trading_enabled', 'icon', 'price', 'price_updated', 'id', 'url', 'cid', 'contract_type', 'available_contracts']
 
     def get_price(self, obj):
         prices = json.loads(obj.market.prices or '{}')
@@ -126,14 +124,21 @@ class InlineMarketSymbolSerializer(serializers.HyperlinkedModelSerializer):
         fields = ['id', 'url', 'icon', 'name', 'base', 'quote', 'market']
 
 
+class TagSerializer(serializers.HyperlinkedModelSerializer):
+    class Meta:
+        model = Tag
+        fields = ['name', 'description', 'is_ecosystem', 'is_chain', 'is_portfolio', 'weight']
+
+
 class GlobalSymbolSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = GlobalSymbol
         fields = ['id', 'cid', 'name', 'display', 'base', 'quote', 'tags', 'symbols', 'data_source', 
-                  'is_stablecoin', 'ath', 'atl', 'ath_date', 'atl_date', 'volume', 'market_cap', 
-                  'circulating_supply', 'max_supply', 'total_supply', 'last_updated', 'price', 
+                  'is_stablecoin', 'ath', 'atl', 'ath_ratio', 'atl_ratio', 'ath_date', 'atl_date', 'volume', 'market_cap', 
+                  'circulating_supply', 'max_supply', 'total_supply', 'last_updated', 'price', 'supply_ratio', 'high_24h',
+                  'low_24h', 'price_change_24h', 'price_change_percentage_24h',  
                   'supply_ratio', 'ath_prox', 'atl_prox', 'volume24h_to_mcap', 'image', 'url']
-    tags = serializers.StringRelatedField(many=True)
+    tags = TagSerializer(many=True)
     symbols = InlineMarketSymbolSerializer(many=True)
 
 
