@@ -18,7 +18,8 @@ class Command(BaseCommand):
     def print_bids(self, bids, side='bids', length=0):
         print(f'{side.capitalize()} ({length}):')
         for bid in bids:
-            print(f'{bid.price:,.5f}\t{bid.size:,.5f}')
+            td = time.time() - bid.updated.timestamp()
+            print(f'{bid.price:,.5f}\t{bid.size:,.5f}\t[{td:.2f}s]')
         print()
 
     def validate(self, options):
@@ -32,21 +33,21 @@ class Command(BaseCommand):
         self.validate(options)
         try:
             market = Market.objects.get(exchange_name=options['market'])
-            symbol = MarketSymbol.objects.get(contract_type=MarketSymbol.ContractType.SPOT, name=options['symbol'], market=market)
+            contract_type = MarketSymbol.ContractType.FUTURES if options['futures'] else MarketSymbol.ContractType.SPOT
+            symbol = MarketSymbol.objects.get(contract_type=contract_type, name=options['symbol'], market=market)
         except Market.DoesNotExist:
             raise CommandError(f'Market {options["market"]} not found.')
         except MarketSymbol.DoesNotExist:
-            raise CommandError(f'Market symbol {options["symbol"]} not found in {options["market"]}.')
+            raise CommandError(f'Market symbol {options["symbol"]} not found in {options["market"]}-{contract_type}.')
 
         self.stdout.write(f'Starting keeper for {options["symbol"]} on {options["market"]}')
-        futures = options['futures']
-        k = KeeperPool.get(symbol, futures=futures)
+        k = KeeperPool.get(symbol)
         k.start()
 
         while True:
             try:
                 bids, asks = k.book.get_depth(count=options['count'], depth=options['depth'])
-                #bids, asks = k.book.get_best(count=10)  # replace line above with this to see raw price levels
+                # bids, asks = k.book.get_best(count=20)  # replace line above with this to see raw price levels
                 self.print_bids(bids, 'bids', len(k.book.bids.keys()))
                 print(f'Price: {k.book.get_price():,.5f}\n')
                 self.print_bids(asks, 'asks', len(k.book.asks.keys()))

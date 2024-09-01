@@ -21,8 +21,7 @@ class OrderbookConsumer(AsyncWebsocketConsumer):
         self.count = 5
         self.depth = 1
         query_params = parse_qs(self.scope['query_string'].decode('utf-8'))
-        contract = query_params.get('contract', [None])[0]
-        self.futures = True if contract == 'FUTURES' else False
+        self.contract = query_params.get('contract', ['SPOT'])[0]
         await self.accept()
         await self.subscribe({'market': self.scope['url_route']['kwargs']['market'], 'symbol': self.scope['url_route']['kwargs']['symbol']})
         self.connected = True
@@ -51,8 +50,8 @@ class OrderbookConsumer(AsyncWebsocketConsumer):
 
     def get_keeper(self, market, symbol) -> Keeper:
         market = Market.objects.get(exchange_name=market)
-        symbol = MarketSymbol.objects.get(contract_type=MarketSymbol.ContractType.SPOT, name=symbol, market=market)
-        return KeeperPool.get(symbol, futures=self.futures)
+        symbol = MarketSymbol.objects.get(contract_type=self.contract, name=symbol, market=market)
+        return KeeperPool.get(symbol)
 
     async def subscribe(self, event):
         if self.connected:
@@ -72,7 +71,7 @@ class OrderbookConsumer(AsyncWebsocketConsumer):
             await self.send(text_data=json.dumps({'error': f'Market {market} not found'}))
             return
         except MarketSymbol.DoesNotExist:
-            await self.send(text_data=json.dumps({'error': f'Symbol {symbol} not found in {market}'}))
+            await self.send(text_data=json.dumps({'error': f'Symbol {symbol} not found in {market}-{self.contract}'}))
             return
         self.keeper.add_callback(self.callback)
 
@@ -99,8 +98,7 @@ class MiniOrderbookConsumer(AsyncWebsocketConsumer):
         self.count = 5
         self.depth = 1
         query_params = parse_qs(self.scope['query_string'].decode('utf-8'))
-        contract = query_params.get('contract', [None])[0]
-        self.futures = True if contract == 'FUTURES' else False
+        self.contract = query_params.get('contract', ['SPOT'])[0]
         await self.accept()
         print('Connected')
         await self.subscribe({'market': self.scope['url_route']['kwargs']['market'], 'symbol': self.scope['url_route']['kwargs']['symbol']})
@@ -131,8 +129,8 @@ class MiniOrderbookConsumer(AsyncWebsocketConsumer):
 
     def get_keeper(self, market, symbol) -> Keeper:
         market = Market.objects.get(exchange_name=market)
-        symbol = MarketSymbol.objects.get(contract_type=MarketSymbol.ContractType.SPOT, name=symbol, market=market)
-        return KeeperPool.get(symbol, futures=self.futures)
+        symbol = MarketSymbol.objects.get(contract_type=self.contract, name=symbol, market=market)
+        return KeeperPool.get(symbol)
 
     async def subscribe(self, event):
         if self.connected:
@@ -153,7 +151,7 @@ class MiniOrderbookConsumer(AsyncWebsocketConsumer):
             await self.send(text_data=json.dumps({'error': f'Market {market} not found'}))
             return
         except MarketSymbol.DoesNotExist:
-            await self.send(text_data=json.dumps({'error': f'Symbol {symbol} not found in {market}'}))
+            await self.send(text_data=json.dumps({'error': f'Symbol {symbol} not found in {market}-{self.contract}'}))
             return
         # start update loop
 
@@ -176,8 +174,8 @@ class AggregatorConsumer(AsyncWebsocketConsumer):
         self.count = 5
         self.depth = 1
         query_params = parse_qs(self.scope['query_string'].decode('utf-8'))
-        contract = query_params.get('contract', [None])[0]
-        self.futures = True if contract == 'FUTURES' else False
+        self.contract = query_params.get('contract', ['SPOT'])[0]
+        self.futures = True if self.contract == 'FUTURES' else False
         await self.accept()
         await self.subscribe({'market': self.scope['url_route']['kwargs']['market'], 'symbol': self.scope['url_route']['kwargs']['symbol']})
         self.connected = True
@@ -226,7 +224,7 @@ class AggregatorConsumer(AsyncWebsocketConsumer):
             await self.send(text_data=json.dumps({'error': f'Market {markets} not found'}))
             return
         except MarketSymbol.DoesNotExist:
-            await self.send(text_data=json.dumps({'error': f'Symbol {symbol} not found in {markets}'}))
+            await self.send(text_data=json.dumps({'error': f'Symbol {symbol} not found in {markets}-{self.contract}'}))
             return
 
     def callback(self, delta: Delta):
@@ -243,8 +241,8 @@ class MiniAggregatorConsumer(AsyncWebsocketConsumer):
         self.count = 5
         self.depth = 1
         query_params = parse_qs(self.scope['query_string'].decode('utf-8'))
-        contract = query_params.get('contract', [None])[0]
-        self.futures = True if contract == 'FUTURES' else False
+        self.contract = query_params.get('contract', [None])[0]
+        self.futures = True if self.contract == 'FUTURES' else False
         await self.accept()
         await self.subscribe({'markets': self.scope['url_route']['kwargs']['markets'], 'symbol': self.scope['url_route']['kwargs']['symbol']})
         self.connected = True
@@ -254,7 +252,7 @@ class MiniAggregatorConsumer(AsyncWebsocketConsumer):
         self.connected = False
         if self.aggregator and self.callback in self.aggregator.callbacks:
             self.aggregator.callbacks.remove(self.callback)
-    
+
     async def receive(self, text_data):
         try:
             inbound = json.loads(text_data)
@@ -293,7 +291,7 @@ class MiniAggregatorConsumer(AsyncWebsocketConsumer):
             await self.send(text_data=json.dumps({'error': f'Market {markets} not found'}))
             return
         except MarketSymbol.DoesNotExist:
-            await self.send(text_data=json.dumps({'error': f'Symbol {symbol} not found in {markets}'}))
+            await self.send(text_data=json.dumps({'error': f'Symbol {symbol} not found in {markets}-{self.contract}'}))
             return
 
     def callback(self, delta: Delta):
@@ -315,11 +313,12 @@ class CandleConsumer(AsyncWebsocketConsumer):
         try:
             symbol = self.scope['url_route']['kwargs']['symbol'].upper()
             market = self.scope['url_route']['kwargs']['market'].upper()
-            self.symbol = MarketSymbol.objects.get(contract_type=MarketSymbol.ContractType.SPOT, name=symbol, market__exchange_name=market)
+            contract = self.scope['url_route']['kwargs'].get('contract', 'SPOT').upper()
+            self.symbol = MarketSymbol.objects.get(contract_type=contract, name=symbol, market__exchange_name=market)
             self.interface = self.symbol.market.get_interface()
             return self.symbol
         except MarketSymbol.DoesNotExist:
-            raise Exception(f'Symbol {symbol} not found in {market}.')
+            raise Exception(f'Symbol {symbol} not found in {market}-{contract}.')
         except KeyError:
             raise Exception('Market and symbol must be specified in the URI.')
 

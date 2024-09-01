@@ -338,14 +338,16 @@ class OKXMarket(IMarket):
             raise OrderPostProcessingError(f'Failed to process order: {e}')
         return order
 
-    def get_full_orderbook(self, symbol:'MarketSymbol|str', limit=5000, futures=False) -> dict:
+    def get_full_orderbook(self, symbol:'MarketSymbol|str', limit=5000) -> dict:
         symbol_object = self.get_symbol_from_name(symbol) if isinstance(symbol, str) else symbol
         if not symbol_object:
             raise ValueError(f'Symbol not found: {symbol}')
-        if futures:
+        if symbol_object.contract_type == symbol_object.ContractType.FUTURES:
             path = f'/api/v5/market/books-full?instId={self.format_symbol(symbol_object.name)}-SWAP&sz={limit}'
-        else:
+        elif symbol_object.contract_type == symbol_object.ContractType.SPOT:
             path = f'/api/v5/market/books-full?instId={self.format_symbol(symbol_object.name)}&sz={limit}'
+        else:
+            raise ValueError(f'Unknown contract type for symbol {symbol_object.name}')
         url = f'{self.url}{path}'
         self.sign({}, path)
         response = self.session.get(url)
@@ -371,7 +373,14 @@ class OKXMarket(IMarket):
             'asks': [{ 'price': Decimal(price), 'size': Decimal(size), 'count': int(count) } for price, size, _, count in orderbook['asks']],
         }
 
-    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:typing.Callable, liveloop:'LiveLoop|None'=None, retries:int=30, futures=False):
+    def _format_instId(self, symbol:'MarketSymbol') -> str:
+        mapping = {
+            'SPOT': '',
+            'FUTURES': '-SWAP',
+        }
+        return self.format_symbol(symbol.name) + mapping[symbol.contract_type]
+
+    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:typing.Callable, liveloop:'LiveLoop|None'=None, retries:int=30):
         if isinstance(symbol, str):
             symbol_obj = self.get_symbol_from_name(symbol)
         else:
@@ -385,7 +394,7 @@ class OKXMarket(IMarket):
                 'op': 'subscribe',
                 'args': [{
                     'channel': 'books',
-                    'instId': self.format_symbol(symbol_obj.name) + ('-SWAP' if futures else ''),
+                    'instId': self._format_instId(symbol_obj),
                 }]
             }))
             ack = json.loads(ws.recv())
@@ -407,7 +416,7 @@ class OKXMarket(IMarket):
             if retries < self.WS_MAX_RETRIES:
                 time.sleep(1)
                 retries += 1
-                return self.init_orderbook_websocket(symbol, callback, liveloop, retries+1, futures)
+                return self.init_orderbook_websocket(symbol, callback, liveloop, retries+1)
             msg = f'Failed to connect to websocket: {e}'
             logger.error(msg, extra={'market': self.name, 'type': 'MARKET'})
             ws.close()

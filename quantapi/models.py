@@ -478,7 +478,7 @@ class SessionGroup(models.Model):
                 return session
         if validate:
             try:
-                ms = MarketSymbol.objects.get(contract_type=MarketSymbol.ContractType.SPOT, name=self.symbol.name, market=account.market)
+                ms = MarketSymbol.objects.get(contract_type=self.symbol.contract_type, name=self.symbol.name, market=account.market)
                 if not ms.spot_trading_enabled:
                     raise ValueError(f'Spot trading is not enabled for {ms.name} in {account.market}')
             except MarketSymbol.DoesNotExist:
@@ -503,7 +503,7 @@ class SessionGroup(models.Model):
     def save(self, *args, **kwargs):
         if self.interface:
             try:
-                self.symbol = self.interface.market.symbols.get(name=self.symbol.name)
+                self.symbol = self.interface.market.symbols.get(name=self.symbol.name, contract_type=self.symbol.contract_type)
             except MarketSymbol.DoesNotExist:
                 raise ValueError('Symbol must be available in the market to set interface.')
             self.market = self.interface.market

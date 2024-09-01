@@ -37,13 +37,15 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         self.options = options
+        self.futures = options['futures']
         try:
             self.market = Market.objects.get(exchange_name=self.options['market'].upper())
         except Market.DoesNotExist:
             raise CommandError(f'Market {self.options["market"]} not found.')
         try:
             symbol = self.options['symbol'].lower().replace('-', '').replace('usdt', '').upper()
-            self.symbol = MarketSymbol.objects.get(contract_type=MarketSymbol.ContractType.SPOT, market=self.market, base=symbol)
+            contract_type = MarketSymbol.ContractType.FUTURES if self.futures else MarketSymbol.ContractType.SPOT
+            self.symbol = MarketSymbol.objects.get(contract_type=contract_type, market=self.market, base=symbol)
         except MarketSymbol.DoesNotExist:
             raise CommandError(f'Symbol {symbol} not found in {self.market.exchange_name}.')
         self.buffer = Queue()
@@ -55,7 +57,6 @@ class Command(BaseCommand):
         self.interface.init_orderbook_websocket(
             self.symbol,
             self.on_update,
-            futures=self.options['futures'],
         )
 
     def prep_file(self):
@@ -78,7 +79,7 @@ class Command(BaseCommand):
             f.write(json.dumps(header_payload) + '\n')
 
     def prep_snapshot(self):
-        full_ob = self.interface.get_full_orderbook(self.symbol, futures=self.options['futures'])
+        full_ob = self.interface.get_full_orderbook(self.symbol)
         full_ob['time'] = timezone.now().timestamp()
         full_ob['type'] = 'snapshot'
         with open(self.options['output'], 'a') as f:

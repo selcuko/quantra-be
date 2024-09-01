@@ -182,20 +182,22 @@ class MEXCMarket(IMarket):
             if not last_kline:
                 last_kline = candle['end']
 
-    def get_full_orderbook(self, symbol:'MarketSymbol|str', limit=500, futures=False):
+    def get_full_orderbook(self, symbol:'MarketSymbol|str', limit=500):
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         try:
-            if not futures:
+            if symbol.contract_type == symbol.ContractType.SPOT:
                 uri = f'{self.url}/api/v3/depth?symbol={self._format_symbol(symbol.name)}&limit={limit}' 
-            else:
+            elif symbol.contract_type == symbol.ContractType.FUTURES:
                 uri = f'{self.furl}/api/v1/contract/depth/{symbol.name.replace("-","_")}'
+            else:
+                raise ValueError(f'Unknown contract type for symbol {symbol.name}')
             response = requests.get(uri)
             orderbook = response.json()
         except:
             logger.error(f'Error while fetching orderbook for {self.name}', exc_info=True)
             raise
-        if futures:
+        if symbol.contract_type == symbol.ContractType.FUTURES:
             orderbook = orderbook['data']
         return self.format_orderbook_snapshot(orderbook)
 
@@ -211,35 +213,35 @@ class MEXCMarket(IMarket):
             'asks': [ { 'price': Decimal(ask['p']), 'size': Decimal(ask['v']), 'count': 1 } for ask in update.get('asks', []) ],
         }
 
-    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:Callable, futures=False):
+    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:Callable):
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
-        if  not futures:
-            ws_uri = 'wss://wbs.mexc.com/ws'
-        else:
-            ws_uri = 'wss://contract.mexc.com/edge'
-        try:
-            ws = connect(ws_uri)
-        except TimeoutError:
-            time.sleep(5)
-            return self.init_orderbook_websocket(symbol, callback, futures=futures)
-
         topic = f'spot@public.increase.depth.v3.api@{self._format_symbol(symbol.name)}'
-        if not futures:
+        if  symbol.contract_type == symbol.ContractType.SPOT:
+            ws_uri = 'wss://wbs.mexc.com/ws'
             sub = {
                 'method': 'SUBSCRIPTION',
                 'params': [topic]
             }
-        else:
+        elif symbol.contract_type == symbol.ContractType.FUTURES:
+            ws_uri = 'wss://contract.mexc.com/edge'
             sub = {
                 "method": "sub.depth",
                 "param": {
                     "symbol": symbol.name.replace('-','_')
                 }
             }
+        else:
+            raise ValueError(f'Unknown contract type for symbol {symbol.name}')
+        try:
+            ws = connect(ws_uri)
+        except TimeoutError:
+            time.sleep(5)
+            return self.init_orderbook_websocket(symbol, callback)
+
         ws.send(json.dumps(sub))
         ack = json.loads(ws.recv())
-        if not futures and not ack.get('msg') == topic and not ack.get('c') == topic:
+        if symbol.contract_type == symbol.ContractType.SPOT and not ack.get('msg') == topic and not ack.get('c') == topic:
             raise Exception(f'Error while subscribing to {topic}: {ack}')
         last_ping = datetime.now()
         while not self.stop_websocket_stream:
@@ -251,11 +253,15 @@ class MEXCMarket(IMarket):
             except TimeoutError:
                 continue
             except ConnectionClosed:
-                return self.init_orderbook_websocket(symbol, callback, futures=futures)
+                return self.init_orderbook_websocket(symbol, callback)
             if response.get('msg') == 'PONG':
                 continue
-            response = response['d'] if not futures else response['data']
-            orderbook = self.format_orderbook_update(response) if not futures else self.format_orderbook_snapshot(response)
+            if symbol.contract_type == symbol.ContractType.SPOT:
+                response = response['d']
+                orderbook = self.format_orderbook_update(response)
+            elif symbol.contract_type == symbol.ContractType.FUTURES:
+                response = response['data']
+                orderbook = self.format_orderbook_snapshot(response)
             callback(orderbook)
         ws.close()
 
@@ -416,7 +422,7 @@ class MEXCMarket(IMarket):
                 'details',
                 'base_precision',
                 'quote_precision',
-            ], unique_fields=['name', 'market'])
+            ], unique_fields=['name', 'market', 'contract_type'])
         return self.symbols
 
     def get_last_klines(self, symbol:'MarketSymbol|str', interval:str, limit=100, retry=1, silent=True):
