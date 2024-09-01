@@ -90,7 +90,6 @@ class Keeper:
         if self.started:
             return
         """Gets a snapshot from the exchange, starts the queue processor and the dispatcher"""
-        futures = self.symbol.contract_type == self.symbol.ContractType.FUTURES
         with self.book_lock:
             snapshot = self.interface.get_full_orderbook(self.symbol)
             self.received_seq += 1
