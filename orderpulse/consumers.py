@@ -1,11 +1,13 @@
 # myapp/consumers.py
 import asyncio
 import json
+from pprint import pprint
 import threading
 from urllib.parse import parse_qs
 import django
 
 from orderpulse.aggregator import Aggregator, AggregatorPool
+from orderpulse.errors import MaxPoolSizeExceeded
 from orderpulse.keeper import Keeper, KeeperPool
 from orderpulse.structures import Delta
 django.setup()
@@ -99,13 +101,15 @@ class MiniOrderbookConsumer(AsyncWebsocketConsumer):
         self.depth = 1
         query_params = parse_qs(self.scope['query_string'].decode('utf-8'))
         self.contract = query_params.get('contract', ['SPOT'])[0]
+        self.connection_id = str(self.channel_name)
+
         await self.accept()
-        print('Connected')
         await self.subscribe({'market': self.scope['url_route']['kwargs']['market'], 'symbol': self.scope['url_route']['kwargs']['symbol']})
-        print('Subscribed')
         self.connected = True
 
     async def disconnect(self, close_code):
+        if self.keeper:
+            KeeperPool.release(self.keeper, self.connection_id)
         self.close_code = close_code
         self.connected = False
         if self.keeper and self.callback in self.keeper.callbacks:
@@ -130,7 +134,7 @@ class MiniOrderbookConsumer(AsyncWebsocketConsumer):
     def get_keeper(self, market, symbol) -> Keeper:
         market = Market.objects.get(exchange_name=market)
         symbol = MarketSymbol.objects.get(contract_type=self.contract, name=symbol, market=market)
-        return KeeperPool.get(symbol)
+        return KeeperPool.get(symbol, seeker=self.connection_id)
 
     async def subscribe(self, event):
         if self.connected:
@@ -142,29 +146,36 @@ class MiniOrderbookConsumer(AsyncWebsocketConsumer):
             self.depth = event.get('depth', 1)
             self.count = event.get('count', 10)
         except KeyError:
-            await self.send(text_data=json.dumps({'error': 'Market and symbol must be specified'}))
+            await self.send(text_data=json.dumps({'error': 'Market and symbol must be specified', 'code': 400}))
             return
         try:
             self.keeper = await sync_to_async(self.get_keeper)(market, symbol)
             self.keeper.add_callback(self.callback)
         except Market.DoesNotExist:
-            await self.send(text_data=json.dumps({'error': f'Market {market} not found'}))
+            await self.send(text_data=json.dumps({'error': f'Market {market} not found', 'code': 404}))
             return
         except MarketSymbol.DoesNotExist:
-            await self.send(text_data=json.dumps({'error': f'Symbol {symbol} not found in {market}-{self.contract}'}))
+            await self.send(text_data=json.dumps({'error': f'Symbol {symbol} not found in {market}-{self.contract}', 'code': 404}))
+            return
+        except MaxPoolSizeExceeded as e:
+            await self.send(text_data=json.dumps({'error': str(e), 'code': 503}))
             return
         # start update loop
 
     def callback(self, delta: Delta):
-        if self.keeper and self.connected:
-            bids, asks = self.keeper.book.get_depth(self.count, self.depth)
-            payload = json.dumps({
-                'bids': [bid.dict() for bid in bids],
-                'asks': [ask.dict() for ask in asks],
-                'price': str(self.keeper.book.get_price())
-            })
-            if self.connected:
-                asyncio.run(self.send(text_data=payload))
+        if not(self.keeper and self.connected):
+            return
+        bids, asks = self.keeper.book.get_depth(self.count, self.depth)
+        payload = json.dumps({
+            'bids': [bid.dict() for bid in bids],
+            'asks': [ask.dict() for ask in asks],
+            'price': str(self.keeper.book.get_price()),
+        })
+        try:
+            asyncio.run(self.send(text_data=payload))
+        except Exception:
+            self.connected = False
+            return
 
 
 class AggregatorConsumer(AsyncWebsocketConsumer):

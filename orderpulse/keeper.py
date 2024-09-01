@@ -4,6 +4,7 @@ from multiprocessing import Queue, synchronize
 import multiprocessing
 import queue
 import threading
+from orderpulse.errors import MaxPoolSizeExceeded
 from orderpulse.manager import BookManager
 from orderpulse.structures import Book
 import typing
@@ -16,28 +17,43 @@ class KeeperPool:
     manager = BookManager()
     manager_started = False
     pool: dict['MarketSymbol', 'Keeper'] = {}
+    connections: dict['MarketSymbol', 'list[str]'] = {}
+    max_pool_size = 1
 
     @classmethod
-    def get(cls, symbol:'MarketSymbol', callback:Optional[Callable]=None, manager:Optional[BookManager]=None) -> 'Keeper':
+    def get(cls, symbol:'MarketSymbol', callback:Optional[Callable]=None, manager:Optional[BookManager]=None, seeker:str='') -> 'Keeper':
         if not manager and not cls.manager_started:
             cls.manager.start()
             cls.manager_started = True
         manager = manager or cls.manager
         if symbol not in cls.pool:
+            if len(cls.pool) >= cls.max_pool_size:
+                raise MaxPoolSizeExceeded(f'Maximum pool size of {cls.max_pool_size} has been exceeded.')
             keeper = Keeper(symbol, manager)
             keeper.start()
             cls.pool[symbol] = keeper
-        keeper = cls.pool[symbol]
+            cls.connections[symbol] = []
+        else:
+            keeper = cls.pool[symbol]
         if callback:
             keeper.add_callback(callback)
+        if seeker:
+            cls.connections[symbol].append(seeker)
         return keeper
 
     @classmethod
+    def release(cls, keeper: 'Keeper', seeker:str=''):
+        symbol = keeper.symbol
+        if seeker and symbol in cls.connections and seeker in cls.connections[symbol]:
+            cls.connections[keeper.symbol].remove(seeker)
+        if not cls.connections[keeper.symbol]:
+            keeper.stop()
+            del cls.pool[keeper.symbol]
+            del cls.connections[keeper.symbol]
+
+    @classmethod
     def pop(cls, keeper: 'Keeper'):
-        cls.pool.pop(keeper.symbol)
-        if not cls.pool and cls.manager_started:
-            cls.manager.shutdown()
-            cls.manager_started = False
+        pass
 
 
 class Keeper:
@@ -60,6 +76,14 @@ class Keeper:
         self.dispatch_thread = None
         self.market_thread = None
         self.started = False
+        self.connections = {}
+
+    def __str__(self):
+        return f'Keeper <{self.key}>'
+
+    @property
+    def key(self):
+        return f'{self.symbol.base}-{self.symbol.market.exchange_name}-{self.symbol.contract_type}'
 
     def state(self):
         status = 'undefined'

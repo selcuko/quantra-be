@@ -13,6 +13,7 @@ from cache import LIVELOOPS, LOOPGROUPS
 from loops import LiveLoop
 from markets.errors import OrderPlacementError
 from order import OrderManager
+from orderpulse.keeper import KeeperPool
 from quantapi.filters import (GlobalSymbolFilter, MarketAccountFilter, MarketSymbolFilter,
                               SessionFilter, SessionGroupFilter)
 from quantapi.models import (ContactForm, GlobalSymbol, GroupOrder, Market,
@@ -419,3 +420,13 @@ class TagViewSet(viewsets.ModelViewSet):
     queryset = Tag.objects.all()
     serializer_class = TagSerializer
     pagination_class = None
+
+
+class KeeperView(viewsets.ViewSet):
+    def list(self, request):
+        keepers = [str(ms) for ms in KeeperPool.pool.keys()]
+        return Response({
+            'symbols': keepers,
+            'count': len(keepers),
+            'connections': [f'{k}: {v}' for k, v in KeeperPool.connections.items()]
+        })

@@ -83,6 +83,12 @@ MIDDLEWARE = [
     'silk.middleware.SilkyMiddleware'
 ]
 
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer"
+    }
+}
+
 LOGIN_REDIRECT_URL = '/'
 
 ROOT_URLCONF = 'quant.urls'
