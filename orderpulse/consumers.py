@@ -12,7 +12,8 @@ from orderpulse.keeper import Keeper, KeeperPool
 from orderpulse.structures import Delta
 django.setup()
 from channels.generic.websocket import AsyncWebsocketConsumer
-from asgiref.sync import sync_to_async
+from channels.layers import get_channel_layer
+from asgiref.sync import sync_to_async, async_to_sync
 from quantapi.models import Market, MarketSymbol
 
 
@@ -95,6 +96,7 @@ class OrderbookConsumer(AsyncWebsocketConsumer):
 
 class MiniOrderbookConsumer(AsyncWebsocketConsumer):
     async def connect(self):
+        self.group_name = None
         self.connected = False
         self.keeper = None
         self.count = 5
@@ -102,18 +104,22 @@ class MiniOrderbookConsumer(AsyncWebsocketConsumer):
         query_params = parse_qs(self.scope['query_string'].decode('utf-8'))
         self.contract = query_params.get('contract', ['SPOT'])[0]
         self.connection_id = str(self.channel_name)
-
         await self.accept()
         await self.subscribe({'market': self.scope['url_route']['kwargs']['market'], 'symbol': self.scope['url_route']['kwargs']['symbol']})
         self.connected = True
 
     async def disconnect(self, close_code):
+        print('disconnecting', self.group_name)
+        await self.remove_from_group()
         if self.keeper:
             KeeperPool.release(self.keeper, self.connection_id)
         self.close_code = close_code
         self.connected = False
-        if self.keeper and self.callback in self.keeper.callbacks:
-            self.keeper.callbacks.remove(self.callback)
+        if self.keeper and self.publish_callback in self.keeper.callbacks:
+            self.keeper.callbacks.remove(self.publish_callback)
+            print('removed callback', self.keeper, self.publish_callback in self.keeper.callbacks)
+        else:
+            print('cannot remove callback', self.keeper, self.publish_callback in self.keeper.callbacks)
 
     async def receive(self, text_data):
         try:
@@ -136,6 +142,20 @@ class MiniOrderbookConsumer(AsyncWebsocketConsumer):
         symbol = MarketSymbol.objects.get(contract_type=self.contract, name=symbol, market=market)
         return KeeperPool.get(symbol, seeker=self.connection_id)
 
+    async def add_to_group(self):
+        assert self.channel_layer, "Channel layer is not found"
+        await self.channel_layer.group_add(
+            self.group_name,
+            self.channel_name
+        )
+
+    async def remove_from_group(self):
+        assert self.channel_layer, "Channel layer is not found"
+        await self.channel_layer.group_discard(
+            self.group_name,
+            self.channel_name
+        )
+
     async def subscribe(self, event):
         if self.connected:
             await self.send(text_data=json.dumps({'error': 'Already connected'}))
@@ -150,7 +170,10 @@ class MiniOrderbookConsumer(AsyncWebsocketConsumer):
             return
         try:
             self.keeper = await sync_to_async(self.get_keeper)(market, symbol)
-            self.keeper.add_callback(self.callback)
+            self.group_name = f'keeper.{self.keeper.key}'
+            await self.add_to_group()
+            if self.publish_callback not in self.keeper.callbacks:
+                self.keeper.add_callback(self.publish_callback)
         except Market.DoesNotExist:
             await self.send(text_data=json.dumps({'error': f'Market {market} not found', 'code': 404}))
             return
@@ -164,6 +187,7 @@ class MiniOrderbookConsumer(AsyncWebsocketConsumer):
 
     def callback(self, delta: Delta):
         if not(self.keeper and self.connected):
+            async_to_sync(self.disconnect)(1000)
             return
         bids, asks = self.keeper.book.get_depth(self.count, self.depth)
         payload = json.dumps({
@@ -174,9 +198,27 @@ class MiniOrderbookConsumer(AsyncWebsocketConsumer):
         try:
             asyncio.run(self.send(text_data=payload))
         except Exception:
-            self.connected = False
+            async_to_sync(self.disconnect)(1000)
             return
 
+    def publish_callback(self, delta: Delta):
+        if not(self.keeper and self.connected):
+            async_to_sync(self.disconnect)(1000)
+            return
+        assert self.channel_layer, "Channel layer not found."
+        bids, asks = self.keeper.book.get_depth(self.count, self.depth)
+        payload = {
+            'bids': [bid.dict() for bid in bids],
+            'asks': [ask.dict() for ask in asks],
+            'price': str(self.keeper.book.get_price()),
+            'type': 'update'
+        }
+        async_to_sync(self.channel_layer.group_send)(
+            self.group_name,
+            payload,
+        )
+    async def update(self, payload: dict):
+        await self.send(text_data=json.dumps(payload))
 
 class AggregatorConsumer(AsyncWebsocketConsumer):
     async def connect(self):

@@ -109,6 +109,7 @@ class Keeper:
     def add_callback(self, callback):
         """Adds a callback to the list of callbacks that will be called when an update is processed (callbacks are blocking, make them fast)"""
         self.callbacks.append(callback)
+        print('ADDED A NEW CALLBACK, TOTAL:', len(self.callbacks))
 
     def start(self):
         if self.started:
