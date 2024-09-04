@@ -105,17 +105,13 @@ class Keeper:
         """Adds a callback to the list of callbacks that will be called when an update is processed (callbacks are blocking, make them fast)"""
         if callback not in self.callbacks:
             self.callbacks.append(callback)
-            print('ADDED A NEW CALLBACK, TOTAL:', len(self.callbacks))
-        else:
-            print('AVOIDED ADDING A DUPLICATE CALLBACK')
 
     def remove_callback(self, callback):
         """Removes a callback from the list of callbacks"""
         try:
             self.callbacks.remove(callback)
-            print('REMOVED A CALLBACK, TOTAL:', len(self.callbacks))
         except ValueError:
-            print('TRIED TO REMOVE A CALLBACK THAT WAS NOT REGISTERED')
+            pass
 
     def start(self):
         if self.started:

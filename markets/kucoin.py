@@ -232,9 +232,9 @@ class KucoinMarket(IMarket):
             return [[
                 self._standardize_datetime(kline[0]),
                 float(kline[1]),
-                float(kline[2]),
                 float(kline[3]),
                 float(kline[4]),
+                float(kline[2]),
                 float(kline[5]),
             ] for kline in klines ]
         except:

@@ -23,6 +23,8 @@ class KeeperDispatch:
         self.last_updates: dict[Keeper, datetime] = {}
         self.channel_layer = get_channel_layer()
         self.holdback_secs = 1
+        self.shutdown_countdown = 60
+        self.shutdown_schedules: dict[Keeper, threading.Timer] = {}
 
     def make_callback(self, keeper: Keeper) -> Callable[[Delta], None]:
         """Creates a callback function for the given Keeper."""
@@ -51,6 +53,7 @@ class KeeperDispatch:
         keeper = KeeperPool.get(symbol)
         keeper.add_callback(self.make_callback(keeper))
         self.connections.setdefault(keeper, []).append(connection_id)
+        self.cancel_keeper_shutdown(keeper)
         return keeper
 
     def drop(self, connection_id: str, keeper: Keeper|None):
@@ -68,7 +71,22 @@ class KeeperDispatch:
             if keeper in self.callbacks:
                 del self.callbacks[keeper]
             del self.connections[keeper]
-            KeeperDispatch.drop_keeper(keeper.symbol)
+            self.schedule_keeper_shutdown(keeper)
+
+    def schedule_keeper_shutdown(self, keeper: Keeper):
+        """Schedules a Keeper for shutdown."""
+        if keeper in self.shutdown_schedules:
+            return
+        timer = threading.Timer(self.shutdown_countdown, self.drop_keeper, args=[keeper])
+        self.shutdown_schedules[keeper] = timer
+        timer.start()
+
+    def cancel_keeper_shutdown(self, keeper: Keeper):
+        """Cancels the scheduled shutdown of a Keeper."""
+        if keeper not in self.shutdown_schedules:
+            return
+        self.shutdown_schedules[keeper].cancel()
+        del self.shutdown_schedules[keeper]
 
     def find_keeper_for_connection(self, connection_id: str) -> Keeper|None:
         for k, v in self.connections.items():
@@ -77,8 +95,13 @@ class KeeperDispatch:
                 break
         return keeper
 
+
     @staticmethod
-    def drop_keeper(symbol: 'MarketSymbol'):
+    def drop_keeper(keeper: Keeper):
+        KeeperPool.pop(keeper)
+
+    @staticmethod
+    def drop_keeper_with_symbol(symbol: 'MarketSymbol'):
         def in_thread():
             KeeperPool.pop_symbol(symbol)
         threading.Thread(target=in_thread).start()
