@@ -1,9 +1,9 @@
 from datetime import datetime
+import threading
 from typing import Callable, TYPE_CHECKING
 from channels.layers import get_channel_layer
 from orderpulse.keeper import Keeper, KeeperPool
 from orderpulse.structures import Delta
-from orderpulse.tasks import drop_connection
 from asgiref.sync import async_to_sync
 if TYPE_CHECKING:
     from quantapi.models import MarketSymbol
@@ -48,16 +48,38 @@ class KeeperDispatch:
 
     def get(self, connection_id: str, symbol: 'MarketSymbol') -> Keeper:
         """Returns the corresponding Keeper for the given MarketSymbol from the pool or creates a new one."""
-        print('Getting keeper for', symbol)
         keeper = KeeperPool.get(symbol)
         keeper.add_callback(self.make_callback(keeper))
         self.connections.setdefault(keeper, []).append(connection_id)
-        print('Connections:', self.connections)
         return keeper
 
     def drop(self, connection_id: str, keeper: Keeper|None):
-        drop_keeper = True
+        """Lets the Dispatch know that a connection has been dropped."""
+        if not keeper:
+            keeper = self.find_keeper_for_connection(connection_id)
+        if not keeper:
+            return
+        keeper_connections = self.connections[keeper]
+        keeper_connections.remove(connection_id)
+        should_drop_keeper = True
         if keeper and str(keeper.symbol) in KEEP_ALIVE:
-            drop_keeper = False
-        drop_connection(connection_id, self, keeper, drop_keeper=drop_keeper)
+            should_drop_keeper = False
+        if not keeper_connections and should_drop_keeper:
+            if keeper in self.callbacks:
+                del self.callbacks[keeper]
+            del self.connections[keeper]
+            KeeperDispatch.drop_keeper(keeper.symbol)
 
+    def find_keeper_for_connection(self, connection_id: str) -> Keeper|None:
+        for k, v in self.connections.items():
+            if connection_id in v:
+                keeper = k
+                break
+        return keeper
+
+    @staticmethod
+    def drop_keeper(symbol: 'MarketSymbol'):
+        def in_thread():
+            KeeperPool.pop_symbol(symbol)
+        threading.Thread(target=in_thread).start()
+        return True

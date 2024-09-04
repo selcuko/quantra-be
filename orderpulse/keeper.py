@@ -38,6 +38,14 @@ class KeeperPool:
         return keeper
 
     @classmethod
+    def pop_symbol(cls, symbol:'MarketSymbol'):
+        try:
+            keeper = cls.pool[symbol]
+        except KeyError:
+            return None
+        return cls.pop(keeper)
+
+    @classmethod
     def pop(cls, keeper: 'Keeper'):
         del cls.pool[keeper.symbol]
         keeper.stop()
@@ -183,6 +191,7 @@ class Keeper:
         if self.market_thread: 
             self.market_thread.join()
         if self.worker_process: 
+            self.worker_process.terminate()
             self.worker_process.join()
         if self.dispatch_thread:
             self.dispatch_thread.join()
