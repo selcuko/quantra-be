@@ -9,6 +9,12 @@ if TYPE_CHECKING:
     from quantapi.models import MarketSymbol
 
 
+KEEP_ALIVE = [
+    'BTC-USDT BINANCE-SPOT',
+    'BTC-USDT BINANCE-FUTURES',
+]
+
+
 class KeeperDispatch:
     """Manages the relation between the Consumers and the Keepers."""
     def __init__(self):
@@ -50,5 +56,8 @@ class KeeperDispatch:
         return keeper
 
     def drop(self, connection_id: str, keeper: Keeper|None):
-        drop_connection(connection_id, self, keeper)
+        drop_keeper = True
+        if keeper and str(keeper.symbol) in KEEP_ALIVE:
+            drop_keeper = False
+        drop_connection(connection_id, self, keeper, drop_keeper=drop_keeper)
 

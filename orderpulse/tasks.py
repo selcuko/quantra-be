@@ -11,6 +11,7 @@ def drop_connection(
     connection_id: str,
     dispatch: "KeeperDispatch",
     keeper: Keeper | None,
+    drop_keeper: bool = True,
 ):
     """Lets the Dispatch know that a connection has been dropped."""
     print("Dropping connection", connection_id)
@@ -26,7 +27,7 @@ def drop_connection(
         return
     __connections = dispatch.connections[keeper]
     __connections.remove(connection_id)
-    if not __connections:
+    if not __connections and drop_keeper:
         if keeper in dispatch.callbacks:
             print("Dropping callback for", keeper)
             del dispatch.callbacks[keeper]

@@ -13,6 +13,7 @@ from cache import LIVELOOPS, LOOPGROUPS
 from loops import LiveLoop
 from markets.errors import OrderPlacementError
 from order import OrderManager
+from orderpulse.consumers.miniorderbook import MiniOrderbookConsumer
 from orderpulse.keeper import KeeperPool
 from quantapi.filters import (GlobalSymbolFilter, MarketAccountFilter, MarketSymbolFilter,
                               SessionFilter, SessionGroupFilter)
@@ -424,9 +425,15 @@ class TagViewSet(viewsets.ModelViewSet):
 
 class KeeperView(viewsets.ViewSet):
     def list(self, request):
-        keepers = [str(ms) for ms in KeeperPool.pool.keys()]
-        return Response({
-            'symbols': keepers,
-            'count': len(keepers),
-            'connections': [f'{k}: {v}' for k, v in KeeperPool.connections.items()]
-        })
+        keepers = KeeperPool.pool.values()
+        payloads = []
+        for keeper in keepers:
+            connections = MiniOrderbookConsumer.dispatcher.connections.get(keeper, [])
+            payload = {
+                'symbol': str(keeper.symbol),
+                'market': keeper.market,
+                'status': 'running' if keeper.started else 'stopped',
+                'connections': connections,
+            }
+            payloads.append(payload)
+        return Response(payloads)
