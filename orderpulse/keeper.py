@@ -17,7 +17,7 @@ class KeeperPool:
     manager = BookManager()
     manager_started = False
     pool: dict['MarketSymbol', 'Keeper'] = {}
-    max_pool_size = 1
+    max_pool_size = 3
 
     @classmethod
     def get(cls, symbol:'MarketSymbol', callback:Optional[Callable]=None, manager:Optional[BookManager]=None) -> 'Keeper':

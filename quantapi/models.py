@@ -280,6 +280,27 @@ class MarketSymbol(models.Model):
     def available_contracts(self):
         return MarketSymbol.objects.filter(name=self.name, market=self.market).values_list('contract_type', flat=True)
 
+    @property
+    def volume(self):
+        # XXX revisit
+        if not self.symbol:
+            return
+        market_map = {
+            'gate': 'GATEIO',
+            'mxc': 'MEXC',
+            'binance': 'BINANCE',
+            'kucoin': 'KUCOIN',
+            'okex': 'OKX',
+            'bybit_spot': 'BYBIT',
+        }
+        payload = json.loads(self.symbol.coingecko_response or '{}')
+        for ticker in payload.get('tickers', []):
+            if ticker['base'] != self.base or ticker['target'] != self.quote:
+                continue
+            if market_map.get(ticker['market']['identifier']) != self.market.exchange_name:
+                continue
+            return ticker['converted_volume']['usd']
+
 
 class Session(models.Model):
     class CandleSource(models.TextChoices):
@@ -945,6 +966,8 @@ class GlobalSymbol(models.Model):
     def refresh(self):
         cg = CoinGecko()
         coin = cg.coin_by_cid(self.cid)
+        with open('coin.json', 'w') as f:
+            json.dump(coin, f)
         for field, value in cg.full_payload_to_dict(coin).items():
             setattr(self, field, value)
         self.save()
@@ -970,7 +993,7 @@ class Tag(models.Model):
             self.is_chain = True
         if self.name.endswith('-portfolio'):
             self.is_portfolio = True
-        if not self.weight:
+        if not self.weight and self.pk:
             self.weight = self.symbols.count()
         super().save(*args, **kwargs)
 
