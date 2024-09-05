@@ -60,13 +60,13 @@ class MiniOrderbookConsumer(AsyncWebsocketConsumer):
             await self.channel_layer.group_add(self.keeper.key, self.channel_name)
         except Market.DoesNotExist:
             await self.send(text_data=json.dumps({ 'error': f'Market {market} not found', 'code': 404 }))
-            return
+            await self.close()
         except MarketSymbol.DoesNotExist:
             await self.send(text_data=json.dumps({ 'error': f'Symbol {symbol} not found in {market}-{self.contract}', 'code': 404 }))
-            return
+            await self.close()
         except MaxPoolSizeExceeded as e:
             await self.send(text_data=json.dumps({ 'error': f'Maximum available connections are exceeded.', 'code': 503 }))
-            return
+            await self.close()
 
     async def update(self, event):
         """New version of the callback, called via channel layer."""

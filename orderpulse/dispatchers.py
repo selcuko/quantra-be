@@ -1,12 +1,14 @@
 from datetime import datetime
-import threading
+from threading import Event, Thread, Timer
+import time
 from typing import Callable, TYPE_CHECKING
 from channels.layers import get_channel_layer
+from markets.interface import IMarket
 from orderpulse.keeper import Keeper, KeeperPool
 from orderpulse.structures import Delta
 from asgiref.sync import async_to_sync
 if TYPE_CHECKING:
-    from quantapi.models import MarketSymbol
+    from quantapi.models import Market, MarketSymbol
 
 
 KEEP_ALIVE = [
@@ -28,7 +30,7 @@ class KeeperDispatch:
         self.channel_layer = get_channel_layer()
         self.holdback_secs = 1
         self.shutdown_countdown = 60
-        self.shutdown_schedules: dict[Keeper, threading.Timer] = {}
+        self.shutdown_schedules: dict[Keeper, Timer] = {}
 
     def make_callback(self, keeper: Keeper) -> Callable[[Delta], None]:
         """Creates a callback function for the given Keeper."""
@@ -81,7 +83,7 @@ class KeeperDispatch:
         """Schedules a Keeper for shutdown."""
         if keeper in self.shutdown_schedules:
             return
-        timer = threading.Timer(self.shutdown_countdown, self.drop_keeper, args=[keeper])
+        timer = Timer(self.shutdown_countdown, self.drop_keeper, args=[keeper])
         self.shutdown_schedules[keeper] = timer
         timer.start()
 
@@ -108,5 +110,121 @@ class KeeperDispatch:
     def drop_keeper_with_symbol(symbol: 'MarketSymbol'):
         def in_thread():
             KeeperPool.pop_symbol(symbol)
-        threading.Thread(target=in_thread).start()
+        Thread(target=in_thread).start()
         return True
+
+
+class TickerDispatch:
+    """Manages the relation between the Consumers and Tickers."""
+    def __init__(self):
+        self.threads: dict['MarketSymbol', Thread] = {}
+        self.connections: dict['MarketSymbol', list[str]] = {}
+        self.callbacks: dict['MarketSymbol', Callable[[dict], None]] = {}
+        self.last_updates: dict['MarketSymbol', datetime] = {}
+        self.channel_layer = get_channel_layer()
+        self.holdback_secs = 0
+        self.shutdown_countdown = 1
+        self.shutdown_schedules: dict['MarketSymbol', Timer] = {}
+        self.interfaces: dict[Market, IMarket] = {}
+        self.stop_events: dict['MarketSymbol', Event] = {}
+
+    def make_callback(self, symbol: 'MarketSymbol') -> Callable[[dict], None]:
+        """Creates a callback function for the given MarketSymbol."""
+        if symbol in self.callbacks:
+            return self.callbacks[symbol]
+        def callback(payload: dict):
+            assert self.channel_layer, 'Channel layer is not available'
+            if not self.last_updates.get(symbol):
+                self.last_updates[symbol] = datetime.now()
+            elif (datetime.now() - self.last_updates[symbol]).seconds < self.holdback_secs:
+                return
+            self.last_updates[symbol] = datetime.now()
+            payload['type'] = 'update'
+            async_to_sync(self.channel_layer.group_send)(symbol.key(), payload)
+        self.callbacks[symbol] = callback
+        return callback
+
+    def get_interface(self, market: 'Market') -> IMarket:
+        """Returns the corresponding IMarket for the given Market from the pool or creates a new one."""
+        if market in self.interfaces:
+            return self.interfaces[market]
+        interface = market.get_interface()
+        self.interfaces[market] = interface
+        return interface
+
+    def start_thread(self, symbol: 'MarketSymbol'):
+        interface = self.get_interface(symbol.market)
+        stop_event = Event()
+        thread = Thread(
+            target=interface.init_match_engine, 
+            args=[symbol.name, '1 min', self.make_callback(symbol), stop_event, None, self.make_callback(symbol)]
+        )
+        self.stop_events[symbol] = stop_event
+        thread.start()
+        return thread
+
+    def restart_thread(self, symbol: 'MarketSymbol'):
+        thread = self.threads.get(symbol)
+        if not thread:
+            return self.start_thread(symbol)
+        thread.join()
+        while thread.is_alive():
+            time.sleep(0.1)
+        return self.start_thread(symbol)
+
+    def get(self, connection_id: str, symbol: 'MarketSymbol'):
+        """Returns the corresponding Keeper for the given MarketSymbol from the pool or creates a new one."""
+        thread = self.start_thread(symbol)
+        self.threads[symbol] = thread
+        self.connections.setdefault(symbol, []).append(connection_id)
+        self.cancel_ticker_shutdown(symbol)
+
+    def drop(self, connection_id: str, symbol: 'MarketSymbol|None'):
+        """Lets the Dispatch know that a connection has been dropped."""
+        if not symbol:
+            symbol = self.find_ticker_for_connection(connection_id)
+        if not symbol:
+            return
+        if symbol not in self.connections:
+            return
+        ticker_connections = self.connections[symbol]
+        ticker_connections.remove(connection_id)
+        should_drop_ticker = True
+        if str(symbol) in KEEP_ALIVE:
+            should_drop_ticker = False
+        if not ticker_connections and should_drop_ticker:
+            if symbol in self.callbacks:
+                del self.callbacks[symbol]
+            del self.connections[symbol]
+            self.schedule_ticker_shutdown(symbol)
+
+    def schedule_ticker_shutdown(self, symbol: 'MarketSymbol'):
+        """Schedules a Ticker for shutdown."""
+        if symbol in self.shutdown_schedules:
+            return
+        timer = Timer(self.shutdown_countdown, self.drop_ticker, args=[symbol])
+        self.shutdown_schedules[symbol] = timer
+        timer.start()
+
+    def cancel_ticker_shutdown(self, symbol: 'MarketSymbol'):
+        """Cancels the scheduled shutdown of a Ticker."""
+        if symbol not in self.shutdown_schedules:
+            return
+        self.shutdown_schedules[symbol].cancel()
+        del self.shutdown_schedules[symbol]
+
+    def find_ticker_for_connection(self, connection_id: str) -> 'MarketSymbol|None':
+        ms = None
+        for k, v in self.connections.items():
+            if connection_id in v:
+                ms = k
+                break
+        return ms
+
+    def drop_ticker(self, symbol: 'MarketSymbol'):
+        event = self.stop_events.get(symbol)
+        if not event:
+            return
+        event.set()
+        del self.stop_events[symbol]
+        del self.threads[symbol]

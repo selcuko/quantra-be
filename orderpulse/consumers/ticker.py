@@ -1,43 +1,61 @@
-import asyncio
 import json
-from asgiref.sync import sync_to_async
+from urllib.parse import parse_qs
 from channels.generic.websocket import AsyncWebsocketConsumer
-from quantapi.models import MarketSymbol
-from orderpulse.pools import TickerPool
+from asgiref.sync import sync_to_async
+from orderpulse.dispatchers import TickerDispatch
+from quantapi.models import Market, MarketSymbol
 
 
 class TickerConsumer(AsyncWebsocketConsumer):
-    def get_symbol(self):
-        try:
-            symbol = self.scope['url_route']['kwargs']['symbol'].upper()
-            market = self.scope['url_route']['kwargs']['market'].upper()
-            contract = self.scope['url_route']['kwargs'].get('contract', 'SPOT').upper()
-            self.symbol = MarketSymbol.objects.get(contract_type=contract, name=symbol, market__exchange_name=market)
-            self.interface = self.symbol.market.get_interface()
-            return self.symbol
-        except MarketSymbol.DoesNotExist:
-            raise Exception(f'Symbol {symbol} not found in {market}-{contract}.')
-        except KeyError:
-            raise Exception('Market and symbol must be specified in the URI.')
+    dispatcher = TickerDispatch()
 
     async def connect(self):
+        self.group_name: str|None = None
+        self.connected = False
+        self.symbol: MarketSymbol|None = None
+
+        query_params = parse_qs(self.scope['query_string'].decode('utf-8'))
+        self.contract = query_params.get('contract', ['SPOT'])[0]
+        self.market = self.scope['url_route']['kwargs']['market']
+        self.symbol_name = self.scope['url_route']['kwargs']['symbol']
+
+        self.connection_id = str(self.channel_name)
+
         await self.accept()
+        await self.subscribe()
         self.connected = True
-        try:
-            await sync_to_async(self.get_symbol)()
-        except Exception as e:
-            await self.send(text_data=json.dumps({'error': str(e)}))
-            await self.close()
-        await sync_to_async(TickerPool.get)(self.symbol, self.callback)
 
     async def disconnect(self, close_code):
-        self.connected = False
-        await sync_to_async(TickerPool.remove_callback)(self.symbol, self.callback)
+        await sync_to_async(self.dispatcher.drop, thread_sensitive=False)(self.connection_id, self.symbol)
 
-    async def receive(self, text_data):
-        pass
+    def get_symbol(self, market, symbol) -> MarketSymbol:
+        assert self.connection_id, 'Connection ID is not available'
+        market = Market.objects.get(exchange_name=market)
+        symbol = MarketSymbol.objects.get(contract_type=self.contract, name=symbol, market=market)
+        return symbol
 
-    def callback(self, candle: dict):
-        if not self.connected:
+    async def get_symbol_key(self) -> str:
+        assert self.symbol, 'Symbol is not available'
+        key = await sync_to_async(self.symbol.key)()
+        return key
+
+    async def subscribe(self):
+        assert self.channel_layer, 'Channel layer is not available'
+        assert self.connection_id, 'Connection ID is not available'
+        if self.connected:
+            await self.send(text_data='Already connected')
             return
-        asyncio.run(self.send(text_data=json.dumps(candle, default=str)))
+        try:
+            self.symbol = await sync_to_async(self.get_symbol)(self.market, self.symbol_name)
+            await sync_to_async(self.dispatcher.get)(self.connection_id, self.symbol)
+            await self.channel_layer.group_add(await self.get_symbol_key(), self.channel_name)
+        except Market.DoesNotExist:
+            await self.send(text_data=json.dumps({ 'error': f'Market {self.market} not found', 'code': 404 }))
+            await self.close()
+        except MarketSymbol.DoesNotExist:
+            await self.send(text_data=json.dumps({ 'error': f'Symbol {self.symbol_name} not found in {self.market}-{self.contract}', 'code': 404 }))
+            await self.close()
+
+    async def update(self, event):
+        assert self.connected, 'Connection is not established'
+        await self.send(text_data=json.dumps(event, default=str))

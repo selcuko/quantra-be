@@ -271,6 +271,9 @@ class MarketSymbol(models.Model):
     def __str__(self):
         return f'{self.name} {self.market.exchange_name}-{self.contract_type}'
 
+    def key(self):
+        return f'{self.name}.{self.market.exchange_name}.{self.contract_type}'.lower()
+
     def filters(self):
         return self.market.filters(self)
 
