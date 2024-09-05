@@ -3,6 +3,7 @@ from decimal import Decimal
 import hashlib
 import hmac
 import json
+from threading import Event
 import time
 import traceback
 import requests
@@ -21,7 +22,6 @@ from models import interval_to_minutes
 if typing.TYPE_CHECKING:
     from quantapi.models import MarketAccount, MarketSymbol, Order, Market
     from loops.liveloop import LiveLoop
-    from loops.loopgroup import LoopGroup
 
 
 class OKXMarket(IMarket):
@@ -250,11 +250,11 @@ class OKXMarket(IMarket):
                 raise MarketAPIError(f'Failed to subscribe to websocket: {ack}')
             return ws
 
-    def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable, liveloop:'LiveLoop|LoopGroup|None', raw_callback:'typing.Optional[typing.Callable]'=None, ticker_callback:'typing.Optional[typing.Callable]'=None):
+    def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable, stop_event: Event, raw_callback:'typing.Optional[typing.Callable]'=None, ticker_callback:'typing.Optional[typing.Callable]'=None):
         ws = self.get_match_engine_socket(symbol)
         engine = MatchEngine(interval, callback, ticker_callback)
         retries = 30
-        while not self.stop_websocket_stream and not (liveloop and liveloop.should_stop()):
+        while not stop_event.is_set():
             try:
                 data = json.loads(ws.recv(timeout=10))
             except TimeoutError:

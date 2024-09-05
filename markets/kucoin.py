@@ -1,4 +1,5 @@
 import json
+from threading import Event
 import time
 import typing
 import uuid
@@ -7,8 +8,6 @@ from decimal import Decimal
 from typing import Literal
 if typing.TYPE_CHECKING:
     from quantapi.models import MarketSymbol, Order, MarketAccount
-    from loops.liveloop import LiveLoop
-    from loops.loopgroup import LoopGroup
 
 import pytz
 from kucoin.client import Market, Trade, User
@@ -184,16 +183,13 @@ class KucoinMarket(IMarket):
             raise ValueError(f'Error while subscribing to {symbol} on {self.name}: {ack}')
         return ws
 
-    def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable, liveloop:'LiveLoop|LoopGroup|None', raw_callback=None, ticker_callback=None):
+    def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable, stop_event:Event, raw_callback=None, ticker_callback=None):
         ws = self.get_match_engine_socket(symbol)
         last_ping = datetime.now()
         engine = MatchEngine(interval, callback, ticker_callback)
         retries = 0
 
-        while not self.stop_websocket_stream:
-            if liveloop and liveloop.should_stop():
-                self.stop_websocket_stream = True
-                break
+        while not stop_event.is_set():
             if last_ping < datetime.now() - timedelta(seconds=30):
                 ws.send(json.dumps({'id': str(uuid.uuid4()), 'type': 'ping'}))
                 last_ping = datetime.now()

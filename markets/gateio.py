@@ -3,6 +3,7 @@ from decimal import Decimal
 import hashlib
 import hmac
 import json
+from threading import Event
 import time
 import traceback
 import requests
@@ -230,12 +231,12 @@ class GateIOMarket(IMarket):
         ack = json.loads(ws.recv())
         return ws
 
-    def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable, liveloop:'LiveLoop|None', raw_callback:typing.Optional[typing.Callable]=None, ticker_callback:typing.Optional[typing.Callable]=None):
+    def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable, stop_event:Event, raw_callback:typing.Optional[typing.Callable]=None, ticker_callback:typing.Optional[typing.Callable]=None):
         ws = self.get_match_engine_socket(symbol)
         last_ping = timezone.now()
         engine = MatchEngine(interval, callback, ticker_callback)
         retries = 30
-        while not self.stop_websocket_stream and not (liveloop and liveloop.should_stop()):
+        while not stop_event.is_set():
             if last_ping - timezone.now() > timedelta(seconds=30):
                 ws.send(json.dumps({'time': self.format_timestamp(timezone.now()), 'channel': 'spot.ping'}))
                 last_ping = timezone.now()
