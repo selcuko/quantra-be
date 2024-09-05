@@ -10,7 +10,6 @@ if typing.TYPE_CHECKING:
     from loops.liveloop import LiveLoop
     from loops.loopgroup import LoopGroup
 
-
 import pytz
 from kucoin.client import Market, Trade, User
 from kucoin_futures.client import Market as FuturesMarket
@@ -29,7 +28,7 @@ from websockets.sync.client import ClientConnection
 
 class KucoinMarket(IMarket):
     name = 'KuCoin'
-    
+
     def __init__(self, config:dict, account:'MarketAccount|None', market:'Market|None'=None) -> None:
         if not config:
             config = {}

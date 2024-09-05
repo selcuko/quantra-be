@@ -15,6 +15,10 @@ KEEP_ALIVE = [
 ]
 
 
+class ConnectionDispatch:
+    """Base class for managing the relation between the Consumers and real-time data providers."""
+
+
 class KeeperDispatch:
     """Manages the relation between the Consumers and the Keepers."""
     def __init__(self):
@@ -89,12 +93,12 @@ class KeeperDispatch:
         del self.shutdown_schedules[keeper]
 
     def find_keeper_for_connection(self, connection_id: str) -> Keeper|None:
+        keeper = None
         for k, v in self.connections.items():
             if connection_id in v:
                 keeper = k
                 break
         return keeper
-
 
     @staticmethod
     def drop_keeper(keeper: Keeper):

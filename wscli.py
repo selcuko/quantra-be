@@ -2,7 +2,7 @@ import json
 from pprint import pprint
 from websockets.sync.client import connect
 
-ws = connect('ws://localhost:8000/ws/miniorderbook/BINANCE/BTC-USDT/?contract=FUTURES')
+ws = connect('ws://localhost:8000/ws/ticker/BINANCE/BTC-USDT/')
 while True:
     try:
         try:
