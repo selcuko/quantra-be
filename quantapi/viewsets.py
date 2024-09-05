@@ -3,7 +3,6 @@ import threading
 
 from django.db.models import Prefetch, Count, Q
 from django_filters.rest_framework import DjangoFilterBackend
-from pytest import mark
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import MethodNotAllowed
@@ -422,6 +421,9 @@ class TagViewSet(viewsets.ModelViewSet):
     serializer_class = TagSerializer
     pagination_class = None
 
+    def get_queryset(self):
+        return super().get_queryset().prefetch_related('symbols')
+
 
 class KeeperView(viewsets.ViewSet):
     def list(self, request):
@@ -437,3 +439,9 @@ class KeeperView(viewsets.ViewSet):
             }
             payloads.append(payload)
         return Response(payloads)
+
+
+class CategoryViewSet(viewsets.ModelViewSet):
+    class Meta:
+        model = Tag
+        fields = ['name']

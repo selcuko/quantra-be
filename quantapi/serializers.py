@@ -127,7 +127,24 @@ class InlineMarketSymbolSerializer(serializers.HyperlinkedModelSerializer):
 class TagSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = Tag
-        fields = ['name', 'description', 'is_ecosystem', 'is_chain', 'is_portfolio', 'weight']
+        fields = ['name', 'description', 'volume', 'market_cap', 'is_ecosystem', 'is_chain', 'is_portfolio', 'weight', 'best_symbols']
+
+    best_symbols = serializers.SerializerMethodField()
+
+    def get_best_symbols(self, obj):
+        return InlineGlobalSymbolSerializer(obj.symbols.order_by('-volume')[:3], many=True, context={'request': self.context['request']}).data
+
+
+class InlineTagSerializer(serializers.HyperlinkedModelSerializer):
+    class Meta:
+        model = Tag
+        fields = ['name', 'weight']
+
+
+class InlineGlobalSymbolSerializer(serializers.HyperlinkedModelSerializer):
+    class Meta:
+        model = GlobalSymbol
+        fields = ['id', 'cid', 'name', 'display', 'base', 'quote', 'markets', 'image']
 
 
 class GlobalSymbolSerializer(serializers.HyperlinkedModelSerializer):
@@ -138,7 +155,7 @@ class GlobalSymbolSerializer(serializers.HyperlinkedModelSerializer):
                   'circulating_supply', 'max_supply', 'total_supply', 'last_updated', 'price', 'supply_ratio', 'high_24h',
                   'low_24h', 'price_change_24h', 'price_change_percentage_24h',
                   'supply_ratio', 'ath_prox', 'atl_prox', 'volume24h_to_mcap', 'image', 'url']
-    tags = TagSerializer(many=True)
+    tags = InlineTagSerializer(many=True)
     symbols = InlineMarketSymbolSerializer(many=True)
 
 

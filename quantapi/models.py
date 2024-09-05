@@ -997,6 +997,15 @@ class Tag(models.Model):
             self.weight = self.symbols.count()
         super().save(*args, **kwargs)
 
+    def volume(self):
+        symbols = self.symbols.filter(volume__gte=1).values_list('volume', flat=True)
+        return sum(symbols)
+
+    def market_cap(self):
+        symbols = self.symbols.filter(market_cap__gte=1).values_list('market_cap', flat=True)
+        return sum(symbols)
+
+
     class Meta:
         verbose_name_plural = 'Tags'
         ordering = ['-weight', 'name']
