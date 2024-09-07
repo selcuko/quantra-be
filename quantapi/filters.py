@@ -88,6 +88,8 @@ class GlobalSymbolFilter(filters.FilterSet):
     )
     contract_type = filters.CharFilter(field_name='contract_type', lookup_expr='iexact')
     name = filters.CharFilter(field_name='name', lookup_expr='icontains')
+    base = filters.CharFilter(field_name='base', lookup_expr='icontains')
+    quote = filters.CharFilter(field_name='quote', lookup_expr='iexact')
     tags = filters.CharFilter(method='filter_tags')
     market = filters.CharFilter(method='filter_market')
     is_favorite = filters.BooleanFilter(field_name='favorite')
@@ -138,3 +140,4 @@ class GlobalSymbolFilter(filters.FilterSet):
     class Meta:
         model = GlobalSymbol
         fields = ['market', 'name', 'base', 'quote', 'supply_ratio', 'sort', 'contract_type', 'tags', 'is_favorite']
+    
