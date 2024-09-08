@@ -183,12 +183,7 @@ class SessionSerializer(serializers.HyperlinkedModelSerializer):
                   'strategy', 'status', 'last_price', 'last_kline_timestamp', 
                   'last_heartbeat', 'capital', 'assets', 'initial_capital', 
                   'initial_assets', 'buy_enabled', 'sell_enabled', 'account', 
-                  'equity', 'orders', 'signals', 'thread', 'health', 'url']
-
-    def get_thread(self, obj):
-        if obj.thread:
-            return ThreadSerializer(obj.thread).data
-        return {}
+                  'equity', 'orders', 'signals', 'health', 'url']
 
     def validate(self, data):
         instance = self.instance
@@ -310,38 +305,6 @@ class SubscriptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Subscription
         fields = '__all__'
-
-
-class ThreadSerializer(serializers.Serializer):
-    ident = serializers.CharField()
-    is_alive = serializers.BooleanField()
-    name = serializers.CharField()
-    source = serializers.SerializerMethodField()
-
-    def get_source(self, obj):
-        if obj.name.startswith('LiveLoop-'):
-            return 'LiveLoop'
-        if obj.name.startswith('LoopGroup-'):
-            return 'LoopGroup'
-        return None
-
-
-class LiveLoopSerializer(serializers.Serializer):
-    symbol = serializers.CharField()
-    market = serializers.CharField()
-    account = MarketAccountSerializer()
-    #group = serializers.IntegerField()
-    session = serializers.IntegerField(source='session.pk')
-    thread = ThreadSerializer()
-
-
-class LoopGroupSerializer(serializers.Serializer):
-    symbol = serializers.CharField()
-    market = serializers.CharField()
-    account = MarketAccountSerializer()
-    group = serializers.HyperlinkedRelatedField(view_name='sessiongroup-detail', read_only=True)
-    session = serializers.HyperlinkedRelatedField(view_name='session-detail', read_only=True)
-    thread = ThreadSerializer()
 
 
 class ContactFormSerializer(serializers.HyperlinkedModelSerializer):

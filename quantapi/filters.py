@@ -1,6 +1,6 @@
 import django_filters as filters
-from django.db.models import Q
-from .models import GlobalSymbol, MarketAccount, MarketSymbol, Session, SessionGroup
+from django.db.models import Q, Count
+from .models import GlobalSymbol, MarketAccount, MarketSymbol, Session, SessionGroup, Tag
 
 
 class MarketAccountFilter(filters.FilterSet):
@@ -140,4 +140,16 @@ class GlobalSymbolFilter(filters.FilterSet):
     class Meta:
         model = GlobalSymbol
         fields = ['market', 'name', 'base', 'quote', 'supply_ratio', 'sort', 'contract_type', 'tags', 'is_favorite']
-    
+
+
+class TagFilter(filters.FilterSet):
+    class Meta:
+        model = Tag
+        fields = ['symbols', 'name']
+
+    symbols = filters.CharFilter(method='filter_symbols')
+    name = filters.CharFilter(field_name='name', lookup_expr='icontains')
+
+    def filter_symbols(self, queryset, name, value):
+        cids = value.split(",")
+        return queryset.filter(symbols__cid__in=cids).annotate(symbol_count=Count('symbols')).filter(symbol_count=len(cids)).distinct()

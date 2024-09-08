@@ -1,3 +1,4 @@
+from functools import cached_property
 import json
 import threading
 import typing
@@ -280,7 +281,7 @@ class MarketSymbol(models.Model):
     def available_contracts(self):
         return MarketSymbol.objects.filter(name=self.name, market=self.market).values_list('contract_type', flat=True)
 
-    @property
+    @cached_property
     def volume(self):
         # XXX revisit
         if not self.symbol:

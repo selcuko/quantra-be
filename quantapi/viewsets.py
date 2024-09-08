@@ -15,22 +15,22 @@ from order import OrderManager
 from orderpulse.consumers.miniorderbook import MiniOrderbookConsumer
 from orderpulse.keeper import KeeperPool
 from quantapi.filters import (GlobalSymbolFilter, MarketAccountFilter, MarketSymbolFilter,
-                              SessionFilter, SessionGroupFilter)
+                              SessionFilter, SessionGroupFilter, TagFilter)
 from quantapi.models import (ContactForm, GlobalSymbol, GroupOrder, Market,
                              MarketAccount, MarketSymbol, Order,
                              Session, SessionGroup, Signal, Strategy,
                              Subscription, Tag)
 from quantapi.serializers import (ContactFormSerializer, DraftSessionSerializer,
                                   GlobalSymbolSerializer, GroupOrderSerializer,
-                                  LiveLoopSerializer,
-                                  LoopGroupSerializer, MarketAccountSerializer,
+                                  
+                                  MarketAccountSerializer,
                                   MarketSerializer, MarketSymbolSerializer, NewAccountSerializer,
                                   OrderPlacementSerializer, OrderSerializer,
                                   SessionGroupSerializer,
                                   SessionOrderPlacementSerializer,
                                   SessionSerializer, SessionUpdateSerializer,
                                   SignalSerializer, StrategySerializer,
-                                  SubscriptionSerializer, TagSerializer, ThreadSerializer)
+                                  SubscriptionSerializer, TagSerializer)
 from quantapi.validations import validate_session_can_start
 
 
@@ -122,7 +122,7 @@ class GlobalSymbolViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_class = GlobalSymbolFilter
 
     def get_queryset(self):
-        return GlobalSymbol.objects.prefetch_related('tags', 'symbols').all()
+        return GlobalSymbol.objects.prefetch_related('tags', 'symbols__market').all()
 
     @action(detail=True, methods=['get', 'post'])
     def refresh(self, request, pk):
@@ -345,45 +345,6 @@ class SubscriptionViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = SubscriptionSerializer
     filter_backends = [DjangoFilterBackend]
 
-class LiveLoopViewSet(viewsets.ViewSet):
-    def list(self, request):
-        return Response(LiveLoopSerializer(LIVELOOPS.values(), many=True).data)
-
-
-class LoopGroupViewSet(viewsets.ViewSet):
-    def list(self, request):
-        return Response(LoopGroupSerializer(LOOPGROUPS.values(), many=True).data)
-
-
-class HealthViewSet(viewsets.ViewSet):
-    def list(self, request):
-        sessions = Session.objects.filter(status=Session.Status.ONGOING, group__isnull=True)
-        groups = SessionGroup.objects.filter(status=SessionGroup.Status.ONGOING)
-        died_threads = []
-        died_threads.extend([session.pk for session in sessions if not session.thread])
-        died_threads.extend([group.pk for group in groups if not group.thread])
-        return Response({
-            'sessions': sessions.count(),
-            'groups': groups.count(),
-            'health': 'OK' if not died_threads else 'DEGRADED',
-            'died_threads': died_threads
-        })
-
-
-class ThreadViewSet(viewsets.ViewSet):
-    def list(self, request):
-        threads = threading.enumerate()
-        serializer = ThreadSerializer(threads, many=True)
-        return Response(serializer.data)
-
-    def retrieve(self, request, pk):
-        try:
-            thread = next(t for t in threading.enumerate() if t.ident == int(pk))
-        except StopIteration:
-            return Response({'detail': 'Thread not found, ensure it\'s an alive thread.'}, status=404)
-        serializer = ThreadSerializer(thread)
-        return Response(serializer.data)
-
 
 class CandlesViewSet(viewsets.ViewSet):
     def list(self, request):
@@ -419,10 +380,12 @@ class ContactFormViewSet(viewsets.ReadOnlyModelViewSet):
 class TagViewSet(viewsets.ModelViewSet):
     queryset = Tag.objects.all()
     serializer_class = TagSerializer
-    pagination_class = None
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = TagFilter
+    lookup_field = 'name'
 
     def get_queryset(self):
-        return super().get_queryset().prefetch_related('symbols')
+        return super().get_queryset().prefetch_related('symbols__symbols')
 
 
 class KeeperView(viewsets.ViewSet):
