@@ -125,11 +125,12 @@ class GlobalSymbolFilter(filters.FilterSet):
 
     def filter_market(self, queryset, name, value):
         query = Q()
+        queryset = queryset.exclude(available_markets='[]')
         if value.lower() == 'notnull':
-            return queryset.exclude(available_markets='[]')
+            return queryset
         for market in value.split(","):
             query &= Q(available_markets__icontains=market)
-        return queryset.filter(query)
+        return queryset.filter(query).annotate(symbol_count=Count('symbols', filter=Q(symbol=self))).filter(symbol_count__gt=0)
 
     def filter_tags(self, queryset, name, value):
         query = Q()

@@ -154,7 +154,7 @@ class GlobalSymbolSerializer(serializers.HyperlinkedModelSerializer):
                   'is_stablecoin', 'ath', 'atl', 'ath_ratio', 'atl_ratio', 'ath_date', 'atl_date', 'volume', 'market_cap',
                   'circulating_supply', 'max_supply', 'total_supply', 'last_updated', 'price', 'supply_ratio', 'high_24h',
                   'low_24h', 'price_change_24h', 'price_change_percentage_24h',
-                  'supply_ratio', 'ath_prox', 'atl_prox', 'volume24h_to_mcap', 'image', 'url']
+                  'supply_ratio', 'ath_prox', 'atl_prox', 'volume24h_to_mcap', 'image', 'url', 'display_name', 'markets']
     tags = InlineTagSerializer(many=True)
     symbols = InlineMarketSymbolSerializer(many=True)
 

@@ -860,6 +860,13 @@ class GlobalSymbol(models.Model):
     issues = GenericRelation(Issue)
 
     @property
+    def display_name(self):
+        if self.display:
+            return self.display
+        payload = json.loads(self.coingecko_response or '{}')
+        return payload.get('name')
+
+    @property
     def markets(self):
         return json.loads(self.available_markets)
 
