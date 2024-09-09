@@ -120,6 +120,7 @@ class GlobalSymbolViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = GlobalSymbolSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_class = GlobalSymbolFilter
+    ordering = ['metrics__market_cap']
 
     def get_queryset(self):
         return GlobalSymbol.objects.prefetch_related('tags', 'symbols__market').all()

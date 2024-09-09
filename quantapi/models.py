@@ -140,7 +140,7 @@ class MarketCredentials(models.Model):
                 data = json.dumps(json.loads(self.encrypted))
                 fernet = Fernet(settings.SYMKEY)
                 self.encrypted = fernet.encrypt(data.encode()).decode()
-            except:
+            except json.JSONDecodeError:
                 pass
         create_market_account = not bool(self.pk)
         super().save(*args, **kwargs)
@@ -152,7 +152,7 @@ class MarketCredentials(models.Model):
         try:
             fernet = Fernet(settings.SYMKEY)
             return json.loads(fernet.decrypt(self.encrypted.encode()).decode())
-        except:
+        except json.JSONDecodeError:
             logger.error(f'Could not decrypt credentials for {self.market.exchange_name}', exc_info=True)
             return {}
 
@@ -221,6 +221,52 @@ class MarketAccount(models.Model):
         return
 
 
+class MarketSymbolMetrics(models.Model):
+    symbol = models.OneToOneField('MarketSymbol', on_delete=models.CASCADE, related_name='metrics')
+
+    # first hand metrics - from data providers (e.g. coingecko) or exchanges
+    volume = models.FloatField(null=True, blank=True, help_text='Volume in USD, rolling 24 hours')
+    market_cap = models.FloatField(null=True, blank=True, help_text='Market capitalization in USD')
+    market_cap_change_24h = models.FloatField(null=True, blank=True, help_text='Market cap change in the last 24 hours')
+    market_cap_change_percentage_24h = models.FloatField(null=True, blank=True, help_text='Market cap change percentage in the last 24 hours')
+    ath = models.FloatField(null=True, blank=True, help_text='All time high in USD', verbose_name='ATH')
+    atl = models.FloatField(null=True, blank=True, help_text='All time low in USD', verbose_name='ATL')
+    ath_date = models.DateTimeField(null=True, blank=True, help_text='Date of all time high', verbose_name='ATH Date')
+    atl_date = models.DateTimeField(null=True, blank=True, help_text='Date of all time low', verbose_name='ATL Date')
+    ath_prox = models.FloatField(null=True, blank=True, help_text='Proximity to all time high (0-1)', verbose_name='ATH Proximity')
+    atl_prox = models.FloatField(null=True, blank=True, help_text='Proximity to all time low (0-1)', verbose_name='ATL Proximity')
+    ath_ratio = models.FloatField(null=True, blank=True, help_text='ATH / Current price', verbose_name='ATH Ratio')
+    atl_ratio = models.FloatField(null=True, blank=True, help_text='Current price / ATL', verbose_name='ATL Ratio')
+    circulating_supply = models.FloatField(null=True, blank=True)
+    total_supply = models.FloatField(null=True, blank=True)
+    max_supply = models.FloatField(null=True, blank=True)
+    price = models.FloatField(null=True, blank=True, help_text='Current price in USD')
+    price_change_24h = models.FloatField(null=True, blank=True, help_text='Price change in the last 24 hours (rolling)')
+    price_change_percentage_24h = models.FloatField(null=True, blank=True)
+    price_high_24h = models.FloatField(null=True, blank=True, help_text='Highest price in the last 24 hours')
+    price_low_24h = models.FloatField(null=True, blank=True, help_text='Lowest price in the last 24 hours')
+
+    # derived metrics
+    supply_ratio = models.FloatField(null=True, blank=True, help_text='Circulating supply / Total supply')
+    volume24h_to_mcap = models.FloatField(null=True, blank=True, help_text='Volume 24H / Market cap')
+    is_stablecoin = models.BooleanField(default=False)
+
+    raw_payload = models.TextField(null=True, blank=True)
+    last_updated = models.DateTimeField(null=True, blank=True, auto_now=True, help_text='Last time this symbol was updated in our system')
+    data_updated = models.DateTimeField(null=True, blank=True, help_text='Last time this symbol was fetched from the data source')
+
+    def __str__(self):
+        return f'{self.symbol!r} Metrics'
+
+    def calculate(self):
+        self.supply_ratio = (self.circulating_supply / self.total_supply) if self.circulating_supply and self.total_supply else None
+        self.ath_prox = ((self.ath - self.price) / (self.ath - self.atl)) if self.ath != self.atl and self.ath and self.atl and self.price else None
+        self.atl_prox = ((self.price - self.atl) / (self.ath - self.atl)) if self.ath != self.atl and self.ath and self.atl and self.price else None
+        self.ath_ratio = ((self.ath - self.price) * 100 / self.ath) if self.ath and self.price else None
+        self.atl_ratio = (self.price / self.atl) if self.atl and self.price else None
+        self.volume24h_to_mcap = (self.volume / self.market_cap) if self.volume and self.market_cap else None
+
+
 class MarketSymbol(models.Model):
     class ContractType(models.TextChoices):
         SPOT = 'SPOT', 'Spot'
@@ -230,7 +276,7 @@ class MarketSymbol(models.Model):
             models.UniqueConstraint(fields=['name', 'market', 'contract_type'], name='unique_symbol')
         ]
         ordering = ['market__exchange_name', 'name']
-    symbol = models.ForeignKey('GlobalSymbol', on_delete=models.PROTECT, related_name='symbols', null=True, blank=True)
+    symbol = models.ForeignKey('GlobalSymbol', on_delete=models.SET_NULL, related_name='symbols', null=True, blank=True)
     market = models.ForeignKey(Market, on_delete=models.PROTECT, related_name='symbols')
     base = models.CharField(max_length=30)
     quote = models.CharField(max_length=30)
@@ -242,15 +288,7 @@ class MarketSymbol(models.Model):
     details = models.TextField(null=True, blank=True, help_text='JSON string of symbol detail from market')
     sessions: models.QuerySet['Session']
     contract_type = models.CharField(max_length=30, choices=ContractType.choices, default=ContractType.SPOT)
-
-    hour4_volume = models.FloatField(null=True, blank=True, help_text='Volume in the last 4 hours')
-    hour4_volume_date = models.DateTimeField(null=True, blank=True, help_text='Start date of the candle used for last 4 hour volume')
-    day10_volume = models.FloatField(null=True, blank=True, help_text='Volume in the last 10 days')
-    day10_volume_date = models.DateTimeField(null=True, blank=True, help_text='Start date of the candle used for last 10 day volume')
-    day30_volume = models.FloatField(null=True, blank=True, help_text='Volume in the last 30 days')
-    day30_volume_date = models.DateTimeField(null=True, blank=True, help_text='Start date of the candle used for last 30 day volume')
-    day60_volume = models.FloatField(null=True, blank=True, help_text='Volume in the last 60 days')
-    day60_volume_date = models.DateTimeField(null=True, blank=True, help_text='Start date of the candle used for last 60 day volume')
+    metrics: models.OneToOneField['MarketSymbolMetrics | None']
 
     def save(self, *args, **kwargs):
         if not self.name and self.base and self.quote:
@@ -374,7 +412,7 @@ class Session(models.Model):
     def equity(self):
         try:
             last_price = self.last_price or self.group.last_price if (self.group and self.group.last_price) else 0
-        except:
+        except (AttributeError, ZeroDivisionError):
             last_price = 0
         return round(self.capital + self.assets * last_price, 2)
 
@@ -412,7 +450,8 @@ class Session(models.Model):
             logger.warning(f'Assets changed from {self.assets} to {new_assets} (SessionID:{self.pk})')
         self.capital = new_capital
         self.assets = new_assets
-        if save: self.save()
+        if save:
+            self.save()
 
     def save(self, **kwargs):
         from quantapi.validations import validate_session_can_save
@@ -816,48 +855,72 @@ class Backtest(models.Model):
         return f'{self.symbol} {self.market} {self.status}'
 
 
+class GlobalSymbolMetrics(models.Model):
+    symbol = models.OneToOneField('GlobalSymbol', on_delete=models.CASCADE, related_name='metrics')
+
+    # first hand metrics - from data providers (e.g. coingecko) or exchanges
+    volume = models.FloatField(null=True, blank=True, help_text='Volume in USD, rolling 24 hours')
+    market_cap = models.FloatField(null=True, blank=True, help_text='Market capitalization in USD')
+    market_cap_change_24h = models.FloatField(null=True, blank=True, help_text='Market cap change in the last 24 hours')
+    market_cap_change_percentage_24h = models.FloatField(null=True, blank=True, help_text='Market cap change percentage in the last 24 hours')
+    ath = models.FloatField(null=True, blank=True, help_text='All time high in USD', verbose_name='ATH')
+    atl = models.FloatField(null=True, blank=True, help_text='All time low in USD', verbose_name='ATL')
+    ath_date = models.DateTimeField(null=True, blank=True, help_text='Date of all time high', verbose_name='ATH Date')
+    atl_date = models.DateTimeField(null=True, blank=True, help_text='Date of all time low', verbose_name='ATL Date')
+    ath_prox = models.FloatField(null=True, blank=True, help_text='Proximity to all time high (0-1)', verbose_name='ATH Proximity')
+    atl_prox = models.FloatField(null=True, blank=True, help_text='Proximity to all time low (0-1)', verbose_name='ATL Proximity')
+    ath_ratio = models.FloatField(null=True, blank=True, help_text='ATH / Current price', verbose_name='ATH Ratio')
+    atl_ratio = models.FloatField(null=True, blank=True, help_text='Current price / ATL', verbose_name='ATL Ratio')
+    circulating_supply = models.FloatField(null=True, blank=True)
+    total_supply = models.FloatField(null=True, blank=True)
+    max_supply = models.FloatField(null=True, blank=True)
+    price = models.FloatField(null=True, blank=True, help_text='Current price in USD')
+    price_change_24h = models.FloatField(null=True, blank=True, help_text='Price change in the last 24 hours (rolling)')
+    price_change_percentage_24h = models.FloatField(null=True, blank=True)
+    price_high_24h = models.FloatField(null=True, blank=True, help_text='Highest price in the last 24 hours')
+    price_low_24h = models.FloatField(null=True, blank=True, help_text='Lowest price in the last 24 hours')
+
+    # derived metrics
+    supply_ratio = models.FloatField(null=True, blank=True, help_text='Circulating supply / Total supply')
+    volume24h_to_mcap = models.FloatField(null=True, blank=True, help_text='Volume 24H / Market cap')
+    is_stablecoin = models.BooleanField(default=False)
+
+    raw_payload = models.TextField(null=True, blank=True)
+    last_updated = models.DateTimeField(null=True, blank=True, auto_now=True, help_text='Last time this symbol was updated in our system')
+    data_updated = models.DateTimeField(null=True, blank=True, help_text='Last time this symbol was fetched from the data source')
+
+    def __str__(self):
+        return f'{self.symbol!r} Metrics'
+
+    def calculate(self):
+        self.supply_ratio = (self.circulating_supply / self.total_supply) if self.circulating_supply and self.total_supply else None
+        self.ath_prox = ((self.ath - self.price) / (self.ath - self.atl)) if self.ath != self.atl and self.ath and self.atl and self.price else None
+        self.atl_prox = ((self.price - self.atl) / (self.ath - self.atl)) if self.ath != self.atl and self.ath and self.atl and self.price else None
+        self.ath_ratio = ((self.ath - self.price) * 100 / self.ath) if self.ath and self.price else None
+        self.atl_ratio = (self.price / self.atl) if self.atl and self.price else None
+        self.volume24h_to_mcap = (self.volume / self.market_cap) if self.volume and self.market_cap else None
+
+
 class GlobalSymbol(models.Model):
+    class Meta:
+        ordering = ('-metrics__market_cap',)
+
     class DataSource(models.TextChoices):
         COINGECKO =     'COINGECKO',     'CoinGecko'
         COINMARKETCAP = 'COINMARKETCAP', 'CoinMarketCap'
 
     cid = models.CharField(max_length=200, unique=True)
-    name = models.CharField(max_length=200)
     display = models.CharField(max_length=200)
     base = models.CharField(max_length=200)
-    quote = models.CharField(max_length=200, default='USDT')
+    description = models.TextField(null=True, blank=True)
+    homepage = models.URLField(null=True, blank=True)
     data_source = models.CharField(max_length=30, choices=DataSource.choices, default=DataSource.COINGECKO)
     coingecko_response = models.TextField(null=True, blank=True)
     coinmarketcap_response = models.TextField(null=True, blank=True)
     image = models.URLField(null=True, blank=True, max_length=1024, help_text='URL to image of this symbol')
-    is_favorite = models.BooleanField(default=False)
-    available_markets = models.TextField(default='[]', help_text='JSON string of available markets for this symbol')
-    tags_flat = models.TextField(null=True, blank=True, help_text='JSON string of tags for this symbol')
-    is_stablecoin = models.BooleanField(null=True, blank=True)
     tags = models.ManyToManyField('Tag', related_name='symbols')
-    ath = models.FloatField(null=True, blank=True, help_text='ATH')
-    atl = models.FloatField(null=True, blank=True, help_text='ATL')
-    ath_date = models.DateTimeField(null=True, blank=True)
-    atl_date = models.DateTimeField(null=True, blank=True)
-    volume = models.FloatField(null=True, blank=True, help_text='Total volume in USD')
-    market_cap = models.FloatField(null=True, blank=True, help_text='Market capitalization in USD')
-    circulating_supply = models.FloatField(null=True, blank=True)
-    total_supply = models.FloatField(null=True, blank=True)
-    max_supply = models.FloatField(null=True, blank=True)
-    last_updated = models.DateTimeField(null=True, blank=True, auto_now=True, help_text='Last time this symbol was updated')
-    price = models.FloatField(null=True, blank=True, help_text='Current price')
-    price_change_24h = models.FloatField(null=True, blank=True, help_text='Price change in the last 24 hours')
-    price_change_percentage_24h = models.FloatField(null=True, blank=True, help_text='Price change percentage in the last 24 hours')
-    high_24h = models.FloatField(null=True, blank=True, help_text='Highest price in the last 24 hours')
-    low_24h = models.FloatField(null=True, blank=True, help_text='Lowest price in the last 24 hours')
-    data_updated = models.DateTimeField(null=True, blank=True, help_text='Last time this symbol was updated in the data source')
-    supply_ratio = models.FloatField(null=True, blank=True, help_text='Circulating supply / Total supply')
-    ath_prox = models.FloatField(null=True, blank=True, help_text='Proximity to all time high')
-    ath_ratio = models.FloatField(null=True, blank=True, help_text='ATH / Current price')
-    atl_prox = models.FloatField(null=True, blank=True, help_text='Proximity to all time low')
-    atl_ratio = models.FloatField(null=True, blank=True, help_text='Current price / ATL')
-    volume24h_to_mcap = models.FloatField(null=True, blank=True, help_text='Volume 24H / Market cap')
-    issues = GenericRelation(Issue)
+    symbols: models.QuerySet[MarketSymbol]
+    metrics: models.OneToOneField[GlobalSymbolMetrics | None]
 
     @property
     def display_name(self):
@@ -868,7 +931,7 @@ class GlobalSymbol(models.Model):
 
     @property
     def markets(self):
-        return json.loads(self.available_markets)
+        return list(self.spot_symbols.values_list('market__exchange_name', flat=True))
 
     @property
     def markets_display(self):
@@ -877,6 +940,10 @@ class GlobalSymbol(models.Model):
     @markets.setter
     def markets(self, value):
         self.available_markets = json.dumps(value)
+    
+    @property
+    def spot_symbols(self):
+        return MarketSymbol.objects.filter(symbol=self, contract_type=MarketSymbol.ContractType.SPOT)
 
     def add_market(self, market, save=True):
         markets = self.markets
@@ -885,25 +952,6 @@ class GlobalSymbol(models.Model):
             self.markets = markets
             if save:
                 self.save()
-
-    def mainnet_symbols(self):
-        return MarketSymbol.objects.filter(symbol=self)
-
-    @property
-    def tags_display(self):
-        self.tags_flat = self.tags_flat or '[]'
-        self.tags_flat = self.tags_flat.replace("'", '"')
-        tags = json.loads(self.tags_flat or '[]')
-        tags = [t.replace('-', ' ') for t in tags]
-        return ', '.join(tags)
-
-    def calculate(self):
-        self.supply_ratio = (self.circulating_supply / self.total_supply) if self.circulating_supply and self.total_supply else None
-        self.ath_prox = ((self.ath - self.price) / (self.ath - self.atl)) if self.ath != self.atl and self.ath and self.atl and self.price else None
-        self.atl_prox = ((self.price - self.atl) / (self.ath - self.atl)) if self.ath != self.atl and self.ath and self.atl and self.price else None
-        self.ath_ratio = ((self.ath - self.price) * 100 / self.ath) if self.ath and self.price else None
-        self.atl_ratio = (self.price / self.atl) if self.atl and self.price else None
-        self.volume24h_to_mcap = (self.volume / self.market_cap) if self.volume and self.market_cap else None
 
     def set_markets(self, ms=None, save=True):
         if ms:
@@ -918,78 +966,37 @@ class GlobalSymbol(models.Model):
         if save:
             self.save()
 
-    def save(self, *args, **kwargs):
-        self.calculate()
-        self.assign_tags()
-        super().save(*args, **kwargs)
-
-    def assign_tags(self):
-        tags = json.loads(self.tags_flat or '[]')
-        for tag in tags:
-            tag_obj, created = Tag.objects.get_or_create(name=tag)
-            self.tags.add(tag_obj)
-
     def __str__(self):
-        return f'{self.name} {self.data_source}'
-
-    @staticmethod
-    def batch_to_json(symbols):
-        return [s.to_json() for s in symbols]
-
-    def to_json(self):
-        return {
-            'cid': self.cid,
-            'name': self.name,
-            'display': self.display,
-            'base': self.base,
-            'quote': self.quote,
-            'data_source': self.data_source,
-            'image': self.image,
-            'ath': self.ath,
-            'atl': self.atl,
-            'ath_date': self.ath_date,
-            'atl_date': self.atl_date,
-            'ath_ratio': self.ath_ratio,
-            'atl_ratio': self.atl_ratio,
-            'volume': self.volume,
-            'market_cap': self.market_cap,
-            'circulating_supply': self.circulating_supply,
-            'total_supply': self.total_supply,
-            'max_supply': self.max_supply,
-            'supply_ratio': self.supply_ratio,
-            'last_updated': self.last_updated,
-            'price_change_24h': self.price_change_24h,
-            'price_change_percentage_24h': self.price_change_percentage_24h,
-            'high_24h': self.high_24h,
-            'low_24h': self.low_24h,
-            'data_updated': self.data_updated,
-            'ath_prox': self.ath_prox,
-            'atl_prox': self.atl_prox,
-            'volume24h_to_mcap': self.volume24h_to_mcap,
-            'is_favorite': self.is_favorite,
-            'markets': self.markets,
-            'price': self.price,
-        }
+        return f'{self.base} {self.data_source}'
 
     def refresh(self):
-        cg = CoinGecko()
-        coin = cg.coin_by_cid(self.cid)
-        with open('coin.json', 'w') as f:
-            json.dump(coin, f)
-        for field, value in cg.full_payload_to_dict(coin).items():
-            setattr(self, field, value)
-        self.save()
+        from metrichub import update_symbol
+        update_symbol(self)
+
+
+class TagMetrics(models.Model):
+    tag = models.OneToOneField('Tag', on_delete=models.CASCADE, related_name='metrics')
+    volume = models.FloatField(null=True, blank=True)
+    market_cap = models.FloatField(null=True, blank=True)
+    market_cap_change_24h = models.FloatField(null=True, blank=True)
+    last_updated = models.DateTimeField(auto_now=True, help_text='Last time this tag was updated in our system')
+    data_updated = models.DateTimeField(null=True, blank=True, help_text='Last time this tag was fetched from the data source')
+
+    def __str__(self):
+        return f'{self.tag!r} Metrics'
 
 
 class Tag(models.Model):
     '''M:M relationship with GlobalSymbol'''
     name = models.CharField(max_length=100, unique=True)
+    display = models.CharField(max_length=100, null=True, blank=True)
     description = models.TextField(null=True, blank=True)
     is_ecosystem = models.BooleanField(default=False)
     is_chain = models.BooleanField(default=False)
     is_portfolio = models.BooleanField(default=False)
     weight = models.IntegerField(default=0)
     symbols: models.QuerySet[GlobalSymbol]
+    metrics: models.OneToOneField[TagMetrics | None]
 
     def __str__(self):
         return self.name

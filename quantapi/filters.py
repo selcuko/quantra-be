@@ -69,23 +69,6 @@ class SessionGroupFilter(filters.FilterSet):
 
 
 class GlobalSymbolFilter(filters.FilterSet):
-    sort = filters.OrderingFilter(
-        fields=(
-            ('market_cap', 'market_cap'),
-            ('volume', 'volume'),
-            ('price_change_percentage_24h', 'price_change_percentage_24h'),
-            ('supply_ratio', 'supply_ratio'),
-            ('ath', 'ath'),
-            ('ath_date', 'ath_date'),
-            ('ath_prox', 'ath_prox'),
-            ('ath_ratio', 'ath_ratio'),
-            ('atl', 'atl'),
-            ('atl_date', 'atl_date'),
-            ('atl_prox', 'atl_prox'),
-            ('atl_ratio', 'atl_ratio'),
-            ('volume24h_to_mcap', 'volume24h_to_mcap'),
-        )
-    )
     contract_type = filters.CharFilter(field_name='contract_type', lookup_expr='iexact')
     name = filters.CharFilter(field_name='name', lookup_expr='icontains')
     base = filters.CharFilter(field_name='base', lookup_expr='icontains')
@@ -94,34 +77,6 @@ class GlobalSymbolFilter(filters.FilterSet):
     market = filters.CharFilter(method='filter_market')
     is_favorite = filters.BooleanFilter(field_name='favorite')
     is_stablecoin = filters.BooleanFilter(field_name='is_stablecoin')
-    ath__gte = filters.NumberFilter(field_name='ath', lookup_expr='gte')
-    ath__lte = filters.NumberFilter(field_name='ath', lookup_expr='lte')
-    atl__gte = filters.NumberFilter(field_name='atl', lookup_expr='gte')
-    atl__lte = filters.NumberFilter(field_name='atl', lookup_expr='lte')
-    ath_date__gte = filters.DateFilter(field_name='ath_date', lookup_expr='gte')
-    ath_date__lte = filters.DateFilter(field_name='ath_date', lookup_expr='lte')
-    atl_date__gte = filters.DateFilter(field_name='atl_date', lookup_expr='gte')
-    atl_date__lte = filters.DateFilter(field_name='atl_date', lookup_expr='lte')
-    ath_prox__gte = filters.NumberFilter(field_name='ath_prox', lookup_expr='gte')
-    ath_prox__lte = filters.NumberFilter(field_name='ath_prox', lookup_expr='lte')
-    atl_prox__gte = filters.NumberFilter(field_name='atl_prox', lookup_expr='gte')
-    atl_prox__lte = filters.NumberFilter(field_name='atl_prox', lookup_expr='lte')
-    ath_ratio__gte = filters.NumberFilter(field_name='ath_ratio', lookup_expr='gte')
-    ath_ratio__lte = filters.NumberFilter(field_name='ath_ratio', lookup_expr='lte')
-    atl_ratio__gte = filters.NumberFilter(field_name='atl_ratio', lookup_expr='gte')
-    atl_ratio__lte = filters.NumberFilter(field_name='atl_ratio', lookup_expr='lte')
-    supply_ratio__gte = filters.NumberFilter(field_name='supply_ratio', lookup_expr='gte')
-    supply_ratio__lte = filters.NumberFilter(field_name='supply_ratio', lookup_expr='lte')
-    volume__gte = filters.NumberFilter(field_name='volume', lookup_expr='gte')
-    volume__lte = filters.NumberFilter(field_name='volume', lookup_expr='lte')
-    market_cap__gte = filters.NumberFilter(field_name='market_cap', lookup_expr='gte')
-    market_cap__lte = filters.NumberFilter(field_name='market_cap', lookup_expr='lte')
-    price_change__gte = filters.NumberFilter(field_name='price_change_percentage_24h', lookup_expr='gte')
-    price_change__lte = filters.NumberFilter(field_name='price_change_percentage_24h', lookup_expr='lte')
-    price_change_percentage_24h__gte = filters.NumberFilter(field_name='price_change_percentage_24h', lookup_expr='gte')
-    price_change_percentage_24h__lte = filters.NumberFilter(field_name='price_change_percentage_24h', lookup_expr='lte')
-    volume24h_to_mcap__gte = filters.NumberFilter(field_name='volume24h_to_mcap', lookup_expr='gte')
-    volume24h_to_mcap__lte = filters.NumberFilter(field_name='volume24h_to_mcap', lookup_expr='lte')
 
     def filter_market(self, queryset, name, value):
         query = Q()
@@ -140,7 +95,7 @@ class GlobalSymbolFilter(filters.FilterSet):
 
     class Meta:
         model = GlobalSymbol
-        fields = ['market', 'name', 'base', 'quote', 'supply_ratio', 'sort', 'contract_type', 'tags', 'is_favorite']
+        fields = ['market', 'name', 'base', 'quote', 'contract_type', 'tags', 'is_favorite']
 
 
 class TagFilter(filters.FilterSet):

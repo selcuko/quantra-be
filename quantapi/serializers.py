@@ -1,6 +1,6 @@
 import json
 from rest_framework import serializers
-from quantapi.models import (ContactForm, GlobalSymbol, GroupOrder, Market, MarketAccount, MarketCredentials, 
+from quantapi.models import (ContactForm, GlobalSymbol, GlobalSymbolMetrics, GroupOrder, Market, MarketAccount, MarketCredentials, 
                              MarketSymbol, Order, Session, SessionGroup, 
                              Signal, Strategy, Subscription, Tag)
 from quantapi.validations import validate_order_payload, validate_symbol_against_market
@@ -147,16 +147,22 @@ class InlineGlobalSymbolSerializer(serializers.HyperlinkedModelSerializer):
         fields = ['id', 'cid', 'name', 'display', 'base', 'quote', 'markets', 'image']
 
 
+class GlobalSymbolMetricsSerializer(serializers.HyperlinkedModelSerializer):
+    class Meta:
+        model = GlobalSymbolMetrics
+        fields = ['volume', 'market_cap', 'market_cap_change_24h', 'market_cap_change_percentage_24h', 'ath',
+                  'ath_date', 'atl', 'atl_date', 'total_supply', 'circulating_supply', 'max_supply', 'ath_prox',
+                  'atl_prox', 'ath_ratio', 'atl_ratio', 'data_updated', 'price_change_24h', 'price_change_percentage_24h',
+                  'price_high_24h', 'price_low_24h']
+
+
 class GlobalSymbolSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = GlobalSymbol
-        fields = ['id', 'cid', 'name', 'display', 'base', 'quote', 'tags', 'symbols', 'data_source',
-                  'is_stablecoin', 'ath', 'atl', 'ath_ratio', 'atl_ratio', 'ath_date', 'atl_date', 'volume', 'market_cap',
-                  'circulating_supply', 'max_supply', 'total_supply', 'last_updated', 'price', 'supply_ratio', 'high_24h',
-                  'low_24h', 'price_change_24h', 'price_change_percentage_24h',
-                  'supply_ratio', 'ath_prox', 'atl_prox', 'volume24h_to_mcap', 'image', 'url', 'display_name', 'markets']
+        fields = ['cid', 'id', 'display', 'base', 'url', 'metrics', 'image', 'markets', 'tags', 'spot_symbols']
     tags = InlineTagSerializer(many=True)
-    symbols = InlineMarketSymbolSerializer(many=True)
+    spot_symbols = InlineMarketSymbolSerializer(many=True)
+    metrics = GlobalSymbolMetricsSerializer()
 
 
 class StrategySerializer(serializers.HyperlinkedModelSerializer):
