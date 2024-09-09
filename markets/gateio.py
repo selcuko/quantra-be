@@ -142,16 +142,27 @@ class GateIOMarket(IMarket):
 
     def get_klines(self, symbol:'MarketSymbol|str', interval:str, start:typing.Optional[datetime], end:typing.Optional[datetime]=None, limit=1000, retry=0):
         symbol_object = self.get_symbol_from_name(symbol) if isinstance(symbol, str) else symbol
+        payload = dict()
+        if isinstance(symbol, str):
+            symbol_object = self.get_symbol_from_name(symbol)
+            path = '/api/v4/spot/candlesticks'
+            payload['currency_pair'] = self.format_symbol(symbol),
+        else:
+            symbol_object = symbol
+            if symbol_object.contract_type == symbol_object.ContractType.SPOT:
+                path = '/api/v4/spot/candlesticks'
+                payload['currency_pair'] = self.format_symbol(symbol_object.name)
+            elif symbol_object.contract_type == symbol_object.ContractType.FUTURES:
+                path = '/api/v4/futures/usdt/candlesticks'
+                payload['contract'] = self.format_symbol(symbol_object.name)
+
         if not symbol_object:
             raise ValueError(f'Symbol not found: {symbol}')
-        path = '/api/v4/spot/candlesticks'
+
         url = f'{self.url}{path}'
-        payload = {
-            'currency_pair': self.format_symbol(symbol_object.name),
-            'symbol': self.format_symbol(symbol_object.name),
-            'interval': self.format_interval(interval),
-            'limit': limit
-        }
+        payload['symbol'] = self.format_symbol(symbol_object.name)
+        payload['interval'] = self.format_interval(interval)
+        payload['limit'] = limit
         if start:
             payload['from'] = self.format_timestamp(start)
             payload.pop('limit', None)
@@ -165,9 +176,9 @@ class GateIOMarket(IMarket):
         if isinstance(data, dict):
             logger.warning(f'Gate.io returned an error while fetching candles: {data}', extra={'market': self.name, 'type': 'MARKET'})
             return []
-        return self.standardize_klines(data)
+        return self.standardize_klines(data) if symbol_object.contract_type == symbol_object.ContractType.SPOT else self.standardize_futures_klines(data)
 
-    def get_last_klines(self, symbol:str, interval:str, limit=100, retry=1, silent=True) -> list[list]:
+    def get_last_klines(self, symbol:'MarketSymbol|str', interval:str, limit=100, retry=1, silent=True) -> list[list]:
         minutes = interval_to_minutes(interval)
         now = timezone.now() + timedelta(minutes=1)
         start = now - timedelta(minutes=minutes*limit+1)
@@ -524,6 +535,16 @@ class GateIOMarket(IMarket):
             float(c),
             float(v)
         ] for ts, tv, c, h, l, o, v, t in data if t == 'true']
+
+    def standardize_futures_klines(self, data:list) -> list[list]:
+        return [[
+            self.standardize_timestamp(str(d.get('t'))),
+            float(d.get('o')),
+            float(d.get('h')),
+            float(d.get('l')),
+            float(d.get('c')),
+            float(d.get('v')) # XXX: Volume format is not clear
+        ] for d in data]
 
     def get_symbol_from_name(self, name:str) -> 'MarketSymbol|None':
         return self.symbols.get(name)

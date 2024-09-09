@@ -236,6 +236,20 @@ class KucoinMarket(IMarket):
             logger.error(f'Error while standardizing klines for {self.name}: {klines}', exc_info=True)
             raise
 
+    def _standardize_futures_klines(self, klines:list) -> list[list]:
+        try:
+            return [[
+                self._standardize_datetime(kline[0]),
+                float(kline[1]),
+                float(kline[3]),
+                float(kline[4]),
+                float(kline[2]),
+                float(kline[5]),
+            ] for kline in klines ]
+        except:
+            logger.error(f'Error while standardizing klines for {self.name}: {klines}', exc_info=True)
+            raise
+
     @staticmethod
     def _standardize_symbol(symbol:str) -> str:
         return symbol
@@ -297,7 +311,7 @@ class KucoinMarket(IMarket):
             details=json.dumps(symbol),
             contract_type=MarketSymbol.ContractType.FUTURES,
             )
-    
+
     def _prep_order(self, order:dict) -> 'Order':
         from quantapi.models import Order
         oid = order.get('orderId') or order.get('id')
@@ -315,7 +329,10 @@ class KucoinMarket(IMarket):
         )
 
     def _get_klines(self, symbol:'str|MarketSymbol', interval:str, start:datetime, end:"datetime|None"=None, limit=1000, retry=0) -> list[list]:
-        if not isinstance(symbol, str):
+        if isinstance(symbol, str):
+            contract_type = MarketSymbol.ContractType.SPOT
+        else:
+            contract_type = getattr(symbol, 'contract_type')
             symbol = symbol.name
         if not self.has_symbol(symbol):
             raise SymbolNotInMarket(f'Symbol {symbol} is not available in {self.name}')
@@ -324,12 +341,22 @@ class KucoinMarket(IMarket):
         else:
             calculated_end = start + timedelta(minutes=interval_to_minutes(interval) * limit)
         try:
-            klines = self.kmarket.get_kline(
-                symbol=self._format_symbol(symbol),
-                kline_type=self._format_interval(interval),
-                startAt=self._format_datetime(start),
-                endAt=self._format_datetime(calculated_end),
-                limit=limit)
+            if contract_type == 'SPOT':
+                # Max limit for spot is 1500
+                klines = self.kmarket.get_kline(
+                    symbol=self._format_symbol(symbol),
+                    kline_type=self._format_interval(interval),
+                    startAt=self._format_datetime(start),
+                    endAt=self._format_datetime(calculated_end),
+                    limit=limit)
+            elif contract_type == 'FUTURES':
+                # Max limit for futures is 500
+                symbol = self._format_symbol(symbol)
+                klines = self.fmarket.get_kline_data(
+                    symbol=symbol.split('-')[0] + symbol.split('-')[1]+'M',
+                    granularity=interval_to_minutes(interval),
+                    begin_t=int(self._format_datetime(start) * 1000),
+                    end_t=int(self._format_datetime(calculated_end) * 1000))
         except:
             logger.error(f'Error fetching klines for {self._format_symbol(symbol)} from {self.name}', exc_info=True)
             if retry > 0:
@@ -339,12 +366,12 @@ class KucoinMarket(IMarket):
             return []
         if not klines or not isinstance(klines, list) or not isinstance(klines[0], list):
             return []
-        return self._standardize_klines(klines)
+        return self._standardize_klines(klines) if contract_type == 'SPOT' else self._standardize_futures_klines(klines)
 
-    def get_klines(self, symbol:str, interval:str, start:"datetime", end:"datetime|None"=None, limit=1000, retry=0) -> list[list]:
+    def get_klines(self, symbol:'str|MarketSymbol', interval:str, start:"datetime", end:"datetime|None"=None, limit=1000, retry=0) -> list[list]:
         return self._get_klines(symbol, interval, start, end, limit, retry)
- 
-    def get_last_klines(self, symbol:str, interval:str, limit=100, retry=1, silent=True) -> list[list]:
+
+    def get_last_klines(self, symbol:'str|MarketSymbol', interval:str, limit=100, retry=1, silent=True) -> list[list]:
         minutes = interval_to_minutes(interval)
         now = datetime.now(tz=pytz.UTC)
         start = now - timedelta(minutes=minutes*limit)
@@ -481,7 +508,7 @@ class KucoinMarket(IMarket):
         except:
             logger.error(f'Error while getting order {order} on {self.name}', exc_info=True)
             raise
-    
+
     @authentication_required
     def get_orders(self, symbol:'MarketSymbol|str') -> list['Order']:
         if isinstance(symbol, str):
@@ -496,7 +523,7 @@ class KucoinMarket(IMarket):
         except:
             logger.error(f'Error while getting orders on {self.name}', exc_info=True)
             raise
-    
+
     @authentication_required
     def get_open_orders(self, symbol:'MarketSymbol|str') -> list['Order']:
         if isinstance(symbol, str):
@@ -533,7 +560,7 @@ class KucoinMarket(IMarket):
         except:
             logger.error(f'Error while cancelling order {order} on {self.name}', exc_info=True)
             raise
-    
+
     @authentication_required
     def cancel_all_orders(self, symbol:'MarketSymbol|str') -> list['Order']:
         if isinstance(symbol, str):
@@ -557,7 +584,7 @@ class KucoinMarket(IMarket):
             symbol = self._get_symbol_from_name(symbol)
         try:
             if symbol.contract_type == symbol.ContractType.SPOT:
-                if self.private or 1:
+                if self.private:
                     orderbook = self.kmarket.get_aggregated_orderv3(symbol.name)
                 else:
                     orderbook = self.kmarket.get_part_order(100, symbol.name)
@@ -683,7 +710,7 @@ class KucoinMarket(IMarket):
             logger.error(f'No assets found for account, spot trading disabled on {self.name}')
         if not self.capital:
             logger.error(f'No capital (USDT) found for account on {self.name}')
-    
+
     @authentication_required
     def get_current_prices(self, save=True) -> dict:
         all_tickers = self.kmarket.get_all_tickers()
@@ -705,7 +732,7 @@ class KucoinMarket(IMarket):
             if save:
                 self.account.save()
         return equity
-    
+
     def orderbook_snapshot(self, symbol:'MarketSymbol|str'):
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)

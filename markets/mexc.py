@@ -278,6 +278,26 @@ class MEXCMarket(IMarket):
         ] for kline in klines ]
         return klines
 
+    def _standardize_futures_klines(self, klines):
+        data = klines.get('data', {})
+        # Get the length of any list (assuming all lists are of the same length)
+        length = len(next(iter(data.values())))
+
+        # Iterate over each index and collect the values from each key
+        result = []
+        for i in range(length):
+            # Collect values at index i from all lists in the dictionary
+            temp = [
+                self._standardize_futures_datetime(data['time'][i]),  # Access 'time' and process
+                float(data['open'][i]),                       # Access 'open' and process
+                float(data['high'][i]),                       # Access 'high' and process
+                float(data['low'][i]),                        # Access 'low' and process
+                float(data['close'][i]),                      # Access 'close' and process
+                float(data['vol'][i])                      # Access 'volume' and process
+                ]
+            result.append(temp)
+        return result
+
     @staticmethod
     def _standardize_symbol(symbol):
         return symbol.replace('USDT', '-USDT')
@@ -310,10 +330,18 @@ class MEXCMarket(IMarket):
     @staticmethod
     def _format_datetime(dt):
         return str(int(dt.timestamp()*1000))
+    
+    @staticmethod
+    def _format_futures_datetime(dt):
+        return str(int(dt.timestamp()))
 
     @staticmethod
     def _standardize_datetime(dt):
         return datetime.fromtimestamp(int(dt) // 1000, tz=pytz.UTC).replace(second=0, microsecond=0)
+
+    @staticmethod
+    def _standardize_futures_datetime(dt):
+        return datetime.fromtimestamp(int(dt), tz=pytz.UTC).replace(second=0, microsecond=0)
 
     def sign(self, query_string) -> str:
         signature = hmac.new(self.api_secret.encode('utf-8'), query_string.encode('utf-8'), hashlib.sha256).hexdigest()
@@ -328,7 +356,7 @@ class MEXCMarket(IMarket):
         payload = self.sign(payload)
         return payload
 
-    def get_klines(self, symbol, interval, start=None, end=None, limit=1000, retry=1):
+    def get_klines(self, symbol:'MarketSymbol|str', interval, start=None, end=None, limit=1000, retry=1):
         return self._get_klines(symbol, interval, start, end, limit, retry=retry)
 
     def get_account(self, save=True):
@@ -354,8 +382,11 @@ class MEXCMarket(IMarket):
         if save:
             self.account.save()
 
-    def _get_klines(self, symbol, interval, start=None, end=None, limit=1000, retry=3):
-        if not isinstance(symbol, str):
+    def _get_klines(self, symbol:'MarketSymbol|str', interval, start=None, end=None, limit=1000, retry=3):
+        if isinstance(symbol, str):
+            contract_type = 'SPOT'
+        else:
+            contract_type = symbol.contract_type
             symbol = symbol.name
         if not end and not start:
             raise InvalidUsage('Either start or end must be provided')
@@ -372,7 +403,28 @@ class MEXCMarket(IMarket):
                 candles_in_timerange = (end - start) // timedelta(minutes=interval_to_minutes(interval))
                 raise InvalidUsage(f'We can get a maximum of 1000 klines per request (limit={limit}), your timerange is too wide ({candles_in_timerange} candles), please reduce the timerange or increase the interval')
         try:
-            uri = f'{self.url}/api/v3/klines?symbol={self._format_symbol(symbol)}&interval={self._format_interval(interval)}&limit={limit}&startTime={self._format_datetime(start)}&endTime={self._format_datetime(end)}'
+            if contract_type == 'SPOT':
+                # Max limit is 1000
+                uri = f'{self.url}/api/v3/klines?symbol={self._format_symbol(symbol)}&interval={self._format_interval(interval)}&limit={limit}&startTime={self._format_datetime(start)}&endTime={self._format_datetime(end)}'
+            elif contract_type == 'FUTURES':
+                # Max limit is 2000
+                uri = f'{self.furl}/api/v1/contract/kline/' + symbol.replace('-','_')
+                if contract_type == 'FUTURES':
+                    params = {
+                        'interval': self.interval_to_ws(interval),
+                        'start': self._format_futures_datetime(start),
+                        'end': self._format_futures_datetime(end),
+                    }
+                elif contract_type == 'SPOT':
+                    params = {
+                        'symbol': self._format_symbol(symbol),
+                        'interval': self._format_interval(interval),
+                        'limit': limit,
+                        'startTime': self._format_datetime(start),
+                        'endTime': self._format_datetime(end),
+                    }
+                uri = f'{uri}?{urlencode(params)}'
+                print(uri)
             response = requests.get(uri)
             if not response.ok:
                 raise ValueError(f'Error while fetching klines for {self.name}: {response.text}')
@@ -383,9 +435,8 @@ class MEXCMarket(IMarket):
                 time.sleep(1)
                 return self._get_klines(symbol, interval, start, end, limit, retry-1)
             raise incident.Market.CandleFetchFailed(self.name, e)
-        if not kline_data or not isinstance(kline_data, list) or not isinstance(kline_data[0], list):
-            return []
-        return self._standardize_klines(kline_data)
+
+        return self._standardize_klines(kline_data) if contract_type == 'SPOT' else self._standardize_futures_klines(kline_data)
 
     def _prep_symbol(self, symbol):
         from quantapi.models import MarketSymbol
@@ -515,7 +566,7 @@ class MEXCMarket(IMarket):
                                                     'orderId': order_id,
                                                     'timestamp': str(int(time.time()*1000)),
                                                 })
-            
+
             uri = f'{self.url}/api/v3/order'
             response = self.session.request('GET', uri, params=order_query )
             order_data = response.json()
@@ -537,7 +588,7 @@ class MEXCMarket(IMarket):
             all_tickers = response.json()
         except:
             return {}
-        
+
         prices = { self._standardize_symbol(ticker['symbol']): float(ticker['price']) for ticker in all_tickers if ticker['symbol'].endswith('USDT') and ticker['price'] }
         if self.market:
             self.market.prices = json.dumps(prices)

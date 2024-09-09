@@ -8,7 +8,7 @@ from typing import Callable, Literal, Optional
 
 import pytz
 import requests
-from binance.client import Client
+from binance.client import Client, HistoricalKlinesType
 from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
 from websockets.sync.client import connect
 
@@ -242,20 +242,27 @@ class BinanceMarket(IMarket):
             account=self.account
         )
 
-    def _get_klines(self, symbol:str, interval:str, start:datetime, end:Optional[datetime]=None, limit=1000, retry=0) -> list[list]:
+    def _get_klines(self, symbol:'MarketSymbol|str', interval:str, start:datetime, end:Optional[datetime]=None, limit=1000, retry=0) -> list[list]:
+        if isinstance(symbol, str):
+            symbol_name = symbol
+            contract_type = 'SPOT'
+        else:
+            symbol_name = symbol.name
+            contract_type = symbol.contract_type
         if end:
             calculated_end = end
         else:
             calculated_end = start + timedelta(minutes=interval_to_minutes(interval) * limit)
         try:
             klines = self.client.get_historical_klines(
-                        symbol=self._format_symbol(symbol),
+                        symbol=self._format_symbol(symbol_name),
                         interval=self._format_interval(interval),
                         start_str=self._format_datetime(start),
                         end_str=self._format_datetime(calculated_end),
-                        limit=limit)
+                        limit=limit,
+                        klines_type=getattr(HistoricalKlinesType, contract_type))
         except Exception as e:
-            logger.error(f'Error fetching klines for {symbol} from {self.name}', exc_info=True)
+            logger.error(f'Error fetching klines for {symbol_name} from {self.name}', exc_info=True)
             if retry > 0:
                 logger.warning(f'Retrying {retry} more times')
                 time.sleep(1)
@@ -268,7 +275,7 @@ class BinanceMarket(IMarket):
         if symbol_name not in self.symbols:
             raise ValueError(f'Symbol {symbol} is not present on {self.name}')
         try:
-            return self._get_klines(symbol_name, interval, start, end, limit, retry=retry)
+            return self._get_klines(symbol, interval, start, end, limit, retry=retry)
         except requests.exceptions.ConnectionError:
             return []
 
