@@ -160,7 +160,7 @@ class GlobalSymbolMetricsSerializer(serializers.HyperlinkedModelSerializer):
         fields = ['volume', 'market_cap', 'market_cap_change_24h', 'market_cap_change_percentage_24h', 'ath',
                   'ath_date', 'atl', 'atl_date', 'total_supply', 'circulating_supply', 'max_supply', 'ath_prox',
                   'atl_prox', 'ath_ratio', 'atl_ratio', 'data_updated', 'price_change_24h', 'price_change_percentage_24h',
-                  'price_high_24h', 'price_low_24h']
+                  'price_high_24h', 'price_low_24h', 'price']
 
 
 class GlobalSymbolSerializer(serializers.HyperlinkedModelSerializer):

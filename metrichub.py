@@ -117,16 +117,19 @@ def update_all_tags():
                 }
             )
         tag.save()
+        print('created' if created else 'updated', tag)
         try:
             metrics = tag.metrics
             assert metrics
         except Tag.metrics.RelatedObjectDoesNotExist:
+            print('Creating metrics for', tag)
             metrics = TagMetrics.objects.create(tag=tag)
         
         metrics.market_cap = category['market_cap']
         metrics.market_cap_change_24h = category['market_cap_change_24h']
         metrics.volume = category['volume_24h']
         metrics.data_updated = category['updated_at']
+        metrics.save()
 
 
 def match_tags():
