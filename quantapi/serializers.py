@@ -2,7 +2,7 @@ import json
 from rest_framework import serializers
 from quantapi.models import (ContactForm, GlobalSymbol, GlobalSymbolMetrics, GroupOrder, Market, MarketAccount, MarketCredentials, 
                              MarketSymbol, Order, Session, SessionGroup, 
-                             Signal, Strategy, Subscription, Tag)
+                             Signal, Strategy, Subscription, Tag, TagMetrics)
 from quantapi.validations import validate_order_payload, validate_symbol_against_market
 
 
@@ -124,11 +124,18 @@ class InlineMarketSymbolSerializer(serializers.HyperlinkedModelSerializer):
         fields = ['id', 'url', 'icon', 'name', 'base', 'quote', 'market', 'contract_type', 'available_contracts', 'volume']
 
 
+class TagMetricsSerializer(serializers.HyperlinkedModelSerializer):
+    class Meta:
+        model = TagMetrics
+        fields = ['volume', 'market_cap', 'market_cap_change_24h', 'market_cap_change_percentage_24h']
+
+
 class TagSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = Tag
-        fields = ['name', 'description', 'volume', 'market_cap', 'is_ecosystem', 'is_chain', 'is_portfolio', 'weight', 'best_symbols']
+        fields = ['name', 'description', 'volume', 'market_cap', 'is_ecosystem', 'is_chain', 'is_portfolio', 'weight', 'best_symbols', 'metrics']
 
+    metrics = TagMetricsSerializer()
     best_symbols = serializers.SerializerMethodField()
 
     def get_best_symbols(self, obj):
