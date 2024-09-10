@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 from threading import Event, Thread, Timer
 import time
 from typing import Callable, TYPE_CHECKING
@@ -17,14 +18,34 @@ KEEP_ALIVE = [
 ]
 
 
-class ConnectionDispatch:
-    """Base class for managing the relation between the Consumers and real-time data providers."""
+def bucket(price:float):
+    if price < 0.001:
+        x = 0.00001
+    if 0.01 < price < 0.1:
+        x = 0.0001
+    if 0.1 < price < 1:
+        x = 0.001
+    if 1 < price < 10:
+        x = 0.01
+    if 10 < price < 100:
+        x = 0.1
+    if 100 < price < 1000:
+        x = 1
+    if 1000 < price < 10000:
+        x = 10
+    if 10000 < price:
+        x = 100
+    return Decimal(x or 1)
+
+def bucket_l2(price:Decimal, divisor:Decimal):
+    return price / divisor
 
 
 class KeeperDispatch:
     """Manages the relation between the Consumers and the Keepers."""
     def __init__(self):
-        self.connections: dict[Keeper, list[str]] = {}
+        self.channels: dict[Keeper, dict[str, list[str]]] = {}  # maps group names to keepers, basically groups depths (buckets)
+        self.connections: dict[Keeper, list[str]] = {}          # dict of Keeper: channel_name: [connection_ids]
         self.callbacks: dict[Keeper, Callable[[Delta], None]] = {}
         self.last_updates: dict[Keeper, datetime] = {}
         self.channel_layer = get_channel_layer()
@@ -43,14 +64,23 @@ class KeeperDispatch:
             elif (datetime.now() - self.last_updates[keeper]).seconds < self.holdback_secs:
                 return
             self.last_updates[keeper] = datetime.now()
-            bids, asks = keeper.book.get_depth(10)
-            payload = {
-                'bids': [bid.dict() for bid in bids],
-                'asks': [ask.dict() for ask in asks],
-                'price': keeper.book.get_price(),
-                'type': 'update',
-            }
-            async_to_sync(self.channel_layer.group_send)(keeper.key, payload)
+            channels = list(self.channels[keeper].keys())
+            for channel in channels:
+                channel_depth = channel.split('.')[-1]
+                if channel_depth == 'default':
+                    best_bid_price = float(keeper.book.get_best(count=1)[0][0].price)
+                    bucket_precision = bucket(best_bid_price)
+                    depth = bucket_l2(bucket_precision, Decimal(10))
+                else:
+                    depth = Decimal(channel_depth)
+                bids, asks = keeper.book.get_depth(10, depth)
+                payload = {
+                    'bids': [bid.dict() for bid in bids],
+                    'asks': [ask.dict() for ask in asks],
+                    'price': keeper.book.get_price(),
+                    'type': 'update',
+                }
+                async_to_sync(self.channel_layer.group_send)(channel, payload)
         self.callbacks[keeper] = callback
         return callback
 
@@ -59,6 +89,7 @@ class KeeperDispatch:
         keeper = KeeperPool.get(symbol)
         keeper.add_callback(self.make_callback(keeper))
         self.connections.setdefault(keeper, []).append(connection_id)
+        self.channels.setdefault(keeper, {}).setdefault(keeper.key+'.default', []).append(connection_id)
         self.cancel_keeper_shutdown(keeper)
         return keeper
 
@@ -70,6 +101,15 @@ class KeeperDispatch:
             return
         keeper_connections = self.connections[keeper]
         keeper_connections.remove(connection_id)
+        keeper_channels = self.channels[keeper]
+        channels_to_remove = []
+        for channel_name, connections in keeper_channels.items():
+            if connection_id in connections:
+                connections.remove(connection_id)
+                if not connections:
+                    channels_to_remove.append(channel_name)
+        for channel_name in channels_to_remove:
+            del keeper_channels[channel_name]
         should_drop_keeper = True
         if keeper and str(keeper.symbol) in KEEP_ALIVE:
             should_drop_keeper = False
@@ -78,6 +118,20 @@ class KeeperDispatch:
                 del self.callbacks[keeper]
             del self.connections[keeper]
             self.schedule_keeper_shutdown(keeper)
+
+    def update_depth(self, connection_id:str, old_channel_name:str, new_channel_name:str):
+        keeper = self.find_keeper_for_connection(connection_id)
+        if not keeper:
+            return
+        keeper_channels = self.channels[keeper]
+        if new_channel_name in keeper_channels:
+            keeper_channels[new_channel_name].append(connection_id)
+        else:
+            keeper_channels[new_channel_name] = [connection_id]
+        if old_channel_name in keeper_channels:
+            keeper_channels[old_channel_name].remove(connection_id)
+            if not keeper_channels[old_channel_name]:
+                del keeper_channels[old_channel_name]
 
     def schedule_keeper_shutdown(self, keeper: Keeper):
         """Schedules a Keeper for shutdown."""

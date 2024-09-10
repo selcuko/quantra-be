@@ -2,7 +2,8 @@ import json
 from pprint import pprint
 from websockets.sync.client import connect
 
-ws = connect('ws://localhost:8000/ws/ticker/BINANCE/BTC-USDT/?contract=FUTURES')
+ws = connect('ws://localhost:8000/ws/miniorderbook/BINANCE/BTC-USDT/?contract=SPOT')
+setdepth = True
 while True:
     try:
         try:
@@ -14,6 +15,9 @@ while True:
         pprint(payload)
         if payload.get('error'):
             break
+        if not setdepth:
+            ws.send(json.dumps({'depth': 100}))
+            setdepth = True
     except Exception as e:
         break
 print('closing connection')

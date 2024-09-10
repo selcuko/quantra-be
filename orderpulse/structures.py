@@ -194,7 +194,7 @@ class Book:
             list(asks)[:count],
         )
 
-    def get_depth(self, count=5, depth=1):
+    def get_depth(self, count=5, depth=Decimal(1)):
         depth = Depth(self, depth)
         return self.get_best(bids=depth.bids.values(), asks=depth.asks.values(), count=count)
 
@@ -211,7 +211,7 @@ class Book:
 
 
 class Depth:
-    def __init__(self, book: Book, depth:float=1):
+    def __init__(self, book: Book, depth:Decimal=Decimal(1)):
         self.book = book
         self.bids = SortedDict()
         self.asks = SortedDict()
@@ -232,7 +232,7 @@ class Depth:
             else:
                 container[depthed_price] = Bid(depthed_price, bid.size, bid.updated)
 
-    def get_depth_price(self, price, side:str):
+    def get_depth_price(self, price:Decimal, side:str):
         if self.depth == 0:
             return price
         if self.depth == 1:

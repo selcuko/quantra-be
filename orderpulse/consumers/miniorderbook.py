@@ -57,7 +57,8 @@ class MiniOrderbookConsumer(AsyncWebsocketConsumer):
         symbol = event['symbol']
         try:
             self.keeper = await sync_to_async(self.get_keeper)(market, symbol)
-            await self.channel_layer.group_add(self.keeper.key, self.channel_name)
+            self.group_name = f'{self.keeper.key}.default'
+            await self.channel_layer.group_add(self.group_name, self.channel_name)
         except Market.DoesNotExist:
             await self.send(text_data=json.dumps({ 'error': f'Market {market} not found', 'code': 404 }))
             await self.close()
@@ -71,3 +72,20 @@ class MiniOrderbookConsumer(AsyncWebsocketConsumer):
     async def update(self, event):
         """New version of the callback, called via channel layer."""
         await self.send(text_data=json.dumps(event, default=str))
+
+    async def receive(self, text_data):
+        data = json.loads(text_data)
+        if 'depth' in data:
+            await self.set_depth(data['depth'])
+        return
+
+    async def set_depth(self, depth):
+        assert self.channel_layer, 'Channel layer is not available'
+        assert self.keeper, 'Keeper is not available'
+        assert self.group_name, 'Group name is not available'
+        old_channel_name = self.group_name
+        await self.channel_layer.group_discard(self.group_name, self.channel_name)
+        self.depth = depth
+        self.group_name = f'{self.keeper.key}.{self.depth}'
+        await self.channel_layer.group_add(self.group_name, self.channel_name)
+        await sync_to_async(self.dispatcher.update_depth)(self.connection_id, old_channel_name, self.group_name)

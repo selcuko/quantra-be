@@ -400,6 +400,7 @@ class KeeperView(viewsets.ViewSet):
                 'market': keeper.market,
                 'status': 'running' if keeper.started else 'stopped',
                 'connections': connections,
+                'buckets': MiniOrderbookConsumer.dispatcher.channels.get(keeper, []),
             }
             payloads.append(payload)
         return Response(payloads)
