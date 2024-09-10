@@ -123,7 +123,7 @@ class GlobalSymbolViewSet(viewsets.ReadOnlyModelViewSet):
     ordering = ['metrics__market_cap']
 
     def get_queryset(self):
-        return GlobalSymbol.objects.prefetch_related('tags', 'symbols__market').all()
+        return GlobalSymbol.objects.prefetch_related('tags', 'symbols__market', 'metrics').all()
 
     @action(detail=True, methods=['get', 'post'])
     def refresh(self, request, pk):
@@ -386,7 +386,7 @@ class TagViewSet(viewsets.ModelViewSet):
     lookup_field = 'name'
 
     def get_queryset(self):
-        return super().get_queryset().prefetch_related('symbols__symbols')
+        return super().get_queryset().prefetch_related('symbols__symbols', 'metrics')
 
 
 class KeeperView(viewsets.ViewSet):

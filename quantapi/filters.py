@@ -1,5 +1,6 @@
+from django.test import tag
 import django_filters as filters
-from django.db.models import Q, Count
+from django.db.models import Q, Count, Aggregate
 from .models import GlobalSymbol, MarketAccount, MarketSymbol, Session, SessionGroup, Tag
 
 
@@ -79,19 +80,22 @@ class GlobalSymbolFilter(filters.FilterSet):
     is_stablecoin = filters.BooleanFilter(field_name='is_stablecoin')
 
     def filter_market(self, queryset, name, value):
-        query = Q()
-        queryset = queryset.exclude(available_markets='[]')
         if value.lower() == 'notnull':
-            return queryset
-        for market in value.split(","):
-            query &= Q(available_markets__icontains=market)
-        return queryset.filter(query).annotate(symbol_count=Count('symbols', filter=Q(symbol=self))).filter(symbol_count__gt=0)
+            return queryset.filter(symbols__isnull=False).distinct()
+        market_list = value.split(",")
+        return queryset\
+            .filter(symbols__market__exchange_name__in=market_list, symbols__contract_type='SPOT')\
+            .annotate(market_count=Count('symbols__market', distinct=True))\
+            .filter(market_count=len(market_list))\
+            .distinct()
 
     def filter_tags(self, queryset, name, value):
-        query = Q()
-        for tag in value.split(","):
-            query &= Q(tags_flat__icontains=tag)
-        return queryset.filter(query)
+        tag_list = value.split(",")
+        return queryset\
+            .filter(tags__name__in=tag_list)\
+            .annotate(tag_count=Count('tags', distinct=True))\
+            .filter(tag_count=len(tag_list))\
+            .distinct()
 
     class Meta:
         model = GlobalSymbol
@@ -101,10 +105,11 @@ class GlobalSymbolFilter(filters.FilterSet):
 class TagFilter(filters.FilterSet):
     class Meta:
         model = Tag
-        fields = ['symbols', 'name']
+        fields = ['symbols', 'name', 'volume']
 
     symbols = filters.CharFilter(method='filter_symbols')
     name = filters.CharFilter(field_name='name', lookup_expr='icontains')
+    volume = filters.NumericRangeFilter(field_name='metrics__volume')
 
     def filter_symbols(self, queryset, name, value):
         cids = value.split(",")

@@ -937,34 +937,9 @@ class GlobalSymbol(models.Model):
     def markets_display(self):
         return ', '.join(self.markets)
 
-    @markets.setter
-    def markets(self, value):
-        self.available_markets = json.dumps(value)
-    
     @property
     def spot_symbols(self):
         return MarketSymbol.objects.filter(symbol=self, contract_type=MarketSymbol.ContractType.SPOT)
-
-    def add_market(self, market, save=True):
-        markets = self.markets
-        if market not in markets:
-            markets.append(market)
-            self.markets = markets
-            if save:
-                self.save()
-
-    def set_markets(self, ms=None, save=True):
-        if ms:
-            market_symbols = ms
-        else:
-            market_symbols = MarketSymbol.objects.filter(symbol=self)
-        current_markets = self.markets
-        for ms in market_symbols:
-            if ms.market.exchange_name not in current_markets:
-                current_markets.append(ms.market.exchange_name)
-        self.markets = current_markets
-        if save:
-            self.save()
 
     def __str__(self):
         return f'{self.base} {self.data_source}'
