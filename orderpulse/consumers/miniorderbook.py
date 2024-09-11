@@ -27,7 +27,8 @@ class MiniOrderbookConsumer(AsyncWebsocketConsumer):
         self.connection_id = str(self.channel_name)
         self.market   = self.scope['url_route']['kwargs']['market']
         self.symbol   = self.scope['url_route']['kwargs']['symbol']
-        self.range_bids, self.range_asks = 10, 10
+        self.range_bids_min, self.range_bids_max = 0, 100
+        self.range_asks_min, self.range_asks_max = 0, 100
         await self.accept()
         await self.subscribe({
             'market': self.market, 
@@ -69,18 +70,30 @@ class MiniOrderbookConsumer(AsyncWebsocketConsumer):
 
     async def update(self, event):
         """New version of the callback, called via channel layer."""
-        event['bids'] = event['bids'][-self.range_bids:]
-        event['asks'] = event['asks'][:self.range_asks]
+        print('update', self.range_bids_min, self.range_bids_max, self.range_asks_min, self.range_asks_max)
+        if self.range_bids_max and self.range_bids_min:
+            event['bids'] = event['bids'][-self.range_bids_max:-self.range_bids_min]
+        if self.range_bids_min:
+            event['bids'] = event['bids'][:-self.range_bids_min]
+        if self.range_bids_max:
+            event['bids'] = event['bids'][-self.range_bids_max:]
+        if self.range_asks_max and self.range_asks_min:
+            event['asks'] = event['asks'][self.range_asks_min:self.range_asks_max]
+        if self.range_asks_min:
+            event['asks'] = event['asks'][self.range_asks_min:]
+        if self.range_asks_max:
+            event['asks'] = event['asks'][:self.range_asks_max]
         await self.send(text_data=json.dumps(event, default=str))
 
     async def receive(self, text_data):
         data = json.loads(text_data)
         if 'depth' in data:
             await self.set_depth(data['depth'])
-        if 'range_bids' in data:
-            self.range_bids = data['range_bids']
-        if 'range_asks' in data:
-            self.range_asks = data['range_asks']
+        if 'range' in data:
+            self.range_bids_min = data['range']['bids']['min']
+            self.range_bids_max = data['range']['bids']['max']
+            self.range_asks_min = data['range']['asks']['min']
+            self.range_asks_max = data['range']['asks']['max']
         return
 
     async def set_depth(self, depth):
