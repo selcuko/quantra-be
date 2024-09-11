@@ -183,20 +183,26 @@ class Book:
             return Decimal(0)
         return best_bid.price if best_bid.updated > best_ask.updated else best_ask.price
 
-    def get_best(self, bids:Optional[Iterable[Bid]]=None, asks:Optional[Iterable[Bid]]=None, count=5):
+    def get_best(self, bids:Optional[Iterable[Bid]]=None, asks:Optional[Iterable[Bid]]=None, count=5, range_asks=0, range_bids=0):
         """Returns the best bids and asks"""
         if not bids:
             bids = self.bids.values()
         if not asks:
             asks = self.asks.values()
-        return (
-            list(bids)[-count:],
-            list(asks)[:count],
-        )
+        if range_asks or range_bids:
+            return (
+                list(bids)[-range_bids:],
+                list(asks)[:range_asks]
+            )
+        else:
+            return (
+                list(bids)[-count:],
+                list(asks)[:count],
+            )
 
-    def get_depth(self, count=5, depth=Decimal(1)):
+    def get_depth(self, count=5, depth=Decimal(1), range_asks=0, range_bids=0):
         depth = Depth(self, depth)
-        return self.get_best(bids=depth.bids.values(), asks=depth.asks.values(), count=count)
+        return self.get_best(bids=depth.bids.values(), asks=depth.asks.values(), count=count, range_asks=range_asks, range_bids=range_bids)
 
     def dict(self):
         return {

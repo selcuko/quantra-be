@@ -73,7 +73,7 @@ class KeeperDispatch:
                     depth = bucket_l2(bucket_precision, Decimal(10))
                 else:
                     depth = Decimal(channel_depth)
-                bids, asks = keeper.book.get_depth(10, depth)
+                bids, asks = keeper.book.get_depth(200, depth)
                 payload = {
                     'bids': [bid.dict() for bid in bids],
                     'asks': [ask.dict() for ask in asks],

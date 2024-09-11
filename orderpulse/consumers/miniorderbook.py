@@ -24,17 +24,15 @@ class MiniOrderbookConsumer(AsyncWebsocketConsumer):
         query_params = parse_qs(self.scope['query_string'].decode('utf-8'))
         self.contract = query_params.get('contract', ['SPOT'])[0]
         self.depth    = query_params.get('depth', [self.DEFAULT_DEPTH])[0]
-        self.count    = query_params.get('count', [self.DEFAULT_COUNT])[0]
         self.connection_id = str(self.channel_name)
         self.market   = self.scope['url_route']['kwargs']['market']
         self.symbol   = self.scope['url_route']['kwargs']['symbol']
-
+        self.range_bids, self.range_asks = 10, 10
         await self.accept()
         await self.subscribe({
             'market': self.market, 
             'symbol': self.symbol,
             'depth': self.depth,
-            'count': self.count
         })
         self.connected = True
 
@@ -71,12 +69,18 @@ class MiniOrderbookConsumer(AsyncWebsocketConsumer):
 
     async def update(self, event):
         """New version of the callback, called via channel layer."""
+        event['bids'] = event['bids'][-self.range_bids:]
+        event['asks'] = event['asks'][:self.range_asks]
         await self.send(text_data=json.dumps(event, default=str))
 
     async def receive(self, text_data):
         data = json.loads(text_data)
         if 'depth' in data:
             await self.set_depth(data['depth'])
+        if 'range_bids' in data:
+            self.range_bids = data['range_bids']
+        if 'range_asks' in data:
+            self.range_asks = data['range_asks']
         return
 
     async def set_depth(self, depth):
