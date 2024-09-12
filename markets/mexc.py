@@ -102,28 +102,61 @@ class MEXCMarket(IMarket):
             'maker': True if data['S'] == 1 else False,
         }
 
-    def get_match_engine_ws(self, symbol:str) -> ClientConnection:
-        ws_uri = 'wss://wbs.mexc.com/ws'
-        ws = connect(ws_uri)
+    def format_match_futures(self, data):
+        return {
+            'time': datetime.fromtimestamp(int(data['t']) / 1000, pytz.UTC).replace(second=0, microsecond=0),
+            'size': float(data['v']),
+            'price': float(data['p']),
+            'maker': True if data['T'] == 1 else False,
+        }
+
+    def get_match_engine_ws(self, symbol:'MarketSymbol|str') -> ClientConnection:
+        if isinstance(symbol, str):
+            contract_type = 'SPOT'
+        else:
+            contract_type = symbol.contract_type
+            symbol = symbol.name
         topic = f'spot@public.deals.v3.api@{self._format_symbol(symbol)}'
-        sub = {
+        if contract_type == 'SPOT':
+            ws_uri = 'wss://wbs.mexc.com/ws'
+            sub = {
             'method': 'SUBSCRIPTION',
             'params': [topic]
         }
+        elif contract_type == 'FUTURES':
+            ws_uri = 'wss://contract.mexc.com/edge'
+            sub = {
+                "method": "sub.deal",
+                "param": {
+                    "symbol": symbol.replace('-','_')
+                }
+            }
+        ws = connect(ws_uri)
         ws.send(json.dumps(sub))
         ack = json.loads(ws.recv())
-        if not ack.get('msg') == topic:
+
+        if contract_type == 'SPOT' and not ack.get('msg') == topic:
+            raise Exception(f'Error while subscribing to {topic}: {ack}')
+        elif contract_type == 'FUTURES' and not ack.get('data') == 'success':
             raise Exception(f'Error while subscribing to {topic}: {ack}')
         return ws
 
-    def init_match_engine(self, symbol:str, interval:str, callback:Callable, stop_event: Event, raw_callback:Optional[Callable]=None, ticker_callback:Optional[Callable]=None):
+    def init_match_engine(self, symbol:'MarketSymbol|str', interval:str, callback:Callable, stop_event: Event, raw_callback:Optional[Callable]=None, ticker_callback:Optional[Callable]=None):
         ws = self.get_match_engine_ws(symbol)
         last_ping = datetime.now()
         me = MatchEngine(interval, callback, ticker_callback)
         retries = 0
+        if isinstance(symbol, str):
+            contract_type = 'SPOT'
+        else:
+            contract_type = symbol.contract_type
+            symbol_name = symbol.name
         while not stop_event.is_set():
             if (datetime.now() - last_ping).seconds > 30:
-                ws.send('{"method": "PING"}')
+                ping_payload = {
+                    'method': 'PING' if contract_type == 'SPOT' else 'ping'
+                }
+                ws.send(json.dumps(ping_payload))
                 last_ping = datetime.now()
             try:
                 response = json.loads(ws.recv(timeout=10))
@@ -135,18 +168,21 @@ class MEXCMarket(IMarket):
                 continue
             except:
                 if retries > self.WS_MAX_RETRIES:
-                    logger.error(f'Error while initializing match engine for {symbol} on {self.name}', exc_info=True)
+                    logger.error(f'Error while initializing match engine for {symbol_name} on {self.name}', exc_info=True)
                     raise
                 retries += 1
                 ws = self.get_match_engine_ws(symbol)
                 continue
-            if response.get('msg') == 'PONG':
+            if response.get('msg', '').lower() == 'pong' or response.get('channel', '') == 'pong':
                 continue
             if raw_callback:
                 raw_callback(response)
-            deals = response['d']['deals']
-            for deal in deals:
-                me.on_match(self.format_match(deal))
+            deals = response['d']['deals'] if contract_type == 'SPOT' else response['data']
+            if contract_type == 'SPOT':
+                for deal in deals:
+                    me.on_match(self.format_match(deal))
+            elif contract_type == 'FUTURES':
+                me.on_match(self.format_match_futures(deals))
 
     def init_websocket(self, symbol:str, interval:str, callback:Callable, liveloop:'LiveLoop'):
         ws_uri = 'wss://wbs.mexc.com/ws'

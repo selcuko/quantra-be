@@ -157,14 +157,26 @@ class KucoinMarket(IMarket):
                 current_candle['close'] = price
 
     def format_match(self, data):
+        spot_t = int(data.get('time', 0))
+        futures_t = int(data.get('ts', 0))
         return {
-            'time': datetime.fromtimestamp(int(data['time']) / 1000000000, pytz.UTC),
+            'time': datetime.fromtimestamp(max(spot_t, futures_t) / 1000000000, pytz.UTC),
             'price': float(data['price']),
             'size': float(data['size']),
             'maker': data['side'] == 'buy',
         }
 
-    def get_match_engine_socket(self, symbol:str) -> ClientConnection:
+    def format_topic_match(self, symbol:'MarketSymbol') -> str:
+        mapping = {
+            'SPOT': f'/market/match:{symbol.name}',
+            'FUTURES': f'/contractMarket/execution:{symbol.name.split("-")[0]}USDTM',
+        }
+        return mapping.get(symbol.contract_type, '')
+
+    def get_match_engine_socket(self, symbol:'MarketSymbol|str') -> ClientConnection:
+        if isinstance(symbol, str):
+            symbol = self._get_symbol_from_name(symbol)
+
         token = self.get_websocket_token()
         conn_id = uuid.uuid4().hex
         ws_uri = f'wss://ws-api-spot.kucoin.com/?token={token}&[connectId={conn_id}]'
@@ -173,7 +185,7 @@ class KucoinMarket(IMarket):
         sub = {
             "id": str(uuid.uuid4()),
             "type": "subscribe",
-            "topic": f'/market/match:{symbol}',
+            "topic": self.format_topic_match(symbol),
             "privateChannel": False,
             "response": True 
         }
@@ -183,7 +195,7 @@ class KucoinMarket(IMarket):
             raise ValueError(f'Error while subscribing to {symbol} on {self.name}: {ack}')
         return ws
 
-    def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable, stop_event:Event, raw_callback=None, ticker_callback=None):
+    def init_match_engine(self, symbol:'MarketSymbol|str', interval:str, callback:typing.Callable, stop_event:Event, raw_callback=None, ticker_callback=None):
         ws = self.get_match_engine_socket(symbol)
         last_ping = datetime.now()
         engine = MatchEngine(interval, callback, ticker_callback)
@@ -210,7 +222,7 @@ class KucoinMarket(IMarket):
                 continue
             if data.get('type') == 'pong':
                 continue
-            if not data.get('subject') == 'trade.l3match':
+            if data.get('subject') not in ['trade.l3match', 'match']:
                 continue
             if raw_callback:
                 raw_callback(data)

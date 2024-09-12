@@ -8,7 +8,7 @@ import time
 import traceback
 import requests
 from logger import logger
-from markets.errors import InsufficientBalance, KlineFetchFailed, MarketAPIError, MarketAPIUnavailable, OrderPlacementError, OrderPostProcessingError, RejectedOrder
+from markets.errors import InsufficientBalance, KlineFetchFailed, MarketAPIError, MarketAPIUnavailable, OrderPlacementError, OrderPostProcessingError, RejectedOrder, SymbolNotInMarket
 from markets.interface import IMarket
 from logger import logger
 import base64
@@ -231,7 +231,14 @@ class OKXMarket(IMarket):
             logger.error(msg, extra={'market': self.name, 'type': 'MARKET'})
             raise MarketAPIError(f'Failed to connect to websocket: {traceback.format_exc()}')
 
-    def get_match_engine_socket(self, symbol:str) -> ClientConnection:
+    def get_match_engine_socket(self, symbol:'MarketSymbol|str') -> ClientConnection:
+        if isinstance(symbol, str):
+            symbol_object = self.get_symbol_from_name(symbol)
+            if not symbol_object:
+                raise SymbolNotInMarket(f'{symbol} not found in {self.name}')
+        else:
+            symbol_object = symbol
+
         ws_uri = 'wss://ws.okx.com:8443/ws/v5/business'
         while True:
             try:
@@ -240,7 +247,7 @@ class OKXMarket(IMarket):
                     'op': 'subscribe',
                     'args': [{
                         'channel': 'trades-all',
-                        'instId': self.format_symbol(symbol),
+                        'instId': self._format_instId(symbol_object),
                     }]
                 }))
             except TimeoutError:
@@ -251,7 +258,7 @@ class OKXMarket(IMarket):
                 raise MarketAPIError(f'Failed to subscribe to websocket: {ack}')
             return ws
 
-    def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable, stop_event: Event, raw_callback:'typing.Optional[typing.Callable]'=None, ticker_callback:'typing.Optional[typing.Callable]'=None):
+    def init_match_engine(self, symbol:'MarketSymbol|str', interval:str, callback:typing.Callable, stop_event: Event, raw_callback:'typing.Optional[typing.Callable]'=None, ticker_callback:'typing.Optional[typing.Callable]'=None):
         ws = self.get_match_engine_socket(symbol)
         engine = MatchEngine(interval, callback, ticker_callback)
         retries = 30

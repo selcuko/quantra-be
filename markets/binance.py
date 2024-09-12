@@ -80,8 +80,16 @@ class BinanceMarket(IMarket):
             'maker': data['m'],
         }
 
-    def init_match_engine(self, symbol:str, interval:str, callback:Callable, stop_event:Event, raw_callback:Optional[Callable]=None, ticker_callback:Optional[Callable]=None): # type: ignore
-        ws_uri = f'wss://stream.binance.com:9443/ws/{self._format_symbol(symbol).lower()}@trade'
+    def init_match_engine(self, symbol:'MarketSymbol|str', interval:str, callback:Callable, stop_event:Event, raw_callback:Optional[Callable]=None, ticker_callback:Optional[Callable]=None): # type: ignore
+        if isinstance(symbol, str):
+            contract_type = 'SPOT'
+        else:
+            contract_type = symbol.contract_type
+            symbol = symbol.name
+        if contract_type == 'SPOT':
+            ws_uri = f'wss://stream.binance.com:9443/ws/{self._format_symbol(symbol).lower()}@trade'
+        elif contract_type == 'FUTURES':
+            ws_uri = f'wss://fstream.binance.com/ws/{self._format_symbol(symbol).lower()}@aggTrade'
         ws = connect(ws_uri)
         me = MatchEngine(interval, callback, ticker_callback)
         last_ping = datetime.now()

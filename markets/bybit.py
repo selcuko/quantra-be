@@ -21,7 +21,7 @@ if typing.TYPE_CHECKING:
     from loops import LiveLoop
     from loops import LoopGroup
 
-
+# XXX: Volume is problematic, it is not matching the volume of website.
 class BybitMarket(IMarket):
     name = 'Bybit'
 
@@ -259,8 +259,16 @@ class BybitMarket(IMarket):
             raise MarketAPIError(msg) from e
         ws.close()
 
-    def get_match_engine_socket(self, symbol:str) -> ClientConnection:
-        ws_uri = 'wss://stream.bybit.com/v5/public/spot'
+    def get_match_engine_socket(self, symbol:'MarketSymbol|str') -> ClientConnection:
+        if isinstance(symbol, str):
+            contract_type = 'SPOT'
+        else:
+            contract_type = symbol.contract_type
+            symbol = symbol.name
+        if contract_type == 'SPOT':
+            ws_uri = 'wss://stream.bybit.com/v5/public/spot'
+        elif contract_type == 'FUTURES':
+            ws_uri = 'wss://stream.bybit.com/v5/public/linear'
         base = self.format_symbol(symbol.split('-')[0])
         ws = connect(ws_uri)
         ws.send(json.dumps({
@@ -272,7 +280,7 @@ class BybitMarket(IMarket):
             raise MarketAPIError(f'Failed to subscribe to websocket: {ack}')
         return ws
 
-    def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable, stop_event:Event, raw_callback:typing.Optional[typing.Callable]=None, ticker_callback:typing.Optional[typing.Callable]=None):
+    def init_match_engine(self, symbol:'MarketSymbol|str', interval:str, callback:typing.Callable, stop_event:Event, raw_callback:typing.Optional[typing.Callable]=None, ticker_callback:typing.Optional[typing.Callable]=None):
         ws = self.get_match_engine_socket(symbol)
         last_ping = timezone.now()
         engine = MatchEngine(interval, callback, ticker_callback)
