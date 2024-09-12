@@ -19,6 +19,7 @@ from markets.errors import (InsufficientBalance, KlineFetchFailed,
 from markets.interface import IMarket
 from match import MatchEngine
 from models import interval_to_minutes
+from threading import Event
 
 if typing.TYPE_CHECKING:
     from loops import LiveLoop, LoopGroup
@@ -79,16 +80,13 @@ class BinanceMarket(IMarket):
             'maker': data['m'],
         }
 
-    def init_match_engine(self, symbol:str, interval:str, callback:Callable, liveloop:'LiveLoop|LoopGroup|None', raw_callback:Optional[Callable]=None, ticker_callback:Optional[Callable]=None):
+    def init_match_engine(self, symbol:str, interval:str, callback:Callable, stop_event:Event, raw_callback:Optional[Callable]=None, ticker_callback:Optional[Callable]=None): # type: ignore
         ws_uri = f'wss://stream.binance.com:9443/ws/{self._format_symbol(symbol).lower()}@trade'
         ws = connect(ws_uri)
         me = MatchEngine(interval, callback, ticker_callback)
         last_ping = datetime.now()
         retries = 0
-        while not self.stop_websocket_stream:
-            if liveloop and liveloop.should_stop():
-                self.stop_websocket_stream = True
-                break
+        while not stop_event.is_set():
             if (datetime.now() - last_ping) > timedelta(seconds=30):
                 ws.pong()
                 last_ping = datetime.now()

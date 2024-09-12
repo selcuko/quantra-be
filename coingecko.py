@@ -88,32 +88,16 @@ class CoinGecko:
         self.handle_failed_request(response)
         return response.json()
 
-    def full_payload_to_dict(self, coin):
-        return {
-            'name': coin['symbol'].upper().replace('-USD', '') + '-USD',
-            'base': coin['symbol'].upper().replace('-USD', ''),
-            'image': coin.get('image', {}).get('large'),
-            'market_cap': coin.get('market_data').get('market_cap').get('usd'),
-            'volume': coin.get('market_data').get('total_volume').get('usd'),
-            'high_24h': coin.get('market_data').get('high_24h').get('usd'),
-            'low_24h': coin.get('market_data').get('low_24h').get('usd'),
-            'price_change_24h': coin.get('market_data').get('price_change_24h'),
-            'price_change_percentage_24h': coin.get('market_data').get('price_change_percentage_24h'),
-            'circulating_supply': coin.get('market_data').get('circulating_supply'),
-            'total_supply': coin.get('market_data').get('total_supply'),
-            'max_supply': coin.get('market_data').get('max_supply'),
-            'ath': coin.get('market_data').get('ath').get('usd'),
-            'ath_date': coin.get('market_data').get('ath_date').get('usd'),
-            'atl': coin.get('market_data').get('atl').get('usd'),
-            'atl_date': coin.get('market_data').get('atl_date').get('usd'),
-            'data_updated': str(coin.get('last_updated')),
-            'coingecko_response': json.dumps(coin),
-            'data_source': 'COINGECKO',
-            'price': float(coin.get('market_data').get('current_price').get('usd')) if coin.get('market_data').get('current_price').get('usd') else None,
-        }
+    def categories(self):
+        uri = self.url + 'coins/categories'
+        response = self.session.get(uri)
+        self.handle_failed_request(response)
+        payload = response.json()
+        with open('categories.json', 'w') as f:
+            f.write(json.dumps(payload, indent=4))
+        return payload
 
 
 if __name__ == '__main__':
     gc = CoinGecko()
-    xrp = gc.coins_list_market()
-    print(xrp)
+    xrp = gc.categories()

@@ -1,6 +1,7 @@
+from django.test import tag
 import django_filters as filters
-from django.db.models import Q
-from .models import GlobalSymbol, MarketAccount, MarketSymbol, Session, SessionGroup
+from django.db.models import Q, Count, Aggregate
+from .models import GlobalSymbol, MarketAccount, MarketSymbol, Session, SessionGroup, Tag
 
 
 class MarketAccountFilter(filters.FilterSet):
@@ -32,10 +33,11 @@ class MarketSymbolFilter(filters.FilterSet):
     base = filters.CharFilter(field_name='base', lookup_expr='startswith')
     quote = filters.CharFilter(field_name='quote', lookup_expr='iexact')
     spot_enabled = filters.BooleanFilter(field_name='spot_trading_enabled')
+    contract_type = filters.CharFilter(field_name='contract_type', lookup_expr='iexact')
 
     class Meta:
         model = MarketSymbol
-        fields = ['market', 'name', 'base', 'quote', 'sort']
+        fields = ['market', 'name', 'base', 'quote', 'sort', 'spot_enabled', 'contract_type']
 
 
 class SessionFilter(filters.FilterSet):
@@ -68,71 +70,47 @@ class SessionGroupFilter(filters.FilterSet):
 
 
 class GlobalSymbolFilter(filters.FilterSet):
-    sort = filters.OrderingFilter(
-        fields=(
-            ('market_cap', 'market_cap'),
-            ('volume', 'volume'),
-            ('price_change_percentage_24h', 'price_change_percentage_24h'),
-            ('supply_ratio', 'supply_ratio'),
-            ('ath', 'ath'),
-            ('ath_date', 'ath_date'),
-            ('ath_prox', 'ath_prox'),
-            ('ath_ratio', 'ath_ratio'),
-            ('atl', 'atl'),
-            ('atl_date', 'atl_date'),
-            ('atl_prox', 'atl_prox'),
-            ('atl_ratio', 'atl_ratio'),
-            ('volume24h_to_mcap', 'volume24h_to_mcap'),
-        )
-    )
+    contract_type = filters.CharFilter(field_name='contract_type', lookup_expr='iexact')
     name = filters.CharFilter(field_name='name', lookup_expr='icontains')
+    base = filters.CharFilter(field_name='base', lookup_expr='icontains')
+    quote = filters.CharFilter(field_name='quote', lookup_expr='iexact')
     tags = filters.CharFilter(method='filter_tags')
     market = filters.CharFilter(method='filter_market')
     is_favorite = filters.BooleanFilter(field_name='favorite')
     is_stablecoin = filters.BooleanFilter(field_name='is_stablecoin')
-    ath__gte = filters.NumberFilter(field_name='ath', lookup_expr='gte')
-    ath__lte = filters.NumberFilter(field_name='ath', lookup_expr='lte')
-    atl__gte = filters.NumberFilter(field_name='atl', lookup_expr='gte')
-    atl__lte = filters.NumberFilter(field_name='atl', lookup_expr='lte')
-    ath_date__gte = filters.DateFilter(field_name='ath_date', lookup_expr='gte')
-    ath_date__lte = filters.DateFilter(field_name='ath_date', lookup_expr='lte')
-    atl_date__gte = filters.DateFilter(field_name='atl_date', lookup_expr='gte')
-    atl_date__lte = filters.DateFilter(field_name='atl_date', lookup_expr='lte')
-    ath_prox__gte = filters.NumberFilter(field_name='ath_prox', lookup_expr='gte')
-    ath_prox__lte = filters.NumberFilter(field_name='ath_prox', lookup_expr='lte')
-    atl_prox__gte = filters.NumberFilter(field_name='atl_prox', lookup_expr='gte')
-    atl_prox__lte = filters.NumberFilter(field_name='atl_prox', lookup_expr='lte')
-    ath_ratio__gte = filters.NumberFilter(field_name='ath_ratio', lookup_expr='gte')
-    ath_ratio__lte = filters.NumberFilter(field_name='ath_ratio', lookup_expr='lte')
-    atl_ratio__gte = filters.NumberFilter(field_name='atl_ratio', lookup_expr='gte')
-    atl_ratio__lte = filters.NumberFilter(field_name='atl_ratio', lookup_expr='lte')
-    supply_ratio__gte = filters.NumberFilter(field_name='supply_ratio', lookup_expr='gte')
-    supply_ratio__lte = filters.NumberFilter(field_name='supply_ratio', lookup_expr='lte')
-    volume__gte = filters.NumberFilter(field_name='volume', lookup_expr='gte')
-    volume__lte = filters.NumberFilter(field_name='volume', lookup_expr='lte')
-    market_cap__gte = filters.NumberFilter(field_name='market_cap', lookup_expr='gte')
-    market_cap__lte = filters.NumberFilter(field_name='market_cap', lookup_expr='lte')
-    price_change__gte = filters.NumberFilter(field_name='price_change_percentage_24h', lookup_expr='gte')
-    price_change__lte = filters.NumberFilter(field_name='price_change_percentage_24h', lookup_expr='lte')
-    price_change_percentage_24h__gte = filters.NumberFilter(field_name='price_change_percentage_24h', lookup_expr='gte')
-    price_change_percentage_24h__lte = filters.NumberFilter(field_name='price_change_percentage_24h', lookup_expr='lte')
-    volume24h_to_mcap__gte = filters.NumberFilter(field_name='volume24h_to_mcap', lookup_expr='gte')
-    volume24h_to_mcap__lte = filters.NumberFilter(field_name='volume24h_to_mcap', lookup_expr='lte')
 
     def filter_market(self, queryset, name, value):
-        query = Q()
         if value.lower() == 'notnull':
-            return queryset.exclude(available_markets='[]')
-        for market in value.split(","):
-            query &= Q(available_markets__icontains=market)
-        return queryset.filter(query)
+            return queryset.filter(symbols__isnull=False).distinct()
+        market_list = value.split(",")
+        return queryset\
+            .filter(symbols__market__exchange_name__in=market_list, symbols__contract_type='SPOT')\
+            .annotate(market_count=Count('symbols__market', distinct=True))\
+            .filter(market_count=len(market_list))\
+            .distinct()
 
     def filter_tags(self, queryset, name, value):
-        query = Q()
-        for tag in value.split(","):
-            query &= Q(tags_flat__icontains=tag)
-        return queryset.filter(query)
+        tag_list = value.split(",")
+        return queryset\
+            .filter(tags__name__in=tag_list)\
+            .annotate(tag_count=Count('tags', distinct=True))\
+            .filter(tag_count=len(tag_list))\
+            .distinct()
 
     class Meta:
         model = GlobalSymbol
-        fields = ['market', 'name', 'base', 'quote', 'supply_ratio']
+        fields = ['market', 'name', 'base', 'quote', 'contract_type', 'tags', 'is_favorite']
+
+
+class TagFilter(filters.FilterSet):
+    class Meta:
+        model = Tag
+        fields = ['symbols', 'name', 'volume']
+
+    symbols = filters.CharFilter(method='filter_symbols')
+    name = filters.CharFilter(field_name='name', lookup_expr='icontains')
+    volume = filters.NumericRangeFilter(field_name='metrics__volume')
+
+    def filter_symbols(self, queryset, name, value):
+        cids = value.split(",")
+        return queryset.filter(symbols__cid__in=cids).annotate(symbol_count=Count('symbols')).filter(symbol_count=len(cids)).distinct()

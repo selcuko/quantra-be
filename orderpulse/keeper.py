@@ -17,11 +17,10 @@ class KeeperPool:
     manager = BookManager()
     manager_started = False
     pool: dict['MarketSymbol', 'Keeper'] = {}
-    connections: dict['MarketSymbol', 'list[str]'] = {}
-    max_pool_size = 1
+    max_pool_size = 3
 
     @classmethod
-    def get(cls, symbol:'MarketSymbol', callback:Optional[Callable]=None, manager:Optional[BookManager]=None, seeker:str='') -> 'Keeper':
+    def get(cls, symbol:'MarketSymbol', callback:Optional[Callable]=None, manager:Optional[BookManager]=None) -> 'Keeper':
         if not manager and not cls.manager_started:
             cls.manager.start()
             cls.manager_started = True
@@ -32,28 +31,24 @@ class KeeperPool:
             keeper = Keeper(symbol, manager)
             keeper.start()
             cls.pool[symbol] = keeper
-            cls.connections[symbol] = []
         else:
             keeper = cls.pool[symbol]
         if callback:
             keeper.add_callback(callback)
-        if seeker:
-            cls.connections[symbol].append(seeker)
         return keeper
 
     @classmethod
-    def release(cls, keeper: 'Keeper', seeker:str=''):
-        symbol = keeper.symbol
-        if seeker and symbol in cls.connections and seeker in cls.connections[symbol]:
-            cls.connections[keeper.symbol].remove(seeker)
-        if not cls.connections[keeper.symbol]:
-            keeper.stop()
-            del cls.pool[keeper.symbol]
-            del cls.connections[keeper.symbol]
+    def pop_symbol(cls, symbol:'MarketSymbol'):
+        try:
+            keeper = cls.pool[symbol]
+        except KeyError:
+            return None
+        return cls.pop(keeper)
 
     @classmethod
     def pop(cls, keeper: 'Keeper'):
-        pass
+        del cls.pool[keeper.symbol]
+        keeper.stop()
 
 
 class Keeper:
@@ -83,7 +78,7 @@ class Keeper:
 
     @property
     def key(self):
-        return f'{self.symbol.base}-{self.symbol.market.exchange_name}-{self.symbol.contract_type}'
+        return f'keeper.{self.symbol.base}-{self.symbol.market.exchange_name}-{self.symbol.contract_type}'.lower()
 
     def state(self):
         status = 'undefined'
@@ -108,7 +103,15 @@ class Keeper:
 
     def add_callback(self, callback):
         """Adds a callback to the list of callbacks that will be called when an update is processed (callbacks are blocking, make them fast)"""
-        self.callbacks.append(callback)
+        if callback not in self.callbacks:
+            self.callbacks.append(callback)
+
+    def remove_callback(self, callback):
+        """Removes a callback from the list of callbacks"""
+        try:
+            self.callbacks.remove(callback)
+        except ValueError:
+            pass
 
     def start(self):
         if self.started:
@@ -184,8 +187,8 @@ class Keeper:
         if self.market_thread: 
             self.market_thread.join()
         if self.worker_process: 
+            self.worker_process.terminate()
             self.worker_process.join()
         if self.dispatch_thread:
             self.dispatch_thread.join()
         self.started = False
-        KeeperPool.pop(self)

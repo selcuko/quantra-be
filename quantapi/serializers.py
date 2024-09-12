@@ -1,8 +1,8 @@
 import json
 from rest_framework import serializers
-from quantapi.models import (ContactForm, GlobalSymbol, GroupOrder, Market, MarketAccount, MarketCredentials, 
+from quantapi.models import (ContactForm, GlobalSymbol, GlobalSymbolMetrics, GroupOrder, Market, MarketAccount, MarketCredentials, 
                              MarketSymbol, Order, Session, SessionGroup, 
-                             Signal, Strategy, Subscription, Tag)
+                             Signal, Strategy, Subscription, Tag, TagMetrics)
 from quantapi.validations import validate_order_payload, validate_symbol_against_market
 
 
@@ -109,7 +109,7 @@ class MarketSymbolSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = MarketSymbol
         fields = ['symbol', 'market', 'exchange_name', 'name', 'base', 'quote', 'base_precision', 'quote_precision', 
-                  'spot_trading_enabled', 'icon', 'price', 'price_updated', 'id', 'url', 'cid', 'contract_type', 'available_contracts']
+                  'spot_trading_enabled', 'icon', 'price', 'price_updated', 'id', 'url', 'cid', 'contract_type', 'available_contracts', 'volume']
 
     def get_price(self, obj):
         prices = json.loads(obj.market.prices or '{}')
@@ -121,25 +121,55 @@ class InlineMarketSymbolSerializer(serializers.HyperlinkedModelSerializer):
     market = MarketSerializer()
     class Meta:
         model = MarketSymbol
-        fields = ['id', 'url', 'icon', 'name', 'base', 'quote', 'market']
+        fields = ['id', 'url', 'icon', 'name', 'base', 'quote', 'market', 'contract_type', 'available_contracts', 'volume']
+
+
+class TagMetricsSerializer(serializers.HyperlinkedModelSerializer):
+    class Meta:
+        model = TagMetrics
+        fields = ['volume', 'market_cap', 'market_cap_change_24h']
 
 
 class TagSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = Tag
-        fields = ['name', 'description', 'is_ecosystem', 'is_chain', 'is_portfolio', 'weight']
+        fields = ['name', 'description', 'is_ecosystem', 'is_chain', 'is_portfolio', 'weight', 'best_symbols', 'metrics']
+
+    metrics = TagMetricsSerializer()
+    best_symbols = serializers.SerializerMethodField()
+
+    def get_best_symbols(self, obj):
+        return InlineGlobalSymbolSerializer(obj.symbols.order_by('-metrics__volume')[:3], many=True, context={'request': self.context['request']}).data
+
+
+class InlineTagSerializer(serializers.HyperlinkedModelSerializer):
+    class Meta:
+        model = Tag
+        fields = ['name', 'weight']
+
+
+class InlineGlobalSymbolSerializer(serializers.HyperlinkedModelSerializer):
+    class Meta:
+        model = GlobalSymbol
+        fields = ['id', 'cid', 'display', 'base', 'markets', 'image']
+
+
+class GlobalSymbolMetricsSerializer(serializers.HyperlinkedModelSerializer):
+    class Meta:
+        model = GlobalSymbolMetrics
+        fields = ['volume', 'market_cap', 'market_cap_change_24h', 'market_cap_change_percentage_24h', 'ath',
+                  'ath_date', 'atl', 'atl_date', 'total_supply', 'circulating_supply', 'max_supply', 'ath_prox',
+                  'atl_prox', 'ath_ratio', 'atl_ratio', 'data_updated', 'price_change_24h', 'price_change_percentage_24h',
+                  'price_high_24h', 'price_low_24h', 'price']
 
 
 class GlobalSymbolSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = GlobalSymbol
-        fields = ['id', 'cid', 'name', 'display', 'base', 'quote', 'tags', 'symbols', 'data_source', 
-                  'is_stablecoin', 'ath', 'atl', 'ath_ratio', 'atl_ratio', 'ath_date', 'atl_date', 'volume', 'market_cap', 
-                  'circulating_supply', 'max_supply', 'total_supply', 'last_updated', 'price', 'supply_ratio', 'high_24h',
-                  'low_24h', 'price_change_24h', 'price_change_percentage_24h',  
-                  'supply_ratio', 'ath_prox', 'atl_prox', 'volume24h_to_mcap', 'image', 'url']
-    tags = TagSerializer(many=True)
-    symbols = InlineMarketSymbolSerializer(many=True)
+        fields = ['cid', 'id', 'display', 'base', 'url', 'metrics', 'image', 'markets', 'tags', 'symbols']
+    tags = InlineTagSerializer(many=True)
+    symbols = InlineMarketSymbolSerializer(many=True, source='spot_symbols')
+    metrics = GlobalSymbolMetricsSerializer()
 
 
 class StrategySerializer(serializers.HyperlinkedModelSerializer):
@@ -166,12 +196,7 @@ class SessionSerializer(serializers.HyperlinkedModelSerializer):
                   'strategy', 'status', 'last_price', 'last_kline_timestamp', 
                   'last_heartbeat', 'capital', 'assets', 'initial_capital', 
                   'initial_assets', 'buy_enabled', 'sell_enabled', 'account', 
-                  'equity', 'orders', 'signals', 'thread', 'health', 'url']
-
-    def get_thread(self, obj):
-        if obj.thread:
-            return ThreadSerializer(obj.thread).data
-        return {}
+                  'equity', 'orders', 'signals', 'health', 'url']
 
     def validate(self, data):
         instance = self.instance
@@ -293,38 +318,6 @@ class SubscriptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Subscription
         fields = '__all__'
-
-
-class ThreadSerializer(serializers.Serializer):
-    ident = serializers.CharField()
-    is_alive = serializers.BooleanField()
-    name = serializers.CharField()
-    source = serializers.SerializerMethodField()
-
-    def get_source(self, obj):
-        if obj.name.startswith('LiveLoop-'):
-            return 'LiveLoop'
-        if obj.name.startswith('LoopGroup-'):
-            return 'LoopGroup'
-        return None
-
-
-class LiveLoopSerializer(serializers.Serializer):
-    symbol = serializers.CharField()
-    market = serializers.CharField()
-    account = MarketAccountSerializer()
-    #group = serializers.IntegerField()
-    session = serializers.IntegerField(source='session.pk')
-    thread = ThreadSerializer()
-
-
-class LoopGroupSerializer(serializers.Serializer):
-    symbol = serializers.CharField()
-    market = serializers.CharField()
-    account = MarketAccountSerializer()
-    group = serializers.HyperlinkedRelatedField(view_name='sessiongroup-detail', read_only=True)
-    session = serializers.HyperlinkedRelatedField(view_name='session-detail', read_only=True)
-    thread = ThreadSerializer()
 
 
 class ContactFormSerializer(serializers.HyperlinkedModelSerializer):

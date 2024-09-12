@@ -129,45 +129,21 @@ class OrderAdmin(admin.ModelAdmin):
         return obj.oid or 'No ID'
 
 
-
+class MetricsInline(admin.StackedInline):
+    model = GlobalSymbolMetrics
+    extra = 0
+    readonly_fields = ('data_updated', 'last_updated')
 
 
 class GlobalSymbolAdmin(admin.ModelAdmin):
-    class VolumeFilter(admin.SimpleListFilter):
-        title = 'Hide no volumes'
+    list_display = ['display', 'cid', 'base', 'volume', 'markets']
+    search_fields = ['base', 'display', 'cid']
+    #raw_id_fields = ['metrics']
+    inlines = [MetricsInline]
+    ordering = ['-metrics__volume']
 
-        parameter_name = 'volume'
-
-        def lookups(self, request, model_admin):
-            return [
-                ('vol100', 'Hide volume<=100'),
-                ('volall', 'Show all volumes'),
-            ]
-
-        def queryset(self, request, queryset):
-            """
-            Returns the filtered queryset based on the value
-            provided in the query string and retrievable via
-            `self.value()`.
-            """
-            # Compare the requested value (either '80s' or '90s')
-            # to decide how to filter the queryset.
-            if self.value() == 'vol0' or self.value() is None:
-                return queryset.filter(volume__gt=0)
-            if self.value() == 'vol100':
-                return queryset.filter(volume__gt=100)
-            if self.value() == 'volall':
-                pass
-            return queryset
-
-    list_display = ['name', 'volume', 'data_updated', 'data_source', 'markets']
-    search_fields = ['name', 'data_source']
-    list_filter = ['data_source', VolumeFilter]
-    ordering = ['-volume']
-    inlines = [IssuesInline]
-
-    def get_markets(self, obj):
-        return json.loads(obj.available_markets)
+    def volume(self, obj):
+        return obj.metrics.volume
 
 
 class ComplexOrderAdmin(admin.ModelAdmin):

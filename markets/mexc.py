@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import json
+from threading import Event
 import time
 import typing
 import uuid
@@ -17,14 +18,13 @@ from websockets.sync.client import ClientConnection, connect
 import incident
 from logger import logger
 from markets import IMarket
-from markets.errors import InsufficientBalance, InvalidUsage, KlineFetchFailed, MarketAPIError, MarketAPIUnavailable, RejectedOrder
+from markets.errors import InsufficientBalance, InvalidUsage, KlineFetchFailed, MarketAPIError, RejectedOrder
 from markets.helper import authentication_required
 from match import MatchEngine
 from models import interval_to_minutes
 
 if typing.TYPE_CHECKING:
     from loops.liveloop import LiveLoop
-    from loops.loopgroup import LoopGroup
     from quantapi.models import MarketAccount, MarketSymbol, Order, Market
 
 
@@ -116,15 +116,12 @@ class MEXCMarket(IMarket):
             raise Exception(f'Error while subscribing to {topic}: {ack}')
         return ws
 
-    def init_match_engine(self, symbol:str, interval:str, callback:Callable, liveloop:'LiveLoop|LoopGroup|None', raw_callback:Optional[Callable]=None, ticker_callback:Optional[Callable]=None):
+    def init_match_engine(self, symbol:str, interval:str, callback:Callable, stop_event: Event, raw_callback:Optional[Callable]=None, ticker_callback:Optional[Callable]=None):
         ws = self.get_match_engine_ws(symbol)
         last_ping = datetime.now()
         me = MatchEngine(interval, callback, ticker_callback)
         retries = 0
-        while not self.stop_websocket_stream:
-            if liveloop and liveloop.should_stop():
-                self.stop_websocket_stream = True
-                break
+        while not stop_event.is_set():
             if (datetime.now() - last_ping).seconds > 30:
                 ws.send('{"method": "PING"}')
                 last_ping = datetime.now()

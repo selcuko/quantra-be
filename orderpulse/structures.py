@@ -183,20 +183,35 @@ class Book:
             return Decimal(0)
         return best_bid.price if best_bid.updated > best_ask.updated else best_ask.price
 
-    def get_best(self, bids:Optional[Iterable[Bid]]=None, asks:Optional[Iterable[Bid]]=None, count=5):
+    def get_best(self, bids:Optional[Iterable[Bid]]=None, asks:Optional[Iterable[Bid]]=None, count=5, range_asks_min=0, range_asks_max=100, range_bids_min=0, range_bids_max=100):
         """Returns the best bids and asks"""
         if not bids:
             bids = self.bids.values()
         if not asks:
             asks = self.asks.values()
-        return (
-            list(bids)[-count:],
-            list(asks)[:count],
-        )
+        return_bids = list(bids)
+        return_asks = list(asks)
+        if range_bids_min and range_bids_max:
+            return_bids = return_bids[-range_bids_max:-range_bids_min]
+        if range_bids_max:
+            return_bids = return_bids[-range_bids_max:]
+        if range_bids_min:
+            return_bids = return_bids[:-range_bids_min]
+        if not (range_asks_min or range_asks_max):
+            return_bids = return_bids[-count:]
+        if range_asks_min and range_asks_max:
+            return_asks = return_asks[range_asks_min:range_asks_max]
+        if range_asks_max:
+            return_asks = return_asks[:range_asks_max]
+        if range_asks_min:
+            return_asks = return_asks[range_asks_min:]
+        if not (range_bids_min or range_bids_max):
+            return_asks = return_asks[:count]
+        return return_bids, return_asks
 
-    def get_depth(self, count=5, depth=1):
+    def get_depth(self, count=5, depth=Decimal(1), range_asks_min=0, range_asks_max=0, range_bids_min=0, range_bids_max=0):
         depth = Depth(self, depth)
-        return self.get_best(bids=depth.bids.values(), asks=depth.asks.values(), count=count)
+        return self.get_best(bids=depth.bids.values(), asks=depth.asks.values(), count=count, range_asks_min=range_asks_min, range_asks_max=range_asks_max, range_bids_min=range_bids_min, range_bids_max=range_bids_max)
 
     def dict(self):
         return {
@@ -211,7 +226,7 @@ class Book:
 
 
 class Depth:
-    def __init__(self, book: Book, depth:float=1):
+    def __init__(self, book: Book, depth:Decimal=Decimal(1)):
         self.book = book
         self.bids = SortedDict()
         self.asks = SortedDict()
@@ -232,7 +247,7 @@ class Depth:
             else:
                 container[depthed_price] = Bid(depthed_price, bid.size, bid.updated)
 
-    def get_depth_price(self, price, side:str):
+    def get_depth_price(self, price:Decimal, side:str):
         if self.depth == 0:
             return price
         if self.depth == 1:
