@@ -1,16 +1,18 @@
+from datetime import datetime, timedelta
 import json
-import threading
 
 from django.db.models import Prefetch, Count, Q
 from django_filters.rest_framework import DjangoFilterBackend
+import pytz
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import MethodNotAllowed
 from rest_framework.response import Response
 
-from cache import LIVELOOPS, LOOPGROUPS
+from cache import LIVELOOPS
 from loops import LiveLoop
 from markets.errors import OrderPlacementError
+from models import interval_to_minutes
 from order import OrderManager
 from orderpulse.consumers.miniorderbook import MiniOrderbookConsumer
 from orderpulse.keeper import KeeperPool
@@ -352,13 +354,39 @@ class CandlesViewSet(viewsets.ViewSet):
         return Response({'detail': 'Specify market, symbol and interval in the URI.'})
 
     def get(self, request, market, symbol, interval):
-        market = Market.objects.get(exchange_name=market.upper())
-        symbol = MarketSymbol.objects.get(contract_type=MarketSymbol.ContractType.SPOT, name=symbol.upper(), market=market)
-        interface = symbol.market.get_interface()
-
+        start = request.query_params.get('start')
+        end = request.query_params.get('end')
+        contract_type = request.query_params.get('contract_type', 'spot')
         interval = interval.replace('min', ' min').replace('hour', ' hour').replace('day', ' day').replace('week', ' week').replace('month', ' month')
 
-        candles = interface.get_last_klines(symbol, interval, limit=500)
+        if end:
+            end_date = datetime.fromisoformat(end)
+        else:
+            end_date = datetime.now(tz=pytz.UTC)
+        if start:
+            start_date = datetime.fromisoformat(start)
+        else:
+            start_date = end_date - timedelta(minutes=interval_to_minutes(interval) * 500)
+
+        if start_date >= end_date:
+            return Response({'detail': 'Start date must be before end date.'}, status=400)
+        elif start_date >= datetime.now(tz=pytz.UTC) or end_date > datetime.now(tz=pytz.UTC):
+            return Response({'detail': 'Start and end dates must be before now.'}, status=400)
+        elif start_date < datetime(2000, 1, 1, tzinfo=pytz.UTC) or end_date < datetime(2000, 1, 1, tzinfo=pytz.UTC):
+            return Response({'detail': 'Start and end dates must be in valid range.'}, status=400)
+        elif (end_date - start_date) > timedelta(minutes=interval_to_minutes(interval) * 500):
+            start_date = end_date - timedelta(minutes=interval_to_minutes(interval) * 500)
+
+        market = Market.objects.get(exchange_name=market.upper())
+        symbol = MarketSymbol.objects.get(contract_type=contract_type.upper(), name=symbol.upper(), market=market)
+
+        interface = symbol.market.get_interface()
+
+        if not start and not end:
+            candles = interface.get_last_klines(symbol, interval, limit=500)
+        else:
+            candles = interface.get_klines(symbol, interval, start_date, end_date)
+
         payload = [interface.format_candle(candle) for candle in candles]
         payload = sorted(payload, key=lambda x: x['time'])
         return Response({
@@ -366,8 +394,8 @@ class CandlesViewSet(viewsets.ViewSet):
             'symbol': symbol.name,
             'interval': interval,
             'count': len(payload),
-            'start': payload[0]['time'],
-            'end': payload[-1]['time'],
+            'start': payload[0]['time'] if payload else None,
+            'end': payload[-1]['time'] if payload else None,
             'candles': payload,
         })
 
