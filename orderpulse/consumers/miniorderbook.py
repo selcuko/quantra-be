@@ -70,7 +70,6 @@ class MiniOrderbookConsumer(AsyncWebsocketConsumer):
 
     async def update(self, event):
         """New version of the callback, called via channel layer."""
-        print('update', self.range_bids_min, self.range_bids_max, self.range_asks_min, self.range_asks_max)
         if self.range_bids_max and self.range_bids_min:
             event['bids'] = event['bids'][-self.range_bids_max:-self.range_bids_min]
         if self.range_bids_min:

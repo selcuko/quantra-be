@@ -357,6 +357,7 @@ class CandlesViewSet(viewsets.ViewSet):
         start = request.query_params.get('start')
         end = request.query_params.get('end')
         contract_type = request.query_params.get('contract_type', 'spot')
+        limit = int(request.query_params.get('limit', 500))
         interval = interval.replace('min', ' min').replace('hour', ' hour').replace('day', ' day').replace('week', ' week').replace('month', ' month')
 
         if end:
@@ -366,16 +367,16 @@ class CandlesViewSet(viewsets.ViewSet):
         if start:
             start_date = datetime.fromisoformat(start)
         else:
-            start_date = end_date - timedelta(minutes=interval_to_minutes(interval) * 500)
+            start_date = end_date - timedelta(minutes=interval_to_minutes(interval) * limit)
 
         if start_date >= end_date:
             return Response({'detail': 'Start date must be before end date.'}, status=400)
-        elif start_date >= datetime.now(tz=pytz.UTC) or end_date > datetime.now(tz=pytz.UTC):
-            return Response({'detail': 'Start and end dates must be before now.'}, status=400)
-        elif start_date < datetime(2000, 1, 1, tzinfo=pytz.UTC) or end_date < datetime(2000, 1, 1, tzinfo=pytz.UTC):
-            return Response({'detail': 'Start and end dates must be in valid range.'}, status=400)
-        elif (end_date - start_date) > timedelta(minutes=interval_to_minutes(interval) * 500):
-            start_date = end_date - timedelta(minutes=interval_to_minutes(interval) * 500)
+        elif (end_date - start_date) > timedelta(minutes=interval_to_minutes(interval) * limit):
+            start_date = end_date - timedelta(minutes=interval_to_minutes(interval) * limit)
+        if start_date < datetime(2017, 1, 1, tzinfo=pytz.UTC):
+            start_date = datetime(2017, 1, 1, tzinfo=pytz.UTC)
+        if end_date < datetime(2017, 1, 1, tzinfo=pytz.UTC):
+            end_date = datetime(2017, 1, 1, tzinfo=pytz.UTC)
 
         market = Market.objects.get(exchange_name=market.upper())
         symbol = MarketSymbol.objects.get(contract_type=contract_type.upper(), name=symbol.upper(), market=market)
@@ -383,7 +384,7 @@ class CandlesViewSet(viewsets.ViewSet):
         interface = symbol.market.get_interface()
 
         if not start and not end:
-            candles = interface.get_last_klines(symbol, interval, limit=500)
+            candles = interface.get_last_klines(symbol, interval, limit=limit)
         else:
             candles = interface.get_klines(symbol, interval, start_date, end_date)
 

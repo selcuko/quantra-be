@@ -13,7 +13,6 @@ from django.contrib.auth.models import User
 from django.contrib.contenttypes.fields import GenericRelation
 from django.db import models
 
-from coingecko import CoinGecko
 from errors import SessionCannotContinue
 from logger import logger
 from cache import get_loopgroup
