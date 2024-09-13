@@ -21,7 +21,7 @@ if typing.TYPE_CHECKING:
     from loops import LiveLoop
     from loops import LoopGroup
 
-
+# XXX: Volume is problematic, it is not matching the volume of website.
 class BybitMarket(IMarket):
     name = 'Bybit'
 
@@ -173,11 +173,19 @@ class BybitMarket(IMarket):
 
     def get_klines(self, symbol:'MarketSymbol|str', interval:str, start:datetime, end:typing.Optional[datetime]=None, limit:int=1000, retry:int=0) -> list[list]:
         symbol_object = self.get_symbol_from_name(symbol) if isinstance(symbol, str) else symbol
+
+        if isinstance(symbol, str):
+            symbol_object = self.get_symbol_from_name(symbol)
+            category = 'spot'
+        else:
+            symbol_object = symbol
+            category = 'linear' if symbol_object.contract_type == symbol_object.ContractType.FUTURES else 'spot'
+
         if not symbol_object:
             raise ValueError(f'Symbol not found: {symbol}')
         url = f'{self.url}/v5/market/kline'
         payload = {
-            'category': 'spot',
+            'category': category,
             'symbol': self.format_symbol(symbol_object.name),
             'interval': self.format_interval(interval),
             'start': self.format_timestamp(start),
@@ -251,8 +259,16 @@ class BybitMarket(IMarket):
             raise MarketAPIError(msg) from e
         ws.close()
 
-    def get_match_engine_socket(self, symbol:str) -> ClientConnection:
-        ws_uri = 'wss://stream.bybit.com/v5/public/spot'
+    def get_match_engine_socket(self, symbol:'MarketSymbol|str') -> ClientConnection:
+        if isinstance(symbol, str):
+            contract_type = 'SPOT'
+        else:
+            contract_type = symbol.contract_type
+            symbol = symbol.name
+        if contract_type == 'SPOT':
+            ws_uri = 'wss://stream.bybit.com/v5/public/spot'
+        elif contract_type == 'FUTURES':
+            ws_uri = 'wss://stream.bybit.com/v5/public/linear'
         base = self.format_symbol(symbol.split('-')[0])
         ws = connect(ws_uri)
         ws.send(json.dumps({
@@ -264,7 +280,7 @@ class BybitMarket(IMarket):
             raise MarketAPIError(f'Failed to subscribe to websocket: {ack}')
         return ws
 
-    def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable, stop_event:Event, raw_callback:typing.Optional[typing.Callable]=None, ticker_callback:typing.Optional[typing.Callable]=None):
+    def init_match_engine(self, symbol:'MarketSymbol|str', interval:str, callback:typing.Callable, stop_event:Event, raw_callback:typing.Optional[typing.Callable]=None, ticker_callback:typing.Optional[typing.Callable]=None):
         ws = self.get_match_engine_socket(symbol)
         last_ping = timezone.now()
         engine = MatchEngine(interval, callback, ticker_callback)
@@ -531,10 +547,10 @@ class BybitMarket(IMarket):
             float(c),
             float(v)
         ] for ts, o, h, l, c, v, t in data]
-    
+
     def get_symbol_from_name(self, name:str) -> 'MarketSymbol|None':
         return self.symbols.get(name)
-    
+
     def format_ws_candle(self, payload:dict) -> dict:
         return {
             'time': self.standardize_timestamp(payload['timestamp']),

@@ -8,7 +8,7 @@ import time
 import traceback
 import requests
 from logger import logger
-from markets.errors import InsufficientBalance, KlineFetchFailed, MarketAPIError, MarketAPIUnavailable, OrderPlacementError, OrderPostProcessingError, RejectedOrder
+from markets.errors import InsufficientBalance, KlineFetchFailed, MarketAPIError, MarketAPIUnavailable, OrderPlacementError, OrderPostProcessingError, RejectedOrder, SymbolNotInMarket
 from markets.interface import IMarket
 from logger import logger
 import base64
@@ -152,6 +152,7 @@ class OKXMarket(IMarket):
 
     def get_klines(self, symbol:'MarketSymbol|str', interval:str, start:datetime, end:typing.Optional[datetime]=None, limit=1000, retry=0):
         symbol_object = self.get_symbol_from_name(symbol) if isinstance(symbol, str) else symbol
+        contract_type = symbol_object.contract_type if symbol_object else None
         if not symbol_object:
             raise ValueError(f'Symbol not found: {symbol}')
         now = timezone.now()
@@ -165,7 +166,7 @@ class OKXMarket(IMarket):
         query = {
             'bar': self.format_interval(interval),
             'before': int(start.timestamp() * 1000),
-            'instId': self.format_symbol(symbol_object.name),
+            'instId': self.format_symbol(symbol_object.name) + ('-SWAP' if contract_type == 'FUTURES' else ''),
             'limit': limit,
         }
         if end:
@@ -178,7 +179,7 @@ class OKXMarket(IMarket):
         data = data['data']
         return self.standardize_klines(data)
 
-    def get_last_klines(self, symbol:str, interval:str, limit=100, retry=1, silent=True) -> list[list]:
+    def get_last_klines(self, symbol:'MarketSymbol|str', interval:str, limit=100, retry=1, silent=True) -> list[list]:
         minutes = interval_to_minutes(interval)
         now = timezone.now() + timedelta(minutes=1)
         start = now - timedelta(minutes=minutes*limit+1)
@@ -230,7 +231,14 @@ class OKXMarket(IMarket):
             logger.error(msg, extra={'market': self.name, 'type': 'MARKET'})
             raise MarketAPIError(f'Failed to connect to websocket: {traceback.format_exc()}')
 
-    def get_match_engine_socket(self, symbol:str) -> ClientConnection:
+    def get_match_engine_socket(self, symbol:'MarketSymbol|str') -> ClientConnection:
+        if isinstance(symbol, str):
+            symbol_object = self.get_symbol_from_name(symbol)
+            if not symbol_object:
+                raise SymbolNotInMarket(f'{symbol} not found in {self.name}')
+        else:
+            symbol_object = symbol
+
         ws_uri = 'wss://ws.okx.com:8443/ws/v5/business'
         while True:
             try:
@@ -239,7 +247,7 @@ class OKXMarket(IMarket):
                     'op': 'subscribe',
                     'args': [{
                         'channel': 'trades-all',
-                        'instId': self.format_symbol(symbol),
+                        'instId': self._format_instId(symbol_object),
                     }]
                 }))
             except TimeoutError:
@@ -250,7 +258,7 @@ class OKXMarket(IMarket):
                 raise MarketAPIError(f'Failed to subscribe to websocket: {ack}')
             return ws
 
-    def init_match_engine(self, symbol:str, interval:str, callback:typing.Callable, stop_event: Event, raw_callback:'typing.Optional[typing.Callable]'=None, ticker_callback:'typing.Optional[typing.Callable]'=None):
+    def init_match_engine(self, symbol:'MarketSymbol|str', interval:str, callback:typing.Callable, stop_event: Event, raw_callback:'typing.Optional[typing.Callable]'=None, ticker_callback:'typing.Optional[typing.Callable]'=None):
         ws = self.get_match_engine_socket(symbol)
         engine = MatchEngine(interval, callback, ticker_callback)
         retries = 30
@@ -307,7 +315,7 @@ class OKXMarket(IMarket):
             raise RejectedOrder(f'Order was rejected by the exchange {self.name}: {msg}')
         elif msg != 'order placed':
             raise OrderPlacementError(data.get('retMsg'))
-        
+
         return self.get_order(symbol_object, data['ordId'])
 
     def get_order(self, symbol:'MarketSymbol|str', order:'Order|str|int', retries=0) -> 'Order':
@@ -464,7 +472,7 @@ class OKXMarket(IMarket):
             contract_type=MarketSymbol.ContractType.SPOT
         )
         return symbol_object
-    
+
     def prep_futures_symbol(self, symbol:dict) -> 'MarketSymbol':
         from quantapi.models import MarketSymbol
         symbol_object = MarketSymbol(
@@ -516,10 +524,10 @@ class OKXMarket(IMarket):
             float(c),
             float(v)
         ] for ts, o, h, l, c, v, t, x, y in data]
-    
+
     def get_symbol_from_name(self, name:str) -> 'MarketSymbol|None':
         return self.symbols.get(name)
-    
+
     def format_ws_candle(self, data:list):
         candle = {
             'time': self.standardize_timestamp(data[0]),
