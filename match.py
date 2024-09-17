@@ -22,7 +22,7 @@ def get_start_end_dates(ts, interval):
 
 
 class MatchEngine:
-    def __init__(self, interval:str, candle_callback:Callable, ticker_callback:Optional[Callable]=None):
+    def __init__(self, interval:str, candle_callback:Callable, ticker_callback:Optional[Callable]=None, tick_partial_candle=True):
         self.price = None
         self.candle = {}
         self.interval = interval_to_minutes(interval)
@@ -31,6 +31,7 @@ class MatchEngine:
         self.candle_started_processing = timezone.now()
         self.last_price = None
         self.last_price_ts = None
+        self.tick_partial_candle = tick_partial_candle
 
     def close_candle(self, corrupt=False):
         self.candle_started_processing = timezone.now()
@@ -90,7 +91,12 @@ class MatchEngine:
     def on_match(self, data:dict):
         self.update_candle(data)
         if self.ticker_callback:
-            self.ticker_callback(data)
+            if self.tick_partial_candle:
+                payload = self.candle.copy()
+                payload['price'] = data['price']
+                self.ticker_callback(payload)
+            else:
+                self.ticker_callback(data)
 
 
 if __name__ == '__main__':

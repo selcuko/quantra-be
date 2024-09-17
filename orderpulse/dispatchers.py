@@ -211,7 +211,7 @@ class TickerDispatch:
         stop_event = Event()
         thread = Thread(
             target=interface.init_match_engine, 
-            args=[symbol.name, '1 min', self.make_callback(symbol), stop_event, None, self.make_callback(symbol)]
+            args=[symbol, '1 min', self.make_callback(symbol), stop_event, None, self.make_callback(symbol)]
         )
         self.stop_events[symbol] = stop_event
         thread.start()

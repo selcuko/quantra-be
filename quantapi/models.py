@@ -947,6 +947,28 @@ class GlobalSymbol(models.Model):
         from metrichub import update_symbol
         update_symbol(self)
 
+    @cached_property
+    def cex_volume(self):
+        # XXX revisit
+        market_map = {
+            'gate': 'GATEIO',
+            'mxc': 'MEXC',
+            'binance': 'BINANCE',
+            'kucoin': 'KUCOIN',
+            'okex': 'OKX',
+            'bybit_spot': 'BYBIT',
+        }
+        vols = {'OTHER': 0}
+        payload = json.loads(self.coingecko_response or '{}')
+        for ticker in payload.get('tickers', []):
+            if ticker['base'] != self.base or ticker['target'] != 'USDT':
+                continue
+            if excname := market_map.get(ticker['market']['identifier']):
+                vols[excname] = ticker['converted_volume']['usd']
+            else:
+                vols['OTHER'] += ticker['converted_volume']['usd']
+        return vols
+
 
 class TagMetrics(models.Model):
     tag = models.OneToOneField('Tag', on_delete=models.CASCADE, related_name='metrics')
