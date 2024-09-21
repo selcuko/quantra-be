@@ -63,7 +63,6 @@ INSTALLED_APPS = [
     'quantapi',
     'relay',
     'orderpulse',
-    'silk',
     'rest_framework',
     'django_filters',
     'corsheaders',
@@ -80,7 +79,6 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'silk.middleware.SilkyMiddleware'
 ]
 
 CHANNEL_LAYERS = {

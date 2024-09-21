@@ -13,6 +13,5 @@ urlpatterns = [
     path('schema/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
     path('', include('quantapi.urls')),
 ]
-urlpatterns += [path('silk/', include('silk.urls', namespace='silk'))]
 if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

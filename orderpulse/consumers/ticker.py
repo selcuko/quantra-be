@@ -1,9 +1,14 @@
 import json
+import re
 from urllib.parse import parse_qs
 from channels.generic.websocket import AsyncWebsocketConsumer
 from asgiref.sync import sync_to_async
 from orderpulse.dispatchers import TickerDispatch
 from quantapi.models import Market, MarketSymbol
+
+
+def add_space_after_number(string: str) -> str:
+    return re.sub(r'(\d+)', r'\1 ', string)
 
 
 class TickerConsumer(AsyncWebsocketConsumer):
@@ -16,8 +21,10 @@ class TickerConsumer(AsyncWebsocketConsumer):
 
         query_params = parse_qs(self.scope['query_string'].decode('utf-8'))
         self.contract = query_params.get('contract', ['SPOT'])[0]
+        self.interval = add_space_after_number(query_params.get('interval', ['1min'])[0])
         self.market = self.scope['url_route']['kwargs']['market']
         self.symbol_name = self.scope['url_route']['kwargs']['symbol']
+        print(self.market, self.symbol_name, self.contract, self.interval)
 
         self.connection_id = str(self.channel_name)
 
@@ -26,7 +33,9 @@ class TickerConsumer(AsyncWebsocketConsumer):
         self.connected = True
 
     async def disconnect(self, close_code):
-        await sync_to_async(self.dispatcher.drop, thread_sensitive=False)(self.connection_id, self.symbol)
+        await sync_to_async(self.dispatcher.drop, thread_sensitive=False)(self.connection_id, self.symbol, self.interval)
+        if self.group_name and self.channel_layer:
+            await self.channel_layer.group_discard(self.group_name, self.channel_name)
 
     def get_symbol(self, market, symbol) -> MarketSymbol:
         assert self.connection_id, 'Connection ID is not available'
@@ -47,8 +56,10 @@ class TickerConsumer(AsyncWebsocketConsumer):
             return
         try:
             self.symbol = await sync_to_async(self.get_symbol)(self.market, self.symbol_name)
-            await sync_to_async(self.dispatcher.get)(self.connection_id, self.symbol)
-            await self.channel_layer.group_add(await self.get_symbol_key(), self.channel_name)
+            key = f'{await self.get_symbol_key()}.{self.interval}'
+            self.group_name = key.replace(' ', '')
+            await sync_to_async(self.dispatcher.get)(self.connection_id, self.symbol, self.interval)
+            await self.channel_layer.group_add(self.group_name, self.channel_name)
         except Market.DoesNotExist:
             await self.send(text_data=json.dumps({ 'error': f'Market {self.market} not found', 'code': 404 }))
             await self.close()
