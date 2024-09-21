@@ -100,7 +100,7 @@ class MarketSymbolViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_class = MarketSymbolFilter
 
     def get_queryset(self):
-        return MarketSymbol.objects.select_related('market', 'symbol').all()
+        return MarketSymbol.objects.select_related('market', 'symbol')
 
     @action(detail=False, methods=['get'], url_path='market/(?P<market>[^/.]+)', url_name='market')
     def market(self, request, market):
@@ -125,7 +125,11 @@ class GlobalSymbolViewSet(viewsets.ReadOnlyModelViewSet):
     ordering = ['metrics__market_cap']
 
     def get_queryset(self):
-        return GlobalSymbol.objects.prefetch_related('tags', 'symbols__market', 'metrics').all()
+        return GlobalSymbol.objects.select_related('metrics').prefetch_related(
+            Prefetch('symbols', queryset=MarketSymbol.objects.select_related('market')),
+            Prefetch('tags', queryset=Tag.objects.select_related('metrics')),
+            
+        )
 
     @action(detail=True, methods=['get', 'post'])
     def refresh(self, request, pk):
@@ -415,7 +419,9 @@ class TagViewSet(viewsets.ModelViewSet):
     lookup_field = 'name'
 
     def get_queryset(self):
-        return super().get_queryset().prefetch_related('symbols__symbols', 'metrics')
+        return Tag.objects.select_related('metrics').prefetch_related(
+            Prefetch('symbols', queryset=GlobalSymbol.objects.select_related('metrics')),
+        )
 
 
 class KeeperView(viewsets.ViewSet):

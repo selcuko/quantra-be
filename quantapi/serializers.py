@@ -8,15 +8,11 @@ from quantapi.validations import validate_order_payload, validate_symbol_against
 
 class MarketSerializer(serializers.HyperlinkedModelSerializer):
     prices = serializers.HyperlinkedIdentityField(view_name='market-prices')
-    accounts = serializers.HyperlinkedIdentityField(view_name='marketaccount-detail', many=True)
-    tradable_symbols = serializers.SerializerMethodField()
-
-    def get_tradable_symbols(self, market):
-        return getattr(market, 'tradable_symbols_count', None)
 
     class Meta:
         model = Market
-        fields = ['id', 'exchange_name', 'prices_updated', 'prices', 'icon', 'accounts', 'tradable_symbols', 'display_name']
+        fields = ['id', 'exchange_name', 'prices_updated', 'prices', 'icon', 'display_name']
+
 
 class MarketAccountSerializer(serializers.HyperlinkedModelSerializer):
     assets = serializers.SerializerMethodField()
@@ -121,7 +117,7 @@ class InlineMarketSymbolSerializer(serializers.HyperlinkedModelSerializer):
     market = MarketSerializer()
     class Meta:
         model = MarketSymbol
-        fields = ['id', 'url', 'icon', 'name', 'base', 'quote', 'market', 'contract_type', 'available_contracts', 'volume']
+        fields = ['id', 'url', 'icon', 'name', 'base', 'quote', 'market', 'contract_type']
 
 
 class TagMetricsSerializer(serializers.HyperlinkedModelSerializer):
@@ -151,7 +147,7 @@ class InlineTagSerializer(serializers.HyperlinkedModelSerializer):
 class InlineGlobalSymbolSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = GlobalSymbol
-        fields = ['id', 'cid', 'display', 'base', 'markets', 'image']
+        fields = ['id', 'cid', 'display', 'base', 'image']
 
 
 class GlobalSymbolMetricsSerializer(serializers.HyperlinkedModelSerializer):
@@ -166,9 +162,8 @@ class GlobalSymbolMetricsSerializer(serializers.HyperlinkedModelSerializer):
 class GlobalSymbolSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = GlobalSymbol
-        fields = ['cid', 'id', 'display', 'base', 'url', 'metrics', 'image', 'markets', 'tags', 'symbols', 'description', 'homepage', 'cex_volume']
-    tags = TagSerializer(many=True)
-    symbols = InlineMarketSymbolSerializer(many=True, source='spot_symbols')
+        fields = ['cid', 'id', 'display', 'base', 'url', 'metrics', 'image', 'symbols', 'description', 'homepage', 'cex_volume', 'tags']
+    tags = InlineTagSerializer(many=True)
     metrics = GlobalSymbolMetricsSerializer()
 
 

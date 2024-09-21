@@ -277,9 +277,9 @@ class MarketSymbol(models.Model):
         ordering = ['market__exchange_name', 'name']
     symbol = models.ForeignKey('GlobalSymbol', on_delete=models.SET_NULL, related_name='symbols', null=True, blank=True)
     market = models.ForeignKey(Market, on_delete=models.PROTECT, related_name='symbols')
-    base = models.CharField(max_length=30)
-    quote = models.CharField(max_length=30)
-    name = models.CharField(max_length=60)
+    base = models.CharField(max_length=30, db_index=True)
+    quote = models.CharField(max_length=30, db_index=True)
+    name = models.CharField(max_length=60, db_index=True)
     base_precision = models.DecimalField(null=True, blank=True, max_digits=20, decimal_places=10, help_text='Number of decimal places for base currency')
     quote_precision = models.DecimalField(null=True, blank=True, max_digits=20, decimal_places=10, help_text='Number of decimal places for quote currency')
     spot_trading_enabled = models.BooleanField(default=True, help_text='Spot trading enabled for this symbol in related market')
@@ -910,7 +910,7 @@ class GlobalSymbol(models.Model):
 
     cid = models.CharField(max_length=200, unique=True)
     display = models.CharField(max_length=200)
-    base = models.CharField(max_length=200)
+    base = models.CharField(max_length=200, db_index=True)
     description = models.TextField(null=True, blank=True)
     homepage = models.URLField(null=True, blank=True)
     data_source = models.CharField(max_length=30, choices=DataSource.choices, default=DataSource.COINGECKO)
@@ -938,7 +938,7 @@ class GlobalSymbol(models.Model):
 
     @property
     def spot_symbols(self):
-        return MarketSymbol.objects.filter(symbol=self, contract_type=MarketSymbol.ContractType.SPOT)
+        return self.symbols.filter(symbol=self, contract_type=MarketSymbol.ContractType.SPOT)
 
     def __str__(self):
         return f'{self.base} {self.data_source}'
@@ -1007,14 +1007,6 @@ class Tag(models.Model):
         if not self.weight and self.pk:
             self.weight = self.symbols.count()
         super().save(*args, **kwargs)
-
-    def volume(self):
-        symbols = self.symbols.filter(volume__gte=1).values_list('volume', flat=True)
-        return sum(symbols)
-
-    def market_cap(self):
-        symbols = self.symbols.filter(market_cap__gte=1).values_list('market_cap', flat=True)
-        return sum(symbols)
 
 
     class Meta:

@@ -48,6 +48,10 @@ if ENVIRONMENT != 'local':
 ALLOWED_HOSTS = ['*']
 CSRF_TRUSTED_ORIGINS = ['https://example.org', 'https://example.com', 'https://dev.example.com', 'https://api.example.com', 'https://api-dev.example.com']
 CORS_ALLOW_ALL_ORIGINS = True
+INTERNAL_IPS = [
+    'localhost',
+    '127.0.0.1',
+]
 
 # Application definition
 
@@ -67,9 +71,11 @@ INSTALLED_APPS = [
     'django_filters',
     'corsheaders',
     'drf_spectacular',
+    'debug_toolbar',
 ]
 
 MIDDLEWARE = [
+    'debug_toolbar.middleware.DebugToolbarMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
