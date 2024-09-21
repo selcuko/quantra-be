@@ -280,14 +280,17 @@ class MEXCMarket(IMarket):
         while not self.stop_websocket_stream:
             try:
                 if (datetime.now() - last_ping).seconds > 30:
-                    ws.send('{"method": "PING"}')
+                    if symbol.contract_type == 'SPOT':
+                        ws.send('{"method": "PING"}')
+                    elif symbol.contract_type == 'FUTURES':
+                        ws.send('{"method": "ping"}')
                     last_ping = datetime.now()
                 response = json.loads(ws.recv(timeout=10))
             except TimeoutError:
                 continue
             except ConnectionClosed:
                 return self.init_orderbook_websocket(symbol, callback)
-            if response.get('msg') == 'PONG':
+            if response.get('msg') in ['PONG', 'pong']:
                 continue
             if symbol.contract_type == symbol.ContractType.SPOT:
                 response = response['d']
