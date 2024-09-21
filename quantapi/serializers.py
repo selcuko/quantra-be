@@ -167,7 +167,7 @@ class GlobalSymbolSerializer(serializers.HyperlinkedModelSerializer):
         fields = ['cid', 'id', 'display', 'base', 'url', 'metrics', 'image', 'markets', 'symbols', 'description', 'homepage', 'cex_volume', 'tags',
                   'blockchain_site', 'whitepaper', 'official_forum_url', 'chat_url', 'announcement_url', 'twitter_screen_name', 'facebook_username', 
                   'subreddit_url', 'github_repo_url', 'genesis_date', 'sentiment_votes_up_percentage', 'sentiment_votes_down_percentage', 
-                  'watchlist_portfolio_users', 'market_cap_rank', 'twitter_followers', 'developer_data', 'volume_distribution',]
+                  'watchlist_portfolio_users', 'market_cap_rank', 'twitter_followers', 'developer_data', 'volume_distribution', 'bid_ask_spread_percentage_distribution',]
     tags = InlineTagSerializer(many=True)
     metrics = GlobalSymbolMetricsSerializer()
     symbols = InlineMarketSymbolSerializer(many=True)

@@ -44,14 +44,17 @@ def update_symbol(gs: GlobalSymbol):
     volume_map = {
         'OTHER': 0,
     }
+    bid_ask_spread = {}
     for ticker in cg_symbol['tickers']:
         if ticker['target']!= 'USDT':
             continue
         if excname := market_map.get(ticker['market']['identifier']):
             volume_map[excname] = ticker['converted_volume']['usd']
+            bid_ask_spread[excname] = ticker['bid_ask_spread_percentage']
         else:
             volume_map['OTHER'] += ticker['converted_volume']['usd']
     gs.volume_distribution = volume_map
+    gs.bid_ask_spread_percentage_distribution = bid_ask_spread
 
     try:
         metrics = gs.metrics

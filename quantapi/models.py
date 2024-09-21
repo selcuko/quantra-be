@@ -939,6 +939,7 @@ class GlobalSymbol(models.Model):
     twitter_followers = models.IntegerField(null=True, blank=True)
     developer_data = models.JSONField(null=True, blank=True, help_text='Developer data from Github page')
     volume_distribution = models.JSONField(null=True, blank=True, help_text='Volume distribution by exchanges')
+    bid_ask_spread_percentage_distribution = models.JSONField(null=True, blank=True, help_text='Bid/Ask spread percentage distribution by exchanges')
 
     data_source = models.CharField(max_length=30, choices=DataSource.choices, default=DataSource.COINGECKO)
     coingecko_response = models.TextField(null=True, blank=True)
@@ -976,25 +977,7 @@ class GlobalSymbol(models.Model):
 
     @cached_property
     def cex_volume(self):
-        # XXX revisit
-        market_map = {
-            'gate': 'GATEIO',
-            'mxc': 'MEXC',
-            'binance': 'BINANCE',
-            'kucoin': 'KUCOIN',
-            'okex': 'OKX',
-            'bybit_spot': 'BYBIT',
-        }
-        vols = {'OTHER': 0}
-        payload = json.loads(self.coingecko_response or '{}')
-        for ticker in payload.get('tickers', []):
-            if ticker['base'] != self.base or ticker['target'] != 'USDT':
-                continue
-            if excname := market_map.get(ticker['market']['identifier']):
-                vols[excname] = ticker['converted_volume']['usd']
-            else:
-                vols['OTHER'] += ticker['converted_volume']['usd']
-        return vols
+        return self.volume_distribution
 
 
 class TagMetrics(models.Model):
