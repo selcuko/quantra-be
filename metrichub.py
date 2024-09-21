@@ -5,6 +5,7 @@ from quantapi.models import GlobalSymbol, MarketSymbol, GlobalSymbolMetrics, Tag
 
 
 def update_symbol(gs: GlobalSymbol):
+    # Single symbol update
     cg = CoinGecko()
     cg_symbol = cg.coin_by_cid(gs.cid)
     if not cg_symbol['symbol'].upper() == gs.base:
@@ -15,7 +16,43 @@ def update_symbol(gs: GlobalSymbol):
         gs.image = cg_symbol['image']['small']
     gs.description = cg_symbol['description']['en']
     gs.homepage = cg_symbol['links']['homepage'][0] if cg_symbol['links']['homepage'] else None
-    gs.coingecko_response = json.dumps(cg_symbol)
+    gs.blockchain_site = cg_symbol['links']['blockchain_site'] if cg_symbol['links']['blockchain_site'] else None
+    gs.whitepaper = cg_symbol['links']['whitepaper'] if cg_symbol['links']['whitepaper'] else None
+    gs.official_forum_url = cg_symbol['links']['official_forum_url'] if cg_symbol['links']['official_forum_url'] else None
+    gs.chat_url = cg_symbol['links']['chat_url'] if cg_symbol['links']['chat_url'] else None
+    gs.announcement_url = cg_symbol['links']['announcement_url'] if cg_symbol['links']['announcement_url'] else None
+    gs.subreddit_url = cg_symbol['links']['subreddit_url'] if 'r/' in cg_symbol['links']['subreddit_url'] else None
+    gs.github_repo_url = cg_symbol['links']['repos_url']['github'] if cg_symbol['links']['repos_url']['github'] else None
+    gs.genesis_date = cg_symbol['genesis_date']
+    gs.sentiment_votes_up_percentage = cg_symbol['sentiment_votes_up_percentage']
+    gs.sentiment_votes_down_percentage = cg_symbol['sentiment_votes_down_percentage']
+    gs.watchlist_portfolio_users = cg_symbol['watchlist_portfolio_users']
+    gs.market_cap_rank = cg_symbol['market_cap_rank']
+    gs.twitter_followers = cg_symbol['community_data']['twitter_followers']
+    gs.developer_data = cg_symbol['developer_data'] if cg_symbol['developer_data'] else None
+
+    gs.coingecko_response = json.dumps(cg_symbol) # Delete ?
+
+    market_map = {
+        'gate': 'GATEIO',
+        'mxc': 'MEXC',
+        'binance': 'BINANCE',
+        'kucoin': 'KUCOIN',
+        'okex': 'OKX',
+        'bybit_spot': 'BYBIT',
+        }
+    volume_map = {
+        'OTHER': 0,
+    }
+    for ticker in cg_symbol['tickers']:
+        if ticker['target']!= 'USDT':
+            continue
+        if excname := market_map.get(ticker['market']['identifier']):
+            volume_map[excname] = ticker['converted_volume']['usd']
+        else:
+            volume_map['OTHER'] += ticker['converted_volume']['usd']
+    gs.volume_distribution = volume_map
+
     try:
         metrics = gs.metrics
         assert metrics
@@ -40,6 +77,15 @@ def update_symbol(gs: GlobalSymbol):
     metrics.total_supply = mdata['total_supply']
     metrics.circulating_supply = mdata['circulating_supply']
     metrics.max_supply = mdata['max_supply']
+    metrics.fully_diluted_valuation = mdata['fully_diluted_valuation']['usd']
+    metrics.market_cap_fdv_ratio = mdata['market_cap_fdv_ratio']
+    metrics.price_change_percentage_7d = mdata['price_change_percentage_7d']
+    metrics.price_change_percentage_14d = mdata['price_change_percentage_14d']
+    metrics.price_change_percentage_30d = mdata['price_change_percentage_30d']
+    metrics.price_change_percentage_60d = mdata['price_change_percentage_60d']
+    metrics.price_change_percentage_200d = mdata['price_change_percentage_200d']
+    metrics.price_change_percentage_1y = mdata['price_change_percentage_1y']
+
     metrics.raw_payload = json.dumps(mdata)
     metrics.calculate()
     metrics.save()
