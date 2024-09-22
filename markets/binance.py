@@ -381,7 +381,7 @@ class BinanceMarket(IMarket):
             if symbol.contract_type == symbol.ContractType.SPOT:
                 orderbook = self.client.get_order_book(symbol=self._format_symbol(symbol.name), limit=limit)
             elif symbol.contract_type == symbol.ContractType.FUTURES:
-                orderbook = self.client.futures_order_book(symbol=self._format_symbol(symbol.name))
+                orderbook = self.client.futures_order_book(symbol=self._format_symbol(symbol.name), limit=1000)
             else:
                 raise ValueError(f'Unknown contract type for symbol {symbol.name}')
             return {
