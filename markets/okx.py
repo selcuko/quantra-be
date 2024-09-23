@@ -6,6 +6,7 @@ import json
 from threading import Event
 import time
 import traceback
+import pytz
 import requests
 from logger import logger
 from markets.errors import InsufficientBalance, KlineFetchFailed, MarketAPIError, MarketAPIUnavailable, OrderPlacementError, OrderPostProcessingError, RejectedOrder, SymbolNotInMarket
@@ -156,8 +157,8 @@ class OKXMarket(IMarket):
         if not symbol_object:
             raise ValueError(f'Symbol not found: {symbol}')
         now = timezone.now()
-        start = start.astimezone(timezone.utc)
-        end = end.astimezone(timezone.utc) if end else now
+        start = start.astimezone(pytz.UTC)
+        end = end.astimezone(pytz.UTC) if end else now
         freq_m = interval_to_minutes(interval)
         candle_c = (now - start) / timedelta(minutes=freq_m)
         if candle_c > 1440:
@@ -499,7 +500,7 @@ class OKXMarket(IMarket):
         return ts.isoformat('T', timespec='milliseconds').replace('+00:00', 'Z')
 
     def standardize_timestamp(self, ts:str) -> datetime:
-        return datetime.fromtimestamp(int(ts) // 1000, tz=timezone.utc)
+        return datetime.fromtimestamp(int(ts) // 1000, tz=pytz.UTC)
 
     def format_interval(self, interval:str) -> str:
         return {

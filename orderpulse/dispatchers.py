@@ -3,7 +3,6 @@ from decimal import Decimal
 from threading import Event, Thread, Timer
 import time
 from typing import Callable, TYPE_CHECKING
-from channels.layers import get_channel_layer
 from markets.interface import IMarket
 from orderpulse.keeper import Keeper, KeeperPool
 from orderpulse.structures import Delta
@@ -49,6 +48,7 @@ def bucket_l2(price:Decimal, divisor:Decimal):
 class KeeperDispatch:
     """Manages the relation between the Consumers and the Keepers."""
     def __init__(self):
+        from channels.layers import get_channel_layer
         self.channels: dict[Keeper, dict[str, list[str]]] = {}  # maps group names to keepers, basically groups depths (buckets)
         self.connections: dict[Keeper, list[str]] = {}          # dict of Keeper: channel_name: [connection_ids]
         self.callbacks: dict[Keeper, Callable[[Delta], None]] = {}
@@ -176,6 +176,7 @@ class KeeperDispatch:
 class TickerDispatch:
     """Manages the relation between the Consumers and Tickers."""
     def __init__(self):
+        from channels.layers import get_channel_layer
         self.threads: dict['str', Thread] = {}
         self.connections: dict['str', list[str]] = {}
         self.callbacks: dict['str', Callable[[dict], None]] = {}

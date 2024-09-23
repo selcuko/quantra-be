@@ -1,1 +1,1 @@
-web: uvicorn quant.asgi:application
+web: uvicorn quant.asgi:application --workers 1

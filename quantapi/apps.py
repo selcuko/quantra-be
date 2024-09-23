@@ -50,18 +50,6 @@ def continue_sessions():
             logger.critical(f'Failed to resume group {group} on startup.', exc_info=True, extra={'n_type': 'CRASH', 'subject': 'Failed to resume group on reboot'})
 
 
-
-def symbol_metrics_update_loop():
-    from quantapi.management.commands.update_symbol_metrics import Command
-    while True:
-        try:
-            threading.Event().wait(60 * 60)
-            Command().handle()
-            threading.Event().wait(60 * 60 * 4)
-        except:
-            logger.warning('Failed to update symbol metrics.', exc_info=True)
-
-
 def reboot_notification():
     from relay.models import Notification
     n = Notification.objects.create(
@@ -83,5 +71,4 @@ class QuantapiConfig(AppConfig):
         if 'runserver' in sys.argv or 'quant.wsgi' in sys.argv:
             threading.Thread(target=reboot_notification, daemon=True).start()
             threading.Thread(target=continue_sessions, daemon=True).start()
-            threading.Thread(target=symbol_metrics_update_loop, daemon=True).start()
 

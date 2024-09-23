@@ -14,7 +14,6 @@ from loops import LiveLoop
 from markets.errors import OrderPlacementError
 from models import interval_to_minutes
 from order import OrderManager
-from orderpulse.consumers.miniorderbook import MiniOrderbookConsumer
 from orderpulse.keeper import KeeperPool
 from quantapi.filters import (GlobalSymbolFilter, MarketAccountFilter, MarketSymbolFilter,
                               SessionFilter, SessionGroupFilter, TagFilter)
@@ -51,6 +50,13 @@ class MarketViewSet(viewsets.ReadOnlyModelViewSet):
         market: Market = self.get_object()
         fields = market.fields()
         return Response(fields)
+
+    @action(detail=True, methods=['get'])
+    def refresh(self, request, pk):
+        market: Market = self.get_object()
+        market.get_interface()
+        market.refresh_from_db()
+        return Response(MarketSerializer(market, context={'request': request}).data)
 
     def get_queryset(self):
         return Market.objects.annotate(
@@ -426,6 +432,7 @@ class TagViewSet(viewsets.ModelViewSet):
 
 class KeeperView(viewsets.ViewSet):
     def list(self, request):
+        from orderpulse.consumers.miniorderbook import MiniOrderbookConsumer
         keepers = KeeperPool.pool.values()
         payloads = []
         for keeper in keepers:

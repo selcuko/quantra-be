@@ -11,7 +11,7 @@ class MarketSerializer(serializers.HyperlinkedModelSerializer):
 
     class Meta:
         model = Market
-        fields = ['id', 'exchange_name', 'prices_updated', 'prices', 'icon', 'display_name']
+        fields = ['id', 'url', 'exchange_name', 'prices_updated', 'prices', 'icon', 'display_name']
 
 
 class MarketAccountSerializer(serializers.HyperlinkedModelSerializer):

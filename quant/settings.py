@@ -45,9 +45,9 @@ if ENVIRONMENT != 'local':
     )
 
 
-ALLOWED_HOSTS = ['*']
-CSRF_TRUSTED_ORIGINS = ['https://example.org', 'https://example.com', 'https://dev.example.com', 'https://api.example.com', 'https://api-dev.example.com']
-CORS_ALLOW_ALL_ORIGINS = True
+ALLOWED_HOSTS = ['localhost', 'api.example.com']
+CSRF_TRUSTED_ORIGINS = ['https://api.example.com', 'http://localhost:3000']
+CORS_ALLOWED_ORIGINS = ['https://api.example.com', 'http://localhost:3000']
 INTERNAL_IPS = [
     'localhost',
     '127.0.0.1',
@@ -71,11 +71,11 @@ INSTALLED_APPS = [
     'django_filters',
     'corsheaders',
     'drf_spectacular',
-    'debug_toolbar',
 ]
+if ENVIRONMENT == 'local':
+    INSTALLED_APPS.append('debug_toolbar')
 
 MIDDLEWARE = [
-    'debug_toolbar.middleware.DebugToolbarMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -86,6 +86,8 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+if ENVIRONMENT == 'local':
+    MIDDLEWARE.append('debug_toolbar.middleware.DebugToolbarMiddleware')
 
 CHANNEL_LAYERS = {
     "default": {
@@ -126,10 +128,10 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 RDS = {
         'ENGINE': 'django.db.backends.postgresql_psycopg2',
-        'NAME': os.environ.get('DATABASE_NAME'),
-        'USER': os.environ.get('DATABASE_USER'),
-        'PASSWORD': os.environ.get('DATABASE_PASSWORD'),
-        'HOST': os.environ.get('DATABASE_HOST'),
+        'NAME': os.environ.get('DATABASE_NAME', 'quant'),
+        'USER': os.environ.get('DATABASE_USER', 'postgres'),
+        'PASSWORD': os.environ.get('DATABASE_PASSWORD', 'REDACTED'),
+        'HOST': os.environ.get('DATABASE_HOST', 'db.example.invalid'),
         'PORT': os.environ.get('DATABASE_PORT') or '5432',
 }
 SQLITE = {
@@ -139,7 +141,7 @@ SQLITE = {
 default_db = SQLITE if ENVIRONMENT == 'local' else RDS
 
 DATABASES = {
-    'default': default_db
+    'default': RDS
 }
 
 

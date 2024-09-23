@@ -4,7 +4,6 @@ import os
 import traceback
 
 from django.conf import settings
-from logtail import LogtailHandler
 
 
 
@@ -68,11 +67,6 @@ logger.addHandler(file_handler)
 LOGTAIL_TOKEN = os.getenv('LOGTAIL_TOKEN')
 if not LOGTAIL_TOKEN and os.path.exists('api.json'):
     LOGTAIL_TOKEN = json.load(open('api.json')).get('LOGTAIL', {}).get('TOKEN')
-
-if LOGTAIL_TOKEN and 0:
-    logtail_handler = LogtailHandler(LOGTAIL_TOKEN)
-    logtail_handler.setFormatter(colored_formatter)
-    logger.addHandler(logtail_handler)
 
 
 class NotificationHandler(logging.Handler):

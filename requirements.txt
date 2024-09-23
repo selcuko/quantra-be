@@ -9,7 +9,7 @@ websockets==11.0.3
 sqlalchemy==2.0.21
 pytest==7.4.2
 cryptography==41.0.7
-Django==4.2.6
+django==5.1.1
 gunicorn==21.2.0
 urllib3==2.0.4
 logtail-python==0.2.6
@@ -21,7 +21,8 @@ whitenoise
 django-cors-headers
 drf-spectacular
 sentry-sdk[django]==2.9.0
-channels
+channels==4.1.0
 sortedcontainers
 uvicorn
-channels-redis
+celery
+django-debug-toolbar==4.4.6

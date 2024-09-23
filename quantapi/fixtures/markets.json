@@ -1,0 +1,56 @@
+[
+    {
+        "model": "quantapi.market",
+        "pk": 1,
+        "fields": {
+            "exchange_name": "BINANCE",
+            "icon": "https://upload.wikimedia.org/wikipedia/commons/1/1c/Binance_logo.svg",
+            "created_at": "2021-07-01T00:00:00Z"
+        }
+    },
+    {
+        "model": "quantapi.market",
+        "pk": 2,
+        "fields": {
+            "exchange_name": "KUCOIN",
+            "icon": "https://upload.wikimedia.org/wikipedia/commons/7/7e/KuCoin_logo.png",
+            "created_at": "2021-07-01T00:00:00Z"
+        }
+    },
+    {
+        "model": "quantapi.market",
+        "pk": 3,
+        "fields": {
+            "exchange_name": "MEXC",
+            "icon": "https://altcoinsbox.com/wp-content/uploads/2023/01/mexc-logo.png",
+            "created_at": "2021-07-01T00:00:00Z"
+        }
+    },
+    {
+        "model": "quantapi.market",
+        "pk": 4,
+        "fields": {
+            "exchange_name": "GATEIO",
+            "icon": "https://altcoinsbox.com/wp-content/uploads/2023/01/gate.io-logo.png",
+            "created_at": "2021-07-01T00:00:00Z"
+        }
+    },
+    {
+        "model": "quantapi.market",
+        "pk": 5,
+        "fields": {
+            "exchange_name": "OKX",
+            "icon": "https://altcoinsbox.com/wp-content/uploads/2023/01/okex-logo.png",
+            "created_at": "2021-07-01T00:00:00Z"
+        }
+    },
+    {
+        "model": "quantapi.market",
+        "pk": 6,
+        "fields": {
+            "exchange_name": "BYBIT",
+            "icon": "https://altcoinsbox.com/wp-content/uploads/2023/01/bybit-logo.png",
+            "created_at": "2021-07-01T00:00:00Z"
+        }
+    },
+]
