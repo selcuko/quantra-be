@@ -131,11 +131,10 @@ class GlobalSymbolViewSet(viewsets.ReadOnlyModelViewSet):
     ordering = ['metrics__market_cap']
 
     def get_queryset(self):
-        return GlobalSymbol.objects.select_related('metrics').prefetch_related(
+        return GlobalSymbol.objects.prefetch_related(
             Prefetch('symbols', queryset=MarketSymbol.objects.select_related('market')),
             Prefetch('tags', queryset=Tag.objects.select_related('metrics')),
-            
-        )
+        ).select_related('metrics')
 
     @action(detail=True, methods=['get', 'post'])
     def refresh(self, request, pk):

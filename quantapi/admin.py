@@ -129,7 +129,7 @@ class OrderAdmin(admin.ModelAdmin):
         return obj.oid or 'No ID'
 
 
-class MetricsInline(admin.StackedInline):
+class GlobalSymbolMetricsInline(admin.StackedInline):
     model = GlobalSymbolMetrics
     extra = 0
     readonly_fields = ('data_updated', 'last_updated')
@@ -139,7 +139,7 @@ class GlobalSymbolAdmin(admin.ModelAdmin):
     list_display = ['display', 'cid', 'base', 'volume', 'markets']
     search_fields = ['base', 'display', 'cid']
     #raw_id_fields = ['metrics']
-    inlines = [MetricsInline]
+    inlines = [GlobalSymbolMetricsInline]
     ordering = ['-metrics__volume']
 
     def volume(self, obj):
@@ -175,10 +175,17 @@ class SessionGroupAdmin(admin.ModelAdmin):
         return super().get_queryset(request).select_related('symbol__market', 'interface__market', 'strategy', 'market').prefetch_related('sessions')
 
 
+class TagMetricsInline(admin.StackedInline):
+    model = TagMetrics
+    extra = 0
+    readonly_fields = ('data_updated', 'last_updated')
+
+
 class TagAdmin(admin.ModelAdmin):
     list_display = ('name', 'symbol_count', 'is_chain', 'is_portfolio', 'is_ecosystem')
     search_fields = ('name', )
     list_filter = ('is_chain', 'is_portfolio', 'is_ecosystem')
+    inlines = [TagMetricsInline]
 
     def symbol_count(self, obj):
         return obj.symbols.count()

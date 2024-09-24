@@ -27,17 +27,19 @@ class MarketSymbolFilter(filters.FilterSet):
             ('name', 'name'),
             ('market__exchange_name', 'market'),
             ('symbol__market_cap', 'market_cap'),
+            ('symbol__metrics__volume', 'volume'),
         ))
     market = filters.CharFilter(field_name='market__exchange_name', lookup_expr='iexact')
-    name = filters.CharFilter(field_name='name', lookup_expr='startswith')
+    name = filters.CharFilter(field_name='name', lookup_expr='istartswith')
     base = filters.CharFilter(field_name='base', lookup_expr='iexact')
     quote = filters.CharFilter(field_name='quote', lookup_expr='iexact')
     spot_enabled = filters.BooleanFilter(field_name='spot_trading_enabled')
     contract_type = filters.CharFilter(field_name='contract_type', lookup_expr='iexact')
+    volume = filters.RangeFilter(field_name='symbol__metrics__volume')
 
     class Meta:
         model = MarketSymbol
-        fields = ['market', 'name', 'base', 'quote', 'sort', 'spot_enabled', 'contract_type']
+        fields = ['market', 'name', 'base', 'quote', 'sort', 'spot_enabled', 'contract_type', 'volume']
 
 
 class SessionFilter(filters.FilterSet):
@@ -72,12 +74,23 @@ class SessionGroupFilter(filters.FilterSet):
 class GlobalSymbolFilter(filters.FilterSet):
     contract_type = filters.CharFilter(field_name='contract_type', lookup_expr='iexact')
     name = filters.CharFilter(field_name='name', lookup_expr='icontains')
-    base = filters.CharFilter(field_name='base', lookup_expr='icontains')
+    base = filters.CharFilter(field_name='base', lookup_expr='iexact')
     quote = filters.CharFilter(field_name='quote', lookup_expr='iexact')
     tags = filters.CharFilter(method='filter_tags')
     market = filters.CharFilter(method='filter_market')
     is_favorite = filters.BooleanFilter(field_name='favorite')
     is_stablecoin = filters.BooleanFilter(field_name='is_stablecoin')
+    volume = filters.RangeFilter(field_name='metrics__volume')
+
+    ordering = filters.OrderingFilter(
+        fields=(
+            ('name', 'name'),
+            ('base', 'base'),
+            ('quote', 'quote'),
+            ('metrics__market_cap', 'market_cap'),
+            ('metrics__volume', 'volume'),
+        )
+    )
 
     def filter_market(self, queryset, name, value):
         if value.lower() == 'notnull':
@@ -99,7 +112,7 @@ class GlobalSymbolFilter(filters.FilterSet):
 
     class Meta:
         model = GlobalSymbol
-        fields = ['market', 'name', 'base', 'quote', 'contract_type', 'tags', 'is_favorite', 'cid']
+        fields = ['market', 'name', 'base', 'quote', 'contract_type', 'tags', 'is_favorite', 'cid', 'volume', 'ordering']
 
 
 class TagFilter(filters.FilterSet):

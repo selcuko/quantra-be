@@ -6,6 +6,7 @@ import json
 from threading import Event
 import time
 import traceback
+import pytz
 import requests
 from logger import logger
 from markets.errors import InsufficientBalance, KlineFetchFailed, MarketAPIError, MarketAPIUnrecognizedResponse, OrderPlacementError, OrderPostProcessingError, RejectedOrder
@@ -529,7 +530,7 @@ class GateIOMarket(IMarket):
         return int(ts.timestamp())
 
     def standardize_timestamp(self, ts:str) -> datetime:
-        return datetime.fromtimestamp(int(ts), tz=timezone.utc)
+        return datetime.fromtimestamp(int(ts), tz=pytz.UTC)
 
     def format_interval(self, interval:str) -> str:
         return {

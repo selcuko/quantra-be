@@ -88,7 +88,7 @@ def update_all_coins_coingecko():
                 cid=cg_symbol['id'],
                 base=cg_symbol['symbol'].upper(),
                 display=cg_symbol['name'],
-                image=cg_symbol['image'],
+                image=cg_symbol['image'] if cg_symbol['image'].startswith('http') else None,
             )
         update_symbol_metrics_mini(gs, cg_symbol)
 
@@ -146,3 +146,7 @@ def match_tags():
         if missing_tags:
             print('Missing tags:', missing_tags)
 
+
+def fix_missing_images():
+    gs = GlobalSymbol.objects.exclude(image__startswith='http')
+    gs.update(image=None)

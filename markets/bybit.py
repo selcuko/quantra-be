@@ -5,6 +5,7 @@ import hmac
 import json
 from threading import Event
 import time
+import pytz
 import requests
 from logger import logger
 from markets.errors import InsufficientBalance, KlineFetchFailed, MarketAPIError, MarketAPIUnavailable, MarketAPIUnrecognizedResponse, OrderPlacementError, OrderPostProcessingError, RejectedOrder
@@ -522,7 +523,7 @@ class BybitMarket(IMarket):
         return str(int(ts.timestamp()) * 1000)
 
     def standardize_timestamp(self, ts:str) -> datetime:
-        return datetime.fromtimestamp(int(ts) // 1000, tz=timezone.utc)
+        return datetime.fromtimestamp(int(ts) // 1000, tz=pytz.UTC)
 
     def format_interval(self, interval:str) -> str:
         return {

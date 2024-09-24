@@ -135,7 +135,7 @@ class TagSerializer(serializers.HyperlinkedModelSerializer):
     best_symbols = serializers.SerializerMethodField()
 
     def get_best_symbols(self, obj):
-        return InlineGlobalSymbolSerializer(obj.symbols.order_by('-metrics__volume')[:3], many=True, context={'request': self.context['request']}).data
+        return InlineGlobalSymbolSerializer(obj.symbols.all()[:3], many=True, context={'request': self.context['request']}).data
 
 
 class InlineTagSerializer(serializers.HyperlinkedModelSerializer):
@@ -162,9 +162,14 @@ class GlobalSymbolMetricsSerializer(serializers.HyperlinkedModelSerializer):
 class GlobalSymbolSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = GlobalSymbol
-        fields = ['cid', 'id', 'display', 'base', 'url', 'metrics', 'image', 'symbols', 'description', 'homepage', 'cex_volume', 'tags']
+        fields = ['cid', 'id', 'display', 'base', 'url', 'metrics', 'image', 'markets', 'symbols', 'description', 'homepage', 'cex_volume', 'tags']
     tags = InlineTagSerializer(many=True)
     metrics = GlobalSymbolMetricsSerializer()
+    symbols = InlineMarketSymbolSerializer(many=True)
+    markets = serializers.SerializerMethodField()
+
+    def get_markets(self, obj):
+        return set(symbol.market.exchange_name for symbol in obj.symbols.all())
 
 
 class StrategySerializer(serializers.HyperlinkedModelSerializer):
