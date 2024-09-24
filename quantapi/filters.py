@@ -30,7 +30,7 @@ class MarketSymbolFilter(filters.FilterSet):
         ))
     market = filters.CharFilter(field_name='market__exchange_name', lookup_expr='iexact')
     name = filters.CharFilter(field_name='name', lookup_expr='startswith')
-    base = filters.CharFilter(field_name='base', lookup_expr='startswith')
+    base = filters.CharFilter(field_name='base', lookup_expr='iexact')
     quote = filters.CharFilter(field_name='quote', lookup_expr='iexact')
     spot_enabled = filters.BooleanFilter(field_name='spot_trading_enabled')
     contract_type = filters.CharFilter(field_name='contract_type', lookup_expr='iexact')
@@ -99,7 +99,7 @@ class GlobalSymbolFilter(filters.FilterSet):
 
     class Meta:
         model = GlobalSymbol
-        fields = ['market', 'name', 'base', 'quote', 'contract_type', 'tags', 'is_favorite']
+        fields = ['market', 'name', 'base', 'quote', 'contract_type', 'tags', 'is_favorite', 'cid']
 
 
 class TagFilter(filters.FilterSet):

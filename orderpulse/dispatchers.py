@@ -23,6 +23,7 @@ KEEP_ALIVE_TICKERS = [
 
 
 def bucket(price:float):
+    x = None
     if price < 0.001:
         x = 0.00001
     if 0.01 < price < 0.1:

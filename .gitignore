@@ -20,3 +20,6 @@ settings.json
 db.sqlite3
 **/.DS_Store
 *.dat
+*.bin
+*.html
+*.bak
