@@ -45,9 +45,9 @@ if ENVIRONMENT != 'local':
     )
 
 
-ALLOWED_HOSTS = ['localhost', 'api.example.com']
-CSRF_TRUSTED_ORIGINS = ['https://api.example.com', 'http://localhost:3000']
-CORS_ALLOWED_ORIGINS = ['https://api.example.com', 'http://localhost:3000']
+ALLOWED_HOSTS = ['*']
+CSRF_TRUSTED_ORIGINS = ['https://example.com', 'https://api.example.com', 'http://localhost:3000']
+CORS_ALLOWED_ORIGINS = ['https://example.com', 'https://api.example.com', 'http://localhost:3000']
 INTERNAL_IPS = [
     'localhost',
     '127.0.0.1',
