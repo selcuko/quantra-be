@@ -879,6 +879,15 @@ class GlobalSymbolMetrics(models.Model):
     price_high_24h = models.FloatField(null=True, blank=True, help_text='Highest price in the last 24 hours')
     price_low_24h = models.FloatField(null=True, blank=True, help_text='Lowest price in the last 24 hours')
 
+    fully_diluted_valuation = models.FloatField(null=True, blank=True, help_text='Fully diluted valuation in USD')
+    market_cap_fdv_ratio = models.FloatField(null=True, blank=True, help_text='Market cap / Fully diluted valuation')
+    price_change_percentage_7d = models.FloatField(null=True, blank=True, help_text='Price change percentage in the last 7 days')
+    price_change_percentage_14d = models.FloatField(null=True, blank=True, help_text='Price change percentage in the last 14 days')
+    price_change_percentage_30d = models.FloatField(null=True, blank=True, help_text='Price change percentage in the last 30 days')
+    price_change_percentage_60d = models.FloatField(null=True, blank=True, help_text='Price change percentage in the last 60 days')
+    price_change_percentage_200d = models.FloatField(null=True, blank=True, help_text='Price change percentage in the last 200 days')
+    price_change_percentage_1y = models.FloatField(null=True, blank=True, help_text='Price change percentage in the last 1 year')
+
     # derived metrics
     supply_ratio = models.FloatField(null=True, blank=True, help_text='Circulating supply / Total supply')
     volume24h_to_mcap = models.FloatField(null=True, blank=True, help_text='Volume 24H / Market cap')
@@ -913,6 +922,25 @@ class GlobalSymbol(models.Model):
     base = models.CharField(max_length=200, db_index=True)
     description = models.TextField(null=True, blank=True)
     homepage = models.URLField(null=True, blank=True)
+    blockchain_site = models.JSONField(null=True, blank=True, help_text='Explorers')
+    whitepaper = models.URLField(null=True, blank=True)
+    official_forum_url = models.JSONField(null=True, blank=True)
+    chat_url = models.JSONField(null=True, blank=True)
+    announcement_url = models.JSONField(null=True, blank=True)
+    twitter_screen_name = models.CharField(max_length=200, null=True, blank=True)
+    facebook_username = models.CharField(max_length=200, null=True, blank=True)
+    subreddit_url = models.URLField(null=True, blank=True)
+    github_repo_url = models.JSONField(null=True, blank=True)
+    genesis_date = models.DateField(null=True, blank=True)
+    sentiment_votes_up_percentage = models.FloatField(null=True, blank=True)
+    sentiment_votes_down_percentage = models.FloatField(null=True, blank=True)
+    watchlist_portfolio_users = models.IntegerField(null=True, blank=True)
+    market_cap_rank = models.IntegerField(null=True, blank=True)
+    twitter_followers = models.IntegerField(null=True, blank=True)
+    developer_data = models.JSONField(null=True, blank=True, help_text='Developer data from Github page')
+    volume_distribution = models.JSONField(null=True, blank=True, help_text='Volume distribution by exchanges')
+    bid_ask_spread_percentage_distribution = models.JSONField(null=True, blank=True, help_text='Bid/Ask spread percentage distribution by exchanges')
+
     data_source = models.CharField(max_length=30, choices=DataSource.choices, default=DataSource.COINGECKO)
     coingecko_response = models.TextField(null=True, blank=True)
     coinmarketcap_response = models.TextField(null=True, blank=True)
@@ -949,25 +977,7 @@ class GlobalSymbol(models.Model):
 
     @cached_property
     def cex_volume(self):
-        # XXX revisit
-        market_map = {
-            'gate': 'GATEIO',
-            'mxc': 'MEXC',
-            'binance': 'BINANCE',
-            'kucoin': 'KUCOIN',
-            'okex': 'OKX',
-            'bybit_spot': 'BYBIT',
-        }
-        vols = {'OTHER': 0}
-        payload = json.loads(self.coingecko_response or '{}')
-        for ticker in payload.get('tickers', []):
-            if ticker['base'] != self.base or ticker['target'] != 'USDT':
-                continue
-            if excname := market_map.get(ticker['market']['identifier']):
-                vols[excname] = ticker['converted_volume']['usd']
-            else:
-                vols['OTHER'] += ticker['converted_volume']['usd']
-        return vols
+        return self.volume_distribution
 
 
 class TagMetrics(models.Model):

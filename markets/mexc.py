@@ -292,6 +292,8 @@ class MEXCMarket(IMarket):
                 return self.init_orderbook_websocket(symbol, callback)
             if response.get('msg') in ['PONG', 'pong']:
                 continue
+            if response.get('channel') == 'pong':
+                continue
             if symbol.contract_type == symbol.ContractType.SPOT:
                 response = response['d']
                 orderbook = self.format_orderbook_update(response)
