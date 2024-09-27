@@ -1,4 +1,7 @@
+from datetime import datetime, timedelta
 import json
+
+import pytz
 from coingecko import CoinGecko
 from coinmcap import CoinMarketCap
 from quantapi.models import GlobalSymbol, MarketSymbol, GlobalSymbolMetrics, Tag, TagMetrics
@@ -53,8 +56,8 @@ def update_symbol(gs: GlobalSymbol):
             bid_ask_spread[excname] = ticker['bid_ask_spread_percentage']
         else:
             volume_map['OTHER'] += ticker['converted_volume']['usd']
-    gs.volume_distribution = volume_map
-    gs.bid_ask_spread_percentage_distribution = bid_ask_spread
+    gs.volume_distribution = volume_map  # type: ignore
+    gs.bid_ask_spread_percentage_distribution = bid_ask_spread  # type: ignore
 
     try:
         metrics = gs.metrics
@@ -95,13 +98,7 @@ def update_symbol(gs: GlobalSymbol):
     gs.save()
 
 
-def update_symbol_metrics_mini(gs: GlobalSymbol, cg_symbol: dict):
-    try:
-        metrics = gs.metrics
-        assert metrics
-    except GlobalSymbol.metrics.RelatedObjectDoesNotExist:
-        metrics = GlobalSymbolMetrics(symbol=gs)
-
+def update_symbol_metrics_mini(metrics: GlobalSymbolMetrics, cg_symbol: dict):
     metrics.market_cap = cg_symbol['market_cap']
     metrics.market_cap_change_24h = cg_symbol['market_cap_change_24h']
     metrics.market_cap_change_percentage_24h = cg_symbol['market_cap_change_percentage_24h']
@@ -115,43 +112,114 @@ def update_symbol_metrics_mini(gs: GlobalSymbol, cg_symbol: dict):
     metrics.ath_date = cg_symbol['ath_date']
     metrics.atl = cg_symbol['atl']
     metrics.atl_date = cg_symbol['atl_date']
-    metrics.data_updated=cg_symbol['last_updated']
+    metrics.data_updated=cg_symbol['last_updated'] or datetime.now(pytz.UTC)
     metrics.total_supply = cg_symbol['total_supply']
     metrics.circulating_supply = cg_symbol['circulating_supply']
     metrics.max_supply = cg_symbol['max_supply']
     metrics.raw_payload = json.dumps(cg_symbol)
     metrics.calculate()
-    metrics.save()
+    return metrics
 
 
 def update_all_coins_coingecko():
     cg = CoinGecko()
+    print('Fetching all coins from CoinGecko...', end='\t', flush=True)
     cg_symbols = cg.all_coins_with_market_data()
+    print('OK')
     symbols = GlobalSymbol.objects.all()
 
+    symbols_to_create = {}
+    symbols_to_update = {}
+
+    # Create a dictionary of existing symbols for quick lookup
+    existing_symbols = {s.cid: s for s in symbols}
+    symbols_to_skip = {s.cid for s in GlobalSymbol.objects.filter(metrics__data_updated__gte=datetime.now(pytz.UTC)-timedelta(minutes=30))} 
+
     for cg_symbol in cg_symbols:
-        if symbols.filter(cid=cg_symbol['id']).exists():
-            gs = symbols.get(cid=cg_symbol['id'])
+        cid = cg_symbol['id']
+        if cid in symbols_to_skip:
+            print('Skipping:', cg_symbol['name'])
+            continue
+        if cid in existing_symbols:
+            gs = existing_symbols[cid]
+            # Add the symbol for bulk update later
+            gs.base = cg_symbol['symbol'].upper()
+            gs.display = cg_symbol['name']
+            gs.image = cg_symbol['image'] if cg_symbol['image'].startswith('http') else None
+            if symbols_to_update.get(cid):
+                print('Duplicate symbol:', gs)
+                continue
+            symbols_to_update[cid] = gs
         else:
-            gs = GlobalSymbol.objects.create(
+            # Collect the new symbol to create
+            gs = GlobalSymbol(
                 cid=cg_symbol['id'],
                 base=cg_symbol['symbol'].upper(),
                 display=cg_symbol['name'],
                 image=cg_symbol['image'] if cg_symbol['image'].startswith('http') else None,
             )
-        update_symbol_metrics_mini(gs, cg_symbol)
+            if symbols_to_create.get(cid):
+                print('Duplicate symbol:', gs)
+                continue
+            symbols_to_create[cid] = gs
+            print('Prepared for creation:', gs)
+
+    # Bulk create new symbols
+    if symbols_to_create:
+        GlobalSymbol.objects.bulk_create(symbols_to_create.values())
+        print(f'Created {len(symbols_to_create)} new symbols')
+
+    # Bulk update existing symbols
+    if symbols_to_update:
+        GlobalSymbol.objects.bulk_update(symbols_to_update.values(), ['base', 'display', 'image'])
+        print(f'Updated {len(symbols_to_update)} existing symbols')
+
+
+def update_all_coins_coingecko_metrics():
+    metrics_to_save = []
+    symbols_to_create_metrics = [gs for gs in GlobalSymbol.objects.filter(metrics__isnull=True)]
+    metrics_to_create = []
+
+    # Create symbol metrics
+    for gs in symbols_to_create_metrics:
+        metrics = GlobalSymbolMetrics(symbol=gs, data_updated=datetime.now(pytz.UTC))
+        metrics_to_create.append(metrics)
+        print('Prepared metrics to create for:', gs)
+    
+    if metrics_to_create:
+        GlobalSymbolMetrics.objects.bulk_create(metrics_to_create)
+        print(f'Created {len(metrics_to_create)} symbol metrics')
+
+    symbols = {gs.cid: gs for gs in GlobalSymbol.objects.select_related('metrics')}
+
+    # Update symbol metrics
+    for cg_symbol in CoinGecko().all_coins_with_market_data():
+        symbol = symbols[cg_symbol['id']]
+        metrics = update_symbol_metrics_mini(symbol.metrics, cg_symbol)
+        print('Prepared metrics to update for:', symbol)
+        metrics_to_save.append(metrics)
+
+    updated_count = GlobalSymbolMetrics.objects.bulk_update(
+        metrics_to_save, 
+        ['market_cap', 'market_cap_change_24h', 'market_cap_change_percentage_24h', 'price', 'volume', 'price_change_24h', 'price_change_percentage_24h', 'price_high_24h', 'price_low_24h', 'ath', 'ath_date', 'atl', 'atl_date', 'data_updated', 'total_supply', 'circulating_supply', 'max_supply', 'raw_payload'],
+        batch_size=1000)
+    print(f'Updated {updated_count} symbol metrics')
+
 
 
 def match_symbols():
-    gs = GlobalSymbol.objects.all().order_by('-metrics__market_cap')
+    gs = GlobalSymbol.objects.all().exclude(metrics__market_cap__isnull=True, metrics__volume__isnull=True).order_by('-metrics__market_cap')
+    ms = MarketSymbol.objects.filter(symbol__isnull=True, quote='USDT')
+    ms = [m for m in ms if m.base in {s.base for s in gs}]
+    ms_to_update = []
     for symbol in gs:
-        market_symbols = MarketSymbol.objects.filter(
-            base=symbol.base,
-            quote='USDT',
-            symbol__isnull=True
-        )
-        market_symbols.update(symbol=symbol)
+        market_symbols = [m for m in ms if m.base == symbol.base]
+        for msymbol in market_symbols:
+            msymbol.symbol = symbol  # type: ignore
+            ms_to_update.append(msymbol)
         print('.', end='', flush=True)
+    
+    MarketSymbol.objects.bulk_update(ms_to_update, ['symbol'])
 
 
 def update_all_tags():
@@ -189,11 +257,18 @@ def match_tags():
             symbol = GlobalSymbol.objects.get(cid=cmc_symbol['slug'])
         except GlobalSymbol.DoesNotExist:
             print('Symbol not found:', cmc_symbol['slug'])
+            continue
         tags = Tag.objects.filter(name__in=cmc_symbol['tags'])
         symbol.tags.set(tags)
         missing_tags = set(cmc_symbol['tags']) - set(tags.values_list('name', flat=True))
         if missing_tags:
             print('Missing tags:', missing_tags)
+            for tag in missing_tags:
+                tag, created = Tag.objects.get_or_create(name=tag)
+                if created:
+                    print('Created tag:', tag)
+                    tag.metrics = TagMetrics.objects.create(tag=tag)
+                symbol.tags.add(tag)
 
 
 def fix_missing_images():

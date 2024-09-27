@@ -1,5 +1,5 @@
 version: 1
 cron:
-  - name: "keep-bitcoin-updated"
-    url: "/globalsymbols/2/refresh/"
-    schedule: "0 0 * * *"
+  - name: "keep-globalsymbols-updated"
+    url: "/globalsymbols/refresh/"
+    schedule: "0 */6 * * *"

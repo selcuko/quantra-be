@@ -12,6 +12,7 @@ from rest_framework.response import Response
 from cache import LIVELOOPS
 from loops import LiveLoop
 from markets.errors import OrderPlacementError
+from metrichub import fix_missing_images, match_symbols, match_tags, update_all_coins_coingecko, update_all_tags
 from models import interval_to_minutes
 from order import OrderManager
 from orderpulse.keeper import KeeperPool
@@ -139,8 +140,18 @@ class GlobalSymbolViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=['get', 'post'])
     def refresh(self, request, pk):
         symbol: GlobalSymbol = self.get_object()
-        symbol.refresh()
+        if not (symbol.metrics and (datetime.now(tz=pytz.UTC) - symbol.metrics.data_updated) < timedelta(minutes=15)):
+            symbol.refresh()
         return Response(GlobalSymbolSerializer(symbol, context={'request': request}).data)
+
+    @action(detail=False, methods=['get', 'post'], url_path='refresh', url_name='refresh-all')
+    def refresh_all(self, request):
+        update_all_coins_coingecko()
+        match_symbols()
+        update_all_tags()
+        match_tags()
+        fix_missing_images()
+        return Response()
 
 
 class StrategyViewSet(viewsets.ReadOnlyModelViewSet):

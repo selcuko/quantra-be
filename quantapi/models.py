@@ -894,8 +894,8 @@ class GlobalSymbolMetrics(models.Model):
     is_stablecoin = models.BooleanField(default=False)
 
     raw_payload = models.TextField(null=True, blank=True)
-    last_updated = models.DateTimeField(null=True, blank=True, auto_now=True, help_text='Last time this symbol was updated in our system')
-    data_updated = models.DateTimeField(null=True, blank=True, help_text='Last time this symbol was fetched from the data source')
+    last_updated = models.DateTimeField(auto_now=True, help_text='Last time this symbol was updated in our system')
+    data_updated = models.DateTimeField(help_text='Last time this symbol was fetched from the data source')
 
     def __str__(self):
         return f'{self.symbol!r} Metrics'
@@ -918,6 +918,7 @@ class GlobalSymbol(models.Model):
         COINMARKETCAP = 'COINMARKETCAP', 'CoinMarketCap'
 
     cid = models.CharField(max_length=200, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
     display = models.CharField(max_length=200)
     base = models.CharField(max_length=200, db_index=True)
     description = models.TextField(null=True, blank=True)
@@ -947,7 +948,7 @@ class GlobalSymbol(models.Model):
     image = models.URLField(null=True, blank=True, max_length=1024, help_text='URL to image of this symbol')
     tags = models.ManyToManyField('Tag', related_name='symbols')
     symbols: models.QuerySet[MarketSymbol]
-    metrics: models.OneToOneField[GlobalSymbolMetrics | None]
+    metrics: models.OneToOneField[GlobalSymbolMetrics]
 
     @property
     def display_name(self):
@@ -978,6 +979,11 @@ class GlobalSymbol(models.Model):
     @cached_property
     def cex_volume(self):
         return self.volume_distribution
+    
+    @property
+    def updated_timedelta(self):
+        try: timezone.now() - self.metrics.data_updated if self.metrics and self.metrics.data_updated else timedelta.max
+        except: return timedelta.max
 
 
 class TagMetrics(models.Model):
