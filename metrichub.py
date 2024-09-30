@@ -221,54 +221,133 @@ def match_symbols():
     
     MarketSymbol.objects.bulk_update(ms_to_update, ['symbol'])
 
-
 def update_all_tags():
     cg = CoinGecko()
     payload = cg.categories()
+    
+    # Fetch all existing tags to avoid repetitive queries
+    existing_tags = {tag.name: tag for tag in Tag.objects.all()}
+    
+    tags_to_update = []
+    tags_to_create = []
+    metrics_to_update = []
+    metrics_to_create = []
+
     for category in payload:
-        tag, created = Tag.objects.update_or_create(
+        tag = existing_tags.get(category['id'])
+        
+        if tag:
+            # Update tag if it already exists
+            tag.display = category['name']
+            tag.description = category['content']
+            tags_to_update.append(tag)
+        else:
+            # Create new tag
+            tag = Tag(
                 name=category['id'],
-                defaults={
-                    'display': category['name'],
-                    'description': category['content'],
-                }
+                display=category['name'],
+                description=category['content']
             )
-        tag.save()
-        print('created' if created else 'updated', tag)
+            tags_to_create.append(tag)
+        
+        # Handle tag metrics (create if not exists)
         try:
             metrics = tag.metrics
-            assert metrics
         except Tag.metrics.RelatedObjectDoesNotExist:
-            print('Creating metrics for', tag)
-            metrics = TagMetrics.objects.create(tag=tag)
+            metrics = TagMetrics(tag=tag)
+            metrics_to_create.append(metrics)
         
+        # Update metrics with new data
+        assert metrics
         metrics.market_cap = category['market_cap']
         metrics.market_cap_change_24h = category['market_cap_change_24h']
         metrics.volume = category['volume_24h']
         metrics.data_updated = category['updated_at']
-        metrics.save()
+        metrics_to_update.append(metrics)
 
+    # Bulk create and update tags
+    if tags_to_create:
+        Tag.objects.bulk_create(tags_to_create)
+    
+    if tags_to_update:
+        Tag.objects.bulk_update(tags_to_update, ['display', 'description'])
+    
+    # Bulk create TagMetrics
+    if metrics_to_create:
+        TagMetrics.objects.bulk_create(metrics_to_create)
+    
+    # Bulk update TagMetrics
+    if metrics_to_update:
+        TagMetrics.objects.bulk_update(
+            metrics_to_update, 
+            ['market_cap', 'market_cap_change_24h', 'volume', 'data_updated']
+        )
+
+from django.db import transaction
 
 def match_tags():
     cmc = CoinMarketCap()
     cmc_symbols = cmc.listings()['data']
+    gsymbols = {gs.cid: gs for gs in GlobalSymbol.objects.all()}
+    
+    all_tags = {tag.name: tag for tag in Tag.objects.all()}
+    
+    tags_to_create = set()
+    symbol_tag_relations = []
+
     for cmc_symbol in cmc_symbols:
         try:
-            symbol = GlobalSymbol.objects.get(cid=cmc_symbol['slug'])
-        except GlobalSymbol.DoesNotExist:
+            symbol = gsymbols[cmc_symbol['id']]
+        except KeyError:
             print('Symbol not found:', cmc_symbol['slug'])
             continue
-        tags = Tag.objects.filter(name__in=cmc_symbol['tags'])
-        symbol.tags.set(tags)
-        missing_tags = set(cmc_symbol['tags']) - set(tags.values_list('name', flat=True))
+        
+        # Existing tags associated with the symbol
+        existing_tags = [all_tags[tag_name] for tag_name in cmc_symbol['tags'] if tag_name in all_tags]
+        
+        # Find missing tags
+        missing_tags = set(cmc_symbol['tags']) - set(all_tags.keys())
         if missing_tags:
             print('Missing tags:', missing_tags)
-            for tag in missing_tags:
-                tag, created = Tag.objects.get_or_create(name=tag)
-                if created:
-                    print('Created tag:', tag)
-                    tag.metrics = TagMetrics.objects.create(tag=tag)
-                symbol.tags.add(tag)
+            tags_to_create.update(missing_tags)
+        
+        # Save the relationship for bulk creation later
+        symbol_tag_relations.append((symbol, existing_tags, cmc_symbol['tags']))
+    
+    # Bulk create missing tags
+    if tags_to_create:
+        new_tags = [Tag(name=tag_name) for tag_name in tags_to_create]
+        created_tags = Tag.objects.bulk_create(new_tags)
+        
+        # Update all_tags with newly created tags
+        for tag in created_tags:
+            all_tags[tag.name] = tag
+    
+    # Create missing TagMetrics for newly created tags and link to symbols
+    new_tag_metrics = []
+    through_model_entries = []
+
+    for symbol, existing_tags, cmc_tags in symbol_tag_relations:
+        # Get tags for the symbol (existing and newly created)
+        tags_for_symbol = [all_tags[tag_name] for tag_name in cmc_tags]
+        
+        # Collect through-model data for bulk_create
+        for tag in tags_for_symbol:
+            through_model_entries.append(
+                symbol.tags.through(symbol_id=symbol.id, tag_id=tag.pk)
+            )
+        
+        # Create TagMetrics for any newly created tags
+        for tag_name in cmc_tags:
+            if tag_name in tags_to_create:
+                new_tag_metrics.append(TagMetrics(tag=all_tags[tag_name]))
+
+    # Bulk create TagMetrics for new tags
+    TagMetrics.objects.bulk_create(new_tag_metrics)
+    
+    # Bulk insert the many-to-many relationship through the intermediary table
+    with transaction.atomic():
+        GlobalSymbol.tags.through.objects.bulk_create(through_model_entries, ignore_conflicts=True)
 
 
 def fix_missing_images():

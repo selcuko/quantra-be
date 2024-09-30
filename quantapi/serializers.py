@@ -117,7 +117,7 @@ class InlineMarketSymbolSerializer(serializers.HyperlinkedModelSerializer):
     market = MarketSerializer()
     class Meta:
         model = MarketSymbol
-        fields = ['id', 'url', 'icon', 'name', 'base', 'quote', 'market', 'contract_type']
+        fields = ['id', 'url', 'icon', 'name', 'base', 'quote', 'market', 'contract_type', 'volume']
 
 
 class TagMetricsSerializer(serializers.HyperlinkedModelSerializer):
