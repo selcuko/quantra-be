@@ -12,7 +12,7 @@ from rest_framework.response import Response
 from cache import LIVELOOPS
 from loops import LiveLoop
 from markets.errors import OrderPlacementError
-from metrichub import fix_missing_images, match_symbols, match_tags, update_all_coins_coingecko, update_all_tags
+from metrichub import fix_missing_images, match_symbols, match_tags, update_all_coins_coingecko, update_all_coins_coingecko_metrics, update_all_tags
 from models import interval_to_minutes
 from order import OrderManager
 from orderpulse.keeper import KeeperPool
@@ -147,6 +147,7 @@ class GlobalSymbolViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=['get', 'post'], url_path='refresh', url_name='refresh-all')
     def refresh_all(self, request):
         update_all_coins_coingecko()
+        update_all_coins_coingecko_metrics()
         match_symbols()
         update_all_tags()
         match_tags()
