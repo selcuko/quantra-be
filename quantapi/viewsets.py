@@ -142,6 +142,7 @@ class GlobalSymbolViewSet(viewsets.ReadOnlyModelViewSet):
         symbol: GlobalSymbol = self.get_object()
         if not (symbol.metrics and (datetime.now(tz=pytz.UTC) - symbol.metrics.data_updated) < timedelta(minutes=15)):
             symbol.refresh()
+            symbol.refresh_from_db()
         return Response(GlobalSymbolSerializer(symbol, context={'request': request}).data)
 
     @action(detail=False, methods=['get', 'post'], url_path='refresh', url_name='refresh-all')

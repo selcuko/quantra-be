@@ -97,6 +97,10 @@ def update_symbol(gs: GlobalSymbol):
     metrics.save()
     gs.save()
 
+    # match with market symbols too
+    ms = MarketSymbol.objects.filter(base=gs.base, quote='USDT')
+    ms.update(symbol=gs)
+
 
 def update_symbol_metrics_mini(metrics: GlobalSymbolMetrics, cg_symbol: dict):
     metrics.market_cap = cg_symbol['market_cap']
@@ -209,7 +213,7 @@ def update_all_coins_coingecko_metrics():
 
 def match_symbols():
     gs = GlobalSymbol.objects.all().exclude(metrics__market_cap__isnull=True, metrics__volume__isnull=True).order_by('-metrics__market_cap')
-    ms = MarketSymbol.objects.filter(symbol__isnull=True, quote='USDT')
+    ms = MarketSymbol.objects.filter(quote='USDT')
     ms = [m for m in ms if m.base in {s.base for s in gs}]
     ms_to_update = []
     for symbol in gs:
