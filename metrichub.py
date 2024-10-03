@@ -99,7 +99,15 @@ def update_symbol(gs: GlobalSymbol):
 
     # match with market symbols too
     ms = MarketSymbol.objects.filter(base=gs.base, quote='USDT')
-    ms.update(symbol=gs)
+    ms_update = []
+    for m in ms:
+        try:
+            if m.symbol.metrics.market_cap < gs.metrics.market_cap:  # type: ignore
+                m.symbol = gs  # type: ignore
+                ms_update.append(m)
+        except (GlobalSymbolMetrics.DoesNotExist, AttributeError):
+            pass
+    MarketSymbol.objects.bulk_update(ms_update, ['symbol'])
 
 
 def update_symbol_metrics_mini(metrics: GlobalSymbolMetrics, cg_symbol: dict):
