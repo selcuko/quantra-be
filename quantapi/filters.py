@@ -81,6 +81,7 @@ class GlobalSymbolFilter(filters.FilterSet):
     is_favorite = filters.BooleanFilter(field_name='favorite')
     is_stablecoin = filters.BooleanFilter(field_name='is_stablecoin')
     volume = filters.RangeFilter(field_name='metrics__volume')
+    market_cap = filters.RangeFilter(field_name='metrics__market_cap')
 
     ordering = filters.OrderingFilter(
         fields=(
@@ -112,17 +113,25 @@ class GlobalSymbolFilter(filters.FilterSet):
 
     class Meta:
         model = GlobalSymbol
-        fields = ['market', 'name', 'base', 'quote', 'contract_type', 'tags', 'is_favorite', 'cid', 'volume', 'ordering']
+        fields = ['market', 'name', 'base', 'quote', 'contract_type', 'tags', 'is_favorite', 'cid', 'volume', 'ordering', 'market_cap']
 
 
 class TagFilter(filters.FilterSet):
     class Meta:
         model = Tag
-        fields = ['symbols', 'name', 'volume']
+        fields = ['symbols', 'name', 'volume', 'market_cap', 'ordering']
 
     symbols = filters.CharFilter(method='filter_symbols')
     name = filters.CharFilter(field_name='name', lookup_expr='icontains')
-    volume = filters.NumericRangeFilter(field_name='metrics__volume')
+    volume = filters.RangeFilter(field_name='metrics__volume')
+    market_cap = filters.RangeFilter(field_name='metrics__market_cap')
+    ordering = filters.OrderingFilter(
+        fields=(
+            ('name', 'name'),
+            ('metrics__market_cap', 'market_cap'),
+            ('metrics__volume', 'volume'),
+        )
+    )
 
     def filter_symbols(self, queryset, name, value):
         cids = value.split(",")
