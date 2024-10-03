@@ -18,21 +18,21 @@ def update_symbol(gs: GlobalSymbol):
     if not gs.image.startswith('http'):
         gs.image = cg_symbol['image']['small']
     gs.description = cg_symbol['description']['en']
-    gs.homepage = cg_symbol['links']['homepage'][0] if cg_symbol['links']['homepage'] else None
-    gs.blockchain_site = cg_symbol['links']['blockchain_site'] if cg_symbol['links']['blockchain_site'] else None
-    gs.whitepaper = cg_symbol['links']['whitepaper'] if cg_symbol['links']['whitepaper'] else None
-    gs.official_forum_url = cg_symbol['links']['official_forum_url'] if cg_symbol['links']['official_forum_url'] else None
-    gs.chat_url = cg_symbol['links']['chat_url'] if cg_symbol['links']['chat_url'] else None
-    gs.announcement_url = cg_symbol['links']['announcement_url'] if cg_symbol['links']['announcement_url'] else None
-    gs.subreddit_url = cg_symbol['links']['subreddit_url'] if 'r/' in cg_symbol['links']['subreddit_url'] else None
-    gs.github_repo_url = cg_symbol['links']['repos_url']['github'] if cg_symbol['links']['repos_url']['github'] else None
-    gs.genesis_date = cg_symbol['genesis_date']
-    gs.sentiment_votes_up_percentage = cg_symbol['sentiment_votes_up_percentage']
-    gs.sentiment_votes_down_percentage = cg_symbol['sentiment_votes_down_percentage']
-    gs.watchlist_portfolio_users = cg_symbol['watchlist_portfolio_users']
-    gs.market_cap_rank = cg_symbol['market_cap_rank']
-    gs.twitter_followers = cg_symbol['community_data']['twitter_followers']
-    gs.developer_data = cg_symbol['developer_data'] if cg_symbol['developer_data'] else None
+    gs.homepage = cg_symbol['links']['homepage'][0] if cg_symbol.get('links', {}).get('homepage') else None
+    gs.blockchain_site = cg_symbol.get('links', {}).get('blockchain_site')
+    gs.whitepaper = cg_symbol.get('links', {}).get('whitepaper')
+    gs.official_forum_url = cg_symbol.get('links', {}).get('official_forum_url')
+    gs.chat_url = cg_symbol.get('links', {}).get('chat_url')
+    gs.announcement_url = cg_symbol.get('links', {}).get('announcement_url') 
+    gs.subreddit_url = cg_symbol['links']['subreddit_url'] if 'r/' in cg_symbol.get('links', {}).get('subreddit_url') else None
+    gs.github_repo_url = cg_symbol.get('links', {}).get('repos_url', {}).get('github')  
+    gs.genesis_date = cg_symbol.get('genesis_date')
+    gs.sentiment_votes_up_percentage = cg_symbol.get('sentiment_votes_up_percentage')
+    gs.sentiment_votes_down_percentage = cg_symbol.get('sentiment_votes_down_percentage')
+    gs.watchlist_portfolio_users = cg_symbol.get('watchlist_portfolio_users')
+    gs.market_cap_rank = cg_symbol.get('market_cap_rank')
+    gs.twitter_followers = cg_symbol.get('community_data', {}).get('twitter_followers')
+    gs.developer_data = cg_symbol.get('developer_data')
 
     gs.coingecko_response = json.dumps(cg_symbol) # Delete ?
 
