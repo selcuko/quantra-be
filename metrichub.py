@@ -220,18 +220,18 @@ def update_all_coins_coingecko_metrics():
 
 
 def match_symbols():
-    gs = GlobalSymbol.objects.all().exclude(metrics__market_cap__isnull=True, metrics__volume__isnull=True).order_by('-metrics__market_cap')
-    ms = MarketSymbol.objects.filter(quote='USDT')
+    gs = GlobalSymbol.objects.filter().select_related('metrics').exclude(metrics__market_cap__isnull=True, metrics__volume__isnull=True).order_by('-metrics__market_cap')
+    ms = MarketSymbol.objects.filter(quote='USDT', symbol__isnull=True)
     ms = [m for m in ms if m.base in {s.base for s in gs}]
     ms_to_update = []
     for symbol in gs:
-        market_symbols = [m for m in ms if m.base == symbol.base]
+        market_symbols = [m for m in ms if m.base == symbol.base and m.symbol is None]
         for msymbol in market_symbols:
             msymbol.symbol = symbol  # type: ignore
             ms_to_update.append(msymbol)
         print('.', end='', flush=True)
-    
     MarketSymbol.objects.bulk_update(ms_to_update, ['symbol'])
+
 
 def update_all_tags():
     cg = CoinGecko()
