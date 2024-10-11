@@ -12,7 +12,7 @@ from asgiref.sync import sync_to_async
 
 
 class MiniOrderbookConsumer(AsyncWebsocketConsumer):
-    DEFAULT_DEPTH = 1
+    DEFAULT_DEPTH = 0.001
     DEFAULT_COUNT = 10
     dispatcher = KeeperDispatch()
 
@@ -56,7 +56,7 @@ class MiniOrderbookConsumer(AsyncWebsocketConsumer):
         symbol = event['symbol']
         try:
             self.keeper = await sync_to_async(self.get_keeper)(market, symbol)
-            self.group_name = f'{self.keeper.key}.default'
+            self.group_name = f'{self.keeper.key}_default'
             await self.channel_layer.group_add(self.group_name, self.channel_name)
         except Market.DoesNotExist:
             await self.send(text_data=json.dumps({ 'error': f'Market {market} not found', 'code': 404 }))
@@ -102,6 +102,6 @@ class MiniOrderbookConsumer(AsyncWebsocketConsumer):
         old_channel_name = self.group_name
         await self.channel_layer.group_discard(self.group_name, self.channel_name)
         self.depth = depth
-        self.group_name = f'{self.keeper.key}.{self.depth}'
+        self.group_name = f'{self.keeper.key}_{self.depth}'
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         await sync_to_async(self.dispatcher.update_depth)(self.connection_id, old_channel_name, self.group_name)

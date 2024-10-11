@@ -22,7 +22,7 @@ KEEP_ALIVE_TICKERS = [
 ]
 
 
-def bucket(price:float):
+def bucket(price:Decimal):
     x = None
     if price < 0.001:
         x = 0.00001
@@ -72,9 +72,9 @@ class KeeperDispatch:
             self.last_updates[keeper] = datetime.now()
             channels = list(self.channels[keeper].keys())
             for channel in channels:
-                channel_depth = channel.split('.')[-1]
+                channel_depth = channel.split('_')[-1]
                 if channel_depth == 'default':
-                    best_bid_price = float(keeper.book.get_best(count=1)[0][0].price)
+                    best_bid_price = keeper.book.get_best(count=1)[0][0].price
                     bucket_precision = bucket(best_bid_price)
                     depth = bucket_l2(bucket_precision, Decimal(10))
                 else:
@@ -85,6 +85,7 @@ class KeeperDispatch:
                     'asks': [ask.dict() for ask in asks],
                     'price': keeper.book.get_price(),
                     'type': 'update',
+                    'depth': depth, 
                 }
                 async_to_sync(self.channel_layer.group_send)(channel, payload)
         self.callbacks[keeper] = callback
@@ -95,7 +96,7 @@ class KeeperDispatch:
         keeper = KeeperPool.get(symbol)
         keeper.add_callback(self.make_callback(keeper))
         self.connections.setdefault(keeper, []).append(connection_id)
-        self.channels.setdefault(keeper, {}).setdefault(keeper.key+'.default', []).append(connection_id)
+        self.channels.setdefault(keeper, {}).setdefault(keeper.key+'_default', []).append(connection_id)
         self.cancel_keeper_shutdown(keeper)
         return keeper
 
