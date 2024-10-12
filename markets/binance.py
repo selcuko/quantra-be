@@ -80,18 +80,18 @@ class BinanceMarket(IMarket):
             'maker': data['m'],
         }
 
-    def init_match_engine(self, symbol:'MarketSymbol|str', interval:str, callback:Callable, stop_event:Event, raw_callback:Optional[Callable]=None, ticker_callback:Optional[Callable]=None): # type: ignore
+    def init_match_engine(self, symbol:'MarketSymbol', interval:str, callback:Callable, stop_event:Event, raw_callback:Optional[Callable]=None, ticker_callback:Optional[Callable]=None): # type: ignore
         if isinstance(symbol, str):
             contract_type = 'SPOT'
         else:
             contract_type = symbol.contract_type
-            symbol = symbol.name
+            symbol_name = symbol.name
         if contract_type == 'SPOT':
-            ws_uri = f'wss://stream.binance.com:9443/ws/{self._format_symbol(symbol).lower()}@trade'
+            ws_uri = f'wss://stream.binance.com:9443/ws/{self._format_symbol(symbol_name).lower()}@trade'
         elif contract_type == 'FUTURES':
-            ws_uri = f'wss://fstream.binance.com/ws/{self._format_symbol(symbol).lower()}@aggTrade'
+            ws_uri = f'wss://fstream.binance.com/ws/{self._format_symbol(symbol_name).lower()}@aggTrade'
         ws = connect(ws_uri)
-        me = MatchEngine(interval, callback, ticker_callback)
+        me = MatchEngine(symbol, interval, callback, ticker_callback)
         last_ping = datetime.now()
         retries = 0
         while not stop_event.is_set():
@@ -113,7 +113,7 @@ class BinanceMarket(IMarket):
                 continue
             except Exception as e:
                 if retries > self.WS_MAX_RETRIES:
-                    msg = f'Cannot start websocket connection for match engine for {symbol} on {self.name} (tried {retries} times).'
+                    msg = f'Cannot start websocket connection for match engine for {symbol_name} on {self.name} (tried {retries} times).'
                     logger.error(msg, exc_info=True)
                     raise MarketAPIError(msg) from e
                 retries += 1
@@ -454,6 +454,7 @@ class BinanceMarket(IMarket):
             prices = { self._standardize_symbol(ticker['symbol']): float(ticker['price']) for ticker in self.client.get_all_tickers() if ticker['symbol'].endswith('USDT') and ticker['price'] }
             if self.market and self.market.prices != prices:
                 self.market.prices = json.dumps(prices)
+                self.market.prices_updated = datetime.now(tz=pytz.UTC)
                 if save:
                     self.market.save()
             return prices

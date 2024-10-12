@@ -195,10 +195,10 @@ class KucoinMarket(IMarket):
             raise ValueError(f'Error while subscribing to {symbol} on {self.name}: {ack}')
         return ws
 
-    def init_match_engine(self, symbol:'MarketSymbol|str', interval:str, callback:typing.Callable, stop_event:Event, raw_callback=None, ticker_callback=None):
+    def init_match_engine(self, symbol:'MarketSymbol', interval:str, callback:typing.Callable, stop_event:Event, raw_callback=None, ticker_callback=None):
         ws = self.get_match_engine_socket(symbol)
         last_ping = datetime.now()
-        engine = MatchEngine(interval, callback, ticker_callback)
+        engine = MatchEngine(symbol, interval, callback, ticker_callback)
         retries = 0
 
         while not stop_event.is_set():
@@ -731,6 +731,7 @@ class KucoinMarket(IMarket):
         prices = { self._standardize_symbol(ticker['symbol']): float(ticker['last']) for ticker in all_tickers['ticker'] if ticker['symbol'].endswith('USDT') and ticker['last'] }
         if self.market and self.market.prices != prices:
             self.market.prices = json.dumps(prices)
+            self.market.prices_updated = datetime.now(tz=pytz.UTC)
             if save:
                 self.market.save()
         return prices

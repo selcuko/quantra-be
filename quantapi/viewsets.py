@@ -56,7 +56,8 @@ class MarketViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=['get'])
     def refresh(self, request, pk):
         market: Market = self.get_object()
-        market.get_interface()
+        iface = market.get_interface()
+        iface.get_current_prices()
         market.refresh_from_db()
         return Response(MarketSerializer(market, context={'request': request}).data)
 

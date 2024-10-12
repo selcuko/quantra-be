@@ -168,6 +168,7 @@ class BybitMarket(IMarket):
             self.prices[self.standardize_symbol(symbol['symbol'])] = float(symbol['lastPrice'])
         if self.market:
             self.market.prices = json.dumps(self.prices)
+            self.market.prices_updated = datetime.now(tz=pytz.UTC)
             if save:
                 self.market.save()
         return self.prices
@@ -281,10 +282,10 @@ class BybitMarket(IMarket):
             raise MarketAPIError(f'Failed to subscribe to websocket: {ack}')
         return ws
 
-    def init_match_engine(self, symbol:'MarketSymbol|str', interval:str, callback:typing.Callable, stop_event:Event, raw_callback:typing.Optional[typing.Callable]=None, ticker_callback:typing.Optional[typing.Callable]=None):
+    def init_match_engine(self, symbol:'MarketSymbol', interval:str, callback:typing.Callable, stop_event:Event, raw_callback:typing.Optional[typing.Callable]=None, ticker_callback:typing.Optional[typing.Callable]=None):
         ws = self.get_match_engine_socket(symbol)
         last_ping = timezone.now()
-        engine = MatchEngine(interval, callback, ticker_callback)
+        engine = MatchEngine(symbol, interval, callback, ticker_callback)
         retries = 30
         while not stop_event.is_set():
             if last_ping - timezone.now() > timedelta(seconds=30):

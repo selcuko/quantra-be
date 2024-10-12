@@ -141,10 +141,10 @@ class MEXCMarket(IMarket):
             raise Exception(f'Error while subscribing to {topic}: {ack}')
         return ws
 
-    def init_match_engine(self, symbol:'MarketSymbol|str', interval:str, callback:Callable, stop_event: Event, raw_callback:Optional[Callable]=None, ticker_callback:Optional[Callable]=None):
+    def init_match_engine(self, symbol:'MarketSymbol', interval:str, callback:Callable, stop_event: Event, raw_callback:Optional[Callable]=None, ticker_callback:Optional[Callable]=None):
         ws = self.get_match_engine_ws(symbol)
         last_ping = datetime.now()
-        me = MatchEngine(interval, callback, ticker_callback)
+        me = MatchEngine(symbol, interval, callback, ticker_callback)
         retries = 0
         if isinstance(symbol, str):
             contract_type = 'SPOT'
@@ -633,6 +633,7 @@ class MEXCMarket(IMarket):
         prices = { self._standardize_symbol(ticker['symbol']): float(ticker['price']) for ticker in all_tickers if ticker['symbol'].endswith('USDT') and ticker['price'] }
         if self.market:
             self.market.prices = json.dumps(prices)
+            self.market.prices_updated = datetime.now(tz=pytz.UTC)
             if save:
                 self.market.save()
         return prices
