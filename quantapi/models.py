@@ -947,6 +947,7 @@ class GlobalSymbol(models.Model):
     coinmarketcap_response = models.TextField(null=True, blank=True)
     image = models.URLField(null=True, blank=True, max_length=1024, help_text='URL to image of this symbol')
     tags = models.ManyToManyField('Tag', related_name='symbols')
+    markets = models.JSONField(null=True, blank=True, help_text='List of markets where this symbol is traded')
     symbols: models.QuerySet[MarketSymbol]
     metrics: models.OneToOneField[GlobalSymbolMetrics]
 
@@ -956,14 +957,6 @@ class GlobalSymbol(models.Model):
             return self.display
         payload = json.loads(self.coingecko_response or '{}')
         return payload.get('name')
-
-    @property
-    def markets(self):
-        return list(self.spot_symbols.values_list('market__exchange_name', flat=True))
-
-    @property
-    def markets_display(self):
-        return ', '.join(self.markets)
 
     @property
     def spot_symbols(self):

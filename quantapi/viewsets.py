@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 import json
 
 from django.db.models import Prefetch, Count, Q
+from django.core.cache import cache
 from django_filters.rest_framework import DjangoFilterBackend
 import pytz
 from rest_framework import viewsets
@@ -12,7 +13,7 @@ from rest_framework.response import Response
 from cache import LIVELOOPS
 from loops import LiveLoop
 from markets.errors import OrderPlacementError
-from metrichub import fix_missing_images, match_symbols, match_tags, update_all_coins_coingecko, update_all_coins_coingecko_metrics, update_all_tags
+from metrichub import fix_missing_images, match_symbols, update_all_coins_coingecko, update_all_coins_coingecko_metrics, update_all_tags
 from models import interval_to_minutes
 from order import OrderManager
 from orderpulse.keeper import KeeperPool
@@ -151,7 +152,7 @@ class GlobalSymbolViewSet(viewsets.ReadOnlyModelViewSet):
         update_all_coins_coingecko_metrics()
         match_symbols()
         update_all_tags()
-        match_tags()
+        # match_tags()  # migrating to CoinGecko tags
         fix_missing_images()
         return Response()
 
@@ -437,9 +438,15 @@ class TagViewSet(viewsets.ModelViewSet):
     lookup_field = 'name'
 
     def get_queryset(self):
-        return Tag.objects.select_related('metrics').prefetch_related(
+        cache_key = 'tags'
+        cache_timeout = 60*60*24*7 # 1 week
+        #if results := cache.get(cache_key):
+        #    return results
+        results = Tag.objects.select_related('metrics').prefetch_related(
             Prefetch('symbols', queryset=GlobalSymbol.objects.select_related('metrics')),
         )
+        #cache.set(cache_key, results, cache_timeout)
+        return results
 
 
 class KeeperView(viewsets.ViewSet):

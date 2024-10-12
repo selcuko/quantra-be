@@ -147,7 +147,7 @@ class InlineTagSerializer(serializers.HyperlinkedModelSerializer):
 class InlineGlobalSymbolSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = GlobalSymbol
-        fields = ['id', 'cid', 'display', 'base', 'image']
+        fields = ['id', 'cid', 'display', 'base', 'image', 'markets']
 
 
 class GlobalSymbolMetricsSerializer(serializers.HyperlinkedModelSerializer):

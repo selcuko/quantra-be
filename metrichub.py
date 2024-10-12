@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 import json
+import os
 
 import pytz
 from coingecko import CoinGecko
@@ -297,7 +298,9 @@ def update_all_tags():
 
 from django.db import transaction
 
-def match_tags():
+def cmc_match_tags():
+    # DO NOT USE
+    # we migrated to using only coingecko
     cmc = CoinMarketCap()
     cmc_symbols = cmc.listings()['data']
     gsymbols = {gs.cid: gs for gs in GlobalSymbol.objects.all()}
@@ -360,6 +363,40 @@ def match_tags():
     # Bulk insert the many-to-many relationship through the intermediary table
     with transaction.atomic():
         GlobalSymbol.tags.through.objects.bulk_create(through_model_entries, ignore_conflicts=True)
+
+
+def cg_match_tags():
+    folder_name = 'cg-payloads'
+    tags = Tag.objects.all()
+    tags = {tag.display: tag for tag in tags}
+    symbols = GlobalSymbol.objects.prefetch_related('tags')
+    missing = set()
+
+    for s in symbols:
+        if not os.path.exists(f'{folder_name}/{s.cid}.json'):
+            print('Payload not found:', s.cid)
+            continue
+        with open(f'{folder_name}/{s.cid}.json', 'r') as f:
+            payload = json.load(f)
+            for category in payload['categories']:
+                tag = tags.get(category)
+                if tag:
+                    s.tags.add(tag)
+                else:
+                    missing.add(category)
+
+    print('Missing tags:', missing)
+    if missing:
+        create_missing_tags(missing)
+        print('Created missing tags, recalling self')
+        cg_match_tags()
+    print('Done')
+
+
+def create_missing_tags(tag_names):
+    for tag_name in tag_names:
+        tag = Tag.objects.create(display=tag_name)
+        TagMetrics.objects.create(tag=tag)
 
 
 def fix_missing_images():

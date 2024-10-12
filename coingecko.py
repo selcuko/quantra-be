@@ -20,8 +20,13 @@ class CoinGecko:
 
     @staticmethod
     def handle_failed_request(response):
-        if not response.ok:
-            raise ValueError('CoinGecko API request failed with', response.status_code, response.text)
+        if response.ok:
+            return
+        if response.status_code == 429:
+            print('Rate limited, sleeping for a bit')
+            time.sleep(15)
+            return
+        raise ValueError('CoinGecko API request failed with', response.status_code, response.text)
 
     def coins_list(self):
         uri = self.url + 'coins/list'
@@ -85,7 +90,10 @@ class CoinGecko:
     def coin_by_cid(self, cid:str):
         uri = self.url + f'coins/{cid}'
         response = self.session.get(uri)
-        self.handle_failed_request(response)
+        if response.status_code == 429:
+            print('Rate limited, sleeping for a bit')
+            time.sleep(15)
+            return self.coin_by_cid(cid)
         return response.json()
 
     def categories(self):
