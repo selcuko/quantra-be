@@ -369,7 +369,7 @@ def cg_match_tags():
     folder_name = 'cg-payloads'
     tags = Tag.objects.all()
     tags = {tag.display: tag for tag in tags}
-    symbols = GlobalSymbol.objects.prefetch_related('tags')
+    symbols = GlobalSymbol.objects.prefetch_related('tags', 'symbols').exclude(symbols__isnull=True).distinct()
     missing = set()
 
     for s in symbols:

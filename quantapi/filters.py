@@ -82,6 +82,8 @@ class GlobalSymbolFilter(filters.FilterSet):
     is_stablecoin = filters.BooleanFilter(field_name='is_stablecoin')
     volume = filters.RangeFilter(field_name='metrics__volume')
     market_cap = filters.RangeFilter(field_name='metrics__market_cap')
+    ath_prox = filters.RangeFilter(field_name='metrics__ath_prox')
+    atl_prox = filters.RangeFilter(field_name='metrics__atl_prox')
 
     ordering = filters.OrderingFilter(
         fields=(
@@ -90,6 +92,8 @@ class GlobalSymbolFilter(filters.FilterSet):
             ('quote', 'quote'),
             ('metrics__market_cap', 'market_cap'),
             ('metrics__volume', 'volume'),
+            ('metrics__ath_prox', 'ath_prox'),
+            ('metrics__atl_prox', 'atl_prox'),
         )
     )
 
@@ -113,7 +117,7 @@ class GlobalSymbolFilter(filters.FilterSet):
 
     class Meta:
         model = GlobalSymbol
-        fields = ['market', 'name', 'base', 'quote', 'contract_type', 'tags', 'is_favorite', 'cid', 'volume', 'ordering', 'market_cap']
+        fields = ['market', 'name', 'base', 'quote', 'contract_type', 'tags', 'is_favorite', 'cid', 'volume', 'ordering', 'market_cap', 'ath_prox', 'atl_prox']
 
 
 class TagFilter(filters.FilterSet):

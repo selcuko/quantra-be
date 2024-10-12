@@ -129,7 +129,7 @@ class TagMetricsSerializer(serializers.HyperlinkedModelSerializer):
 class TagSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = Tag
-        fields = ['name', 'description', 'is_ecosystem', 'is_chain', 'is_portfolio', 'weight', 'best_symbols', 'metrics']
+        fields = ['name', 'display', 'description', 'is_ecosystem', 'is_chain', 'is_portfolio', 'weight', 'best_symbols', 'metrics']
 
     metrics = TagMetricsSerializer()
     best_symbols = serializers.SerializerMethodField()
