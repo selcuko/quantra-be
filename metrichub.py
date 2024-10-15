@@ -1,4 +1,6 @@
 from datetime import datetime, timedelta
+from django.utils.text import slugify
+from django.db.models import Sum
 import json
 import os
 
@@ -369,7 +371,7 @@ def cg_match_tags():
     folder_name = 'cg-payloads'
     tags = Tag.objects.all()
     tags = {tag.display: tag for tag in tags}
-    symbols = GlobalSymbol.objects.prefetch_related('tags', 'symbols').exclude(symbols__isnull=True).distinct()
+    symbols = GlobalSymbol.objects.prefetch_related('tags', 'symbols').filter(tags__isnull=True).exclude(symbols__isnull=True).distinct()
     missing = set()
 
     for s in symbols:
@@ -378,7 +380,7 @@ def cg_match_tags():
             continue
         with open(f'{folder_name}/{s.cid}.json', 'r') as f:
             payload = json.load(f)
-            for category in payload['categories']:
+            for category in payload.get('categories', []):
                 tag = tags.get(category)
                 if tag:
                     s.tags.add(tag)
@@ -395,8 +397,29 @@ def cg_match_tags():
 
 def create_missing_tags(tag_names):
     for tag_name in tag_names:
-        tag = Tag.objects.create(display=tag_name)
+        name = slugify(tag_name)
+        tag = Tag.objects.create(display=tag_name, name=name)
         TagMetrics.objects.create(tag=tag)
+
+
+def calculate_tag_metrics():
+    tags = Tag.objects.prefetch_related('metrics', 'symbols').filter(metrics__volume__isnull=True, metrics__market_cap__isnull=True, symbols__isnull=False).distinct()
+    print('Calculating metrics for', tags.count(), 'tags')
+
+    for tag in tags:
+        assert tag.metrics
+        aggregated = tag.symbols.aggregate(volume_sum=Sum('metrics__volume'), marketcap_sum=Sum('metrics__market_cap'))
+        tag.metrics.volume = aggregated['volume_sum']
+        tag.metrics.market_cap = aggregated['marketcap_sum']
+        tag.metrics.save()
+
+def calculate_tag_weights():
+    update = []
+    tags = Tag.objects.prefetch_related('metrics').filter(symbols__isnull=False)
+    for tag in tags:
+        tag.weight = tag.symbols.all().count()
+        update.append(tag)
+    Tag.objects.bulk_update(update, ['weight'])
 
 
 def fix_missing_images():

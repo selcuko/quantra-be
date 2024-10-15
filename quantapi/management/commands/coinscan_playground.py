@@ -8,7 +8,7 @@ from markets import binance
 from markets.binance import BinanceMarket
 from markets.kucoin import KucoinMarket
 from markets.mexc import MEXCMarket
-from metrichub import cg_match_tags
+from metrichub import calculate_tag_metrics, calculate_tag_weights, cg_match_tags
 from quantapi.models import GlobalSymbol, Market, MarketSymbol, Tag
 
 
@@ -16,7 +16,7 @@ class Command(BaseCommand):
     help = 'Test command'
 
     def handle(self, *args, **options):
-        cg_match_tags()
+        calculate_tag_weights()
 
 
 

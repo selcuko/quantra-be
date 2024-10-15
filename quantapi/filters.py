@@ -123,10 +123,11 @@ class GlobalSymbolFilter(filters.FilterSet):
 class TagFilter(filters.FilterSet):
     class Meta:
         model = Tag
-        fields = ['symbols', 'name', 'volume', 'market_cap', 'ordering']
+        fields = ['symbols', 'name', 'volume', 'market_cap', 'ordering', 'display']
 
     symbols = filters.CharFilter(method='filter_symbols')
     name = filters.CharFilter(field_name='name', lookup_expr='icontains')
+    display = filters.CharFilter(field_name='display', lookup_expr='icontains')
     volume = filters.RangeFilter(field_name='metrics__volume')
     market_cap = filters.RangeFilter(field_name='metrics__market_cap')
     ordering = filters.OrderingFilter(
