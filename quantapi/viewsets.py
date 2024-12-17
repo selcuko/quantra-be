@@ -463,6 +463,8 @@ class KeeperView(viewsets.ViewSet):
                 'status': 'running' if keeper.started else 'stopped',
                 'connections': connections,
                 'buckets': MiniOrderbookConsumer.dispatcher.channels.get(keeper, []),
+                'state': keeper.state(),
+                'terminate': str(MiniOrderbookConsumer.dispatcher.shutdown_schedules.get(keeper, None)),
             }
             payloads.append(payload)
         return Response(payloads)

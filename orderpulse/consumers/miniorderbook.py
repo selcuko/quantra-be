@@ -13,7 +13,7 @@ from asgiref.sync import sync_to_async
 
 class MiniOrderbookConsumer(AsyncWebsocketConsumer):
     DEFAULT_DEPTH = 0.001
-    DEFAULT_COUNT = 10
+    DEFAULT_COUNT = 100
     dispatcher = KeeperDispatch()
 
     async def connect(self):
@@ -27,8 +27,8 @@ class MiniOrderbookConsumer(AsyncWebsocketConsumer):
         self.connection_id = str(self.channel_name)
         self.market   = self.scope['url_route']['kwargs']['market']
         self.symbol   = self.scope['url_route']['kwargs']['symbol']
-        self.range_bids_min, self.range_bids_max = 0, 100
-        self.range_asks_min, self.range_asks_max = 0, 100
+        self.range_bids_min, self.range_bids_max = 0, self.DEFAULT_COUNT
+        self.range_asks_min, self.range_asks_max = 0, self.DEFAULT_COUNT
         await self.accept()
         await self.subscribe({
             'market': self.market, 
