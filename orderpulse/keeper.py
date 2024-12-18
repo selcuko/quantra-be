@@ -98,7 +98,14 @@ class Keeper:
         elif self.market_thread and self.market_thread.is_alive() and self.worker_process and self.worker_process.is_alive() and self.dispatch_thread and self.dispatch_thread.is_alive():
             status = 'running'
         else:
-            status = 'degraded'
+            dead = ''
+            if self.market_thread and not self.market_thread.is_alive():
+                dead += 'M'
+            if self.worker_process and not self.worker_process.is_alive():
+                dead += 'W'
+            if self.dispatch_thread and not self.dispatch_thread.is_alive():
+                dead += 'D'
+            status = 'degraded ' + dead
         return f'{status}  [{since_last_update}]  [Q:{qsize} D:{dispatch} U:{updates}]'
 
     def add_callback(self, callback):

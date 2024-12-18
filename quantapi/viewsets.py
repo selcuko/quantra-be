@@ -4,6 +4,9 @@ import json
 from django.db.models import Prefetch, Count, Q
 from django.core.cache import cache
 from django_filters.rest_framework import DjangoFilterBackend
+from django.views.decorators.cache import cache_page
+from django.utils.decorators import method_decorator
+
 import pytz
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -377,6 +380,7 @@ class CandlesViewSet(viewsets.ViewSet):
     def list(self, request):
         return Response({'detail': 'Specify market, symbol and interval in the URI.'})
 
+    @method_decorator(cache_page(60*5))
     def get(self, request, market, symbol, interval):
         start = request.query_params.get('start')
         end = request.query_params.get('end')
@@ -460,7 +464,7 @@ class KeeperView(viewsets.ViewSet):
             payload = {
                 'symbol': str(keeper.symbol),
                 'market': keeper.market,
-                'status': 'running' if keeper.started else 'stopped',
+                'started': keeper.started,
                 'connections': connections,
                 'buckets': MiniOrderbookConsumer.dispatcher.channels.get(keeper, []),
                 'state': keeper.state(),
