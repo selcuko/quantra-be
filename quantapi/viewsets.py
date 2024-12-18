@@ -380,7 +380,6 @@ class CandlesViewSet(viewsets.ViewSet):
     def list(self, request):
         return Response({'detail': 'Specify market, symbol and interval in the URI.'})
 
-    @method_decorator(cache_page(60*5))
     def get(self, request, market, symbol, interval):
         start = request.query_params.get('start')
         end = request.query_params.get('end')
@@ -485,4 +484,11 @@ class ReverseProxyView(viewsets.ViewSet):
         import requests
         query_params = request.query_params
         response = requests.get(url + '?' + '&'.join([f'{k}={v}' for k, v in query_params.items()]))
+        return HttpResponse(response.content, content_type=response.headers['content-type'])
+    
+    def post(self, request, url):
+        from django.http import HttpResponse
+        import requests
+        query_params = request.query_params
+        response = requests.post(url + '?' + '&'.join([f'{k}={v}' for k, v in query_params.items()]), data=request.data)
         return HttpResponse(response.content, content_type=response.headers['content-type'])
