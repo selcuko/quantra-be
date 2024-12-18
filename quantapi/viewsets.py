@@ -478,3 +478,11 @@ class CategoryViewSet(viewsets.ModelViewSet):
     class Meta:
         model = Tag
         fields = ['name']
+
+class ReverseProxyView(viewsets.ViewSet):
+    def get(self, request, url):
+        from django.http import HttpResponse
+        import requests
+        query_params = request.query_params
+        response = requests.get(url + '?' + '&'.join([f'{k}={v}' for k, v in query_params.items()]))
+        return HttpResponse(response.content, content_type=response.headers['content-type'])

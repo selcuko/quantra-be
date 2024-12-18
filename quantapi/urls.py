@@ -2,7 +2,7 @@ from django.urls import include, path
 from rest_framework import routers
 
 from quantapi.viewsets import (CandlesViewSet, ContactFormViewSet, GlobalSymbolViewSet, GroupOrderViewSet, MarketAccountViewSet, MarketSymbolViewSet,
-                               MarketViewSet, OrderViewSet, KeeperView, SessionGroupViewSet, SessionViewSet, SignalViewSet, StrategyViewSet, TagViewSet)
+                               MarketViewSet, OrderViewSet, KeeperView, ReverseProxyView, SessionGroupViewSet, SessionViewSet, SignalViewSet, StrategyViewSet, TagViewSet)
 
 
 router = routers.DefaultRouter()
@@ -24,4 +24,5 @@ urlpatterns = [
     path('candles/<str:market>/<str:symbol>/<str:interval>/', CandlesViewSet.as_view({'get': 'get'})),
     path('keepers/', KeeperView.as_view({'get': 'list'})),
     path('agg/', include('orderpulse.urls')),
+    path('reverse-proxy/<path:url>', ReverseProxyView.as_view({'get': 'get'})),
 ]
