@@ -442,15 +442,18 @@ class TagViewSet(viewsets.ModelViewSet):
     lookup_field = 'name'
 
     def get_queryset(self):
-        cache_key = 'tags'
-        cache_timeout = 60*60*24*7 # 1 week
-        #if results := cache.get(cache_key):
-        #    return results
         results = Tag.objects.select_related('metrics').prefetch_related(
             Prefetch('symbols', queryset=GlobalSymbol.objects.select_related('metrics')),
         )
-        #cache.set(cache_key, results, cache_timeout)
         return results
+
+    def list(self, request):
+        cache_key = 'taglist'
+        if results := cache.get(cache_key):
+            return Response(results)
+        response = super().list(request)
+        cache.set(cache_key, response.data, 60*60*24*7)
+        return response
 
 
 class KeeperView(viewsets.ViewSet):
