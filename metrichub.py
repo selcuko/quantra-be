@@ -216,7 +216,7 @@ def update_all_coins_coingecko_metrics():
 
     updated_count = GlobalSymbolMetrics.objects.bulk_update(
         metrics_to_save, 
-        ['market_cap', 'market_cap_change_24h', 'market_cap_change_percentage_24h', 'price', 'volume', 'price_change_24h', 'price_change_percentage_24h', 'price_high_24h', 'price_low_24h', 'ath', 'ath_date', 'atl', 'atl_date', 'data_updated', 'total_supply', 'circulating_supply', 'max_supply', 'raw_payload'],
+        ['market_cap', 'market_cap_change_24h', 'market_cap_change_percentage_24h', 'price', 'volume', 'price_change_24h', 'price_change_percentage_24h', 'price_high_24h', 'price_low_24h', 'ath', 'ath_date', 'ath_prox', 'atl', 'atl_date', 'atl_prox', 'data_updated', 'total_supply', 'circulating_supply', 'max_supply', 'raw_payload'],
         batch_size=1000)
     print(f'Updated {updated_count} symbol metrics')
 
