@@ -451,13 +451,9 @@ class TagViewSet(viewsets.ModelViewSet):
         )
         return results
 
+    @method_decorator(cache_page(60 * 60 * 24 * 7))  # Cache for 7 days
     def list(self, request):
-        cache_key = 'taglist'
-        if results := cache.get(cache_key):
-            return Response(results)
-        response = super().list(request)
-        cache.set(cache_key, response.data, 60*60*24*7)
-        return response
+        return super().list(request)
 
 
 class KeeperView(viewsets.ViewSet):
