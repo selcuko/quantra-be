@@ -1,6 +1,5 @@
-from django.test import tag
 import django_filters as filters
-from django.db.models import Q, Count, Aggregate
+from django.db.models import Q, Count
 from .models import GlobalSymbol, MarketAccount, MarketSymbol, Session, SessionGroup, Tag
 
 
@@ -84,6 +83,7 @@ class GlobalSymbolFilter(filters.FilterSet):
     market_cap = filters.RangeFilter(field_name='metrics__market_cap')
     ath_prox = filters.RangeFilter(field_name='metrics__ath_prox')
     atl_prox = filters.RangeFilter(field_name='metrics__atl_prox')
+    price_change_percentage_24h = filters.RangeFilter(field_name='metrics__price_change_percentage_24h')
 
     ordering = filters.OrderingFilter(
         fields=(
@@ -94,6 +94,7 @@ class GlobalSymbolFilter(filters.FilterSet):
             ('metrics__volume', 'volume'),
             ('metrics__ath_prox', 'ath_prox'),
             ('metrics__atl_prox', 'atl_prox'),
+            ('metrics__price_change_percentage_24h', 'price_change_percentage_24h'),
         )
     )
 

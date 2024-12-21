@@ -136,6 +136,10 @@ class GlobalSymbolViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_class = GlobalSymbolFilter
     ordering = ['metrics__market_cap']
 
+    @method_decorator(cache_page(60 * 15))  # Cache for 15 minutes
+    def list(self, request):
+        return super().list(request)
+
     def get_queryset(self):
         return GlobalSymbol.objects.prefetch_related(
             Prefetch('symbols', queryset=MarketSymbol.objects.select_related('market')),
