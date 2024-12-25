@@ -46,7 +46,7 @@ def update_symbol(gs: GlobalSymbol):
         'kucoin': 'KUCOIN',
         'okex': 'OKX',
         'bybit_spot': 'BYBIT',
-        }
+    }
     volume_map = {
         'OTHER': 0,
     }

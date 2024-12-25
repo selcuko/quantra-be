@@ -84,6 +84,7 @@ class GlobalSymbolFilter(filters.FilterSet):
     ath_prox = filters.RangeFilter(field_name='metrics__ath_prox')
     atl_prox = filters.RangeFilter(field_name='metrics__atl_prox')
     price_change_percentage_24h = filters.RangeFilter(field_name='metrics__price_change_percentage_24h')
+    volume24h_to_mcap = filters.RangeFilter(field_name='metrics__volume24h_to_mcap')
 
     ordering = filters.OrderingFilter(
         fields=(
@@ -95,6 +96,7 @@ class GlobalSymbolFilter(filters.FilterSet):
             ('metrics__ath_prox', 'ath_prox'),
             ('metrics__atl_prox', 'atl_prox'),
             ('metrics__price_change_percentage_24h', 'price_change_percentage_24h'),
+            ('metrics__volume24h_to_mcap', 'volume24h_to_mcap'),
         )
     )
 
@@ -118,7 +120,7 @@ class GlobalSymbolFilter(filters.FilterSet):
 
     class Meta:
         model = GlobalSymbol
-        fields = ['market', 'name', 'base', 'quote', 'contract_type', 'tags', 'is_favorite', 'cid', 'volume', 'ordering', 'market_cap', 'ath_prox', 'atl_prox']
+        fields = ['market', 'name', 'base', 'quote', 'contract_type', 'tags', 'is_favorite', 'cid', 'volume', 'ordering', 'market_cap', 'ath_prox', 'atl_prox', 'price_change_percentage_24h', 'volume24h_to_mcap']
 
 
 class TagFilter(filters.FilterSet):
