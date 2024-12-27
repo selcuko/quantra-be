@@ -124,7 +124,11 @@ class MarketSymbolViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=['get'], url_path='(?P<market>[^/.]+)/(?P<symbol>[^/.]+)', url_name='symbol')
     def symbol(self, request, market, symbol):
         """Return a specific symbol for a given market."""
-        symbol = MarketSymbol.objects.get(contract_type=MarketSymbol.ContractType.SPOT, market__exchange_name=market.upper(), name=symbol.upper())
+        contract = request.query_params.get('contract', MarketSymbol.ContractType.SPOT)
+        try:
+            symbol = MarketSymbol.objects.get(contract_type=contract, market__exchange_name=market.upper(), name=symbol.upper())
+        except MarketSymbol.DoesNotExist:
+            return Response({'detail': 'Symbol not found.'}, status=404)
         serializer = MarketSymbolSerializer(symbol, context={'request': request})
         return Response(serializer.data)
 

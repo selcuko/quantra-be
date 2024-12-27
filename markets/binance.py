@@ -379,9 +379,9 @@ class BinanceMarket(IMarket):
             symbol = self._get_symbol_from_name(symbol)
         try:
             if symbol.contract_type == symbol.ContractType.SPOT:
-                orderbook = self.client.get_order_book(symbol=self._format_symbol(symbol.name), limit=limit) # Max limit is 5000
+                orderbook = self.client.get_order_book(symbol=self._format_symbol(symbol.name), limit=min(limit, 5000)) # Max limit is 5000
             elif symbol.contract_type == symbol.ContractType.FUTURES:
-                orderbook = self.client.futures_order_book(symbol=self._format_symbol(symbol.name), limit=1000) # XXX: limit is hardcoded to 1000, max is 1000
+                orderbook = self.client.futures_order_book(symbol=self._format_symbol(symbol.name), limit=min(limit, 1000)) # Max is 1000
             else:
                 raise ValueError(f'Unknown contract type for symbol {symbol.name}')
             return {
