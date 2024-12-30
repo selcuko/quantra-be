@@ -16,7 +16,9 @@ class Command(BaseCommand):
     help = 'Test command'
 
     def handle(self, *args, **options):
-        calculate_tag_weights()
+        market = Market.objects.get(exchange_name='MEXC')
+        mxc = MEXCMarket({}, market=market)
+        mxc.get_futures_symbols()
 
 
 

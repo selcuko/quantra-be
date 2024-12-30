@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import json
+from pprint import pprint
 from threading import Event
 import time
 import typing
@@ -16,6 +17,7 @@ from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
 from websockets.sync.client import ClientConnection, connect
 
 import incident
+from incident import market
 from logger import logger
 from markets import IMarket
 from markets.errors import InsufficientBalance, InvalidUsage, KlineFetchFailed, MarketAPIError, RejectedOrder
@@ -31,7 +33,7 @@ if typing.TYPE_CHECKING:
 class MEXCMarket(IMarket):
     name = 'MEXC'
 
-    def __init__(self, config: dict, account: 'MarketAccount|None', market:'Market|None'=None) -> None:
+    def __init__(self, config: dict, account: 'MarketAccount|None'=None, market:'Market|None'=None) -> None:
         self.authenticated = False
         self.session = requests.Session()
         self.url = 'https://api.mexc.com'
@@ -52,11 +54,14 @@ class MEXCMarket(IMarket):
         self.commission = {}
 
         try:
+            #self.get_futures_symbols()
             self.get_symbols()
             self.get_account()
         except requests.ConnectionError as exc:
             incident.Market.APIUnavailable(self.name, exc)
             return
+        except Exception as e:
+            print("Market init failed, account unavailable")
 
         self.spot_trading_enabled = False
         self.margin_trading_enabled = False
@@ -341,7 +346,7 @@ class MEXCMarket(IMarket):
 
     @staticmethod
     def _standardize_symbol(symbol):
-        return symbol.replace('USDT', '-USDT')
+        return symbol.replace('_', '').replace('USDT', '-USDT')
 
     @staticmethod
     def _format_symbol(symbol):
@@ -505,14 +510,40 @@ class MEXCMarket(IMarket):
             raise
         self.symbols = { self._standardize_symbol(symbol['symbol']): self._prep_symbol(symbol) for symbol in symbols if symbol['quoteAsset'] == 'USDT' }
         self.symbols = { key: value for key, value in self.symbols.items() if value.quote == 'USDT'}
-        MarketSymbol.objects.bulk_create(self.symbols.values(), update_conflicts=True, update_fields=[
-                'spot_trading_enabled', 
-                'margin_trading_enabled', 
-                'details',
-                'base_precision',
-                'quote_precision',
-            ], unique_fields=['name', 'market', 'contract_type'])
+        MarketSymbol.objects.bulk_create(self.symbols.values(), ignore_conflicts=True)
         return self.symbols
+
+    def get_futures_symbols(self):
+        from quantapi.models import MarketSymbol
+        uri = f'{self.furl}/api/v1/contract/risk_reverse'
+        response = requests.get(uri)
+        response.raise_for_status()
+        payload = response.json()
+        pprint(payload["data"])
+        futures_bulk = []
+        for i, symbol in enumerate(payload['data']):
+            try:
+                print(f"[{i}/{len(payload['data'])}] Trying", self._standardize_symbol(symbol['symbol']), end=' ')
+                spot = MarketSymbol.objects.get(name=self._standardize_symbol(symbol['symbol']), market=self.market, contract_type=MarketSymbol.ContractType.SPOT)
+            except MarketSymbol.DoesNotExist:
+                print("NOT FOUND")
+                continue
+            futures = MarketSymbol(
+                market=self.market,
+                name=spot.name,
+                base=spot.base,
+                quote=spot.quote,
+                base_precision=spot.base_precision,
+                quote_precision=spot.quote_precision,
+                spot_trading_enabled=False,
+                margin_trading_enabled=True,
+                contract_type=spot.ContractType.FUTURES,
+                details=json.dumps(symbol),
+            )
+            print("OK")
+            futures_bulk.append(futures)
+        print("Bulk creating", len(futures_bulk), "futures symbols")
+        MarketSymbol.objects.bulk_create(futures_bulk, ignore_conflicts=True)
 
     def get_last_klines(self, symbol:'MarketSymbol|str', interval:str, limit=100, retry=1, silent=True):
         minutes = interval_to_minutes(interval)
