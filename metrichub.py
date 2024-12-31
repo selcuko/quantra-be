@@ -108,7 +108,7 @@ def update_symbol(gs: GlobalSymbol):
             if m.symbol.metrics.market_cap < gs.metrics.market_cap:  # type: ignore
                 m.symbol = gs  # type: ignore
                 ms_update.append(m)
-        except (GlobalSymbolMetrics.DoesNotExist, AttributeError):
+        except (GlobalSymbolMetrics.DoesNotExist, AttributeError, TypeError):
             pass
     MarketSymbol.objects.bulk_update(ms_update, ['symbol'])
 
