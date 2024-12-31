@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 import json
 
-from django.db.models import Prefetch, Count, Q
+from django.db.models import Prefetch, Count, Q, F
 from django.core.cache import cache
 from django_filters.rest_framework import DjangoFilterBackend
 from django.views.decorators.cache import cache_page
@@ -22,7 +22,7 @@ from order import OrderManager
 from orderpulse.keeper import KeeperPool
 from quantapi.filters import (GlobalSymbolFilter, MarketAccountFilter, MarketSymbolFilter,
                               SessionFilter, SessionGroupFilter, TagFilter)
-from quantapi.models import (ContactForm, GlobalSymbol, GroupOrder, Market,
+from quantapi.models import (ContactForm, GlobalSymbol, GlobalSymbolMetrics, GroupOrder, Market,
                              MarketAccount, MarketSymbol, Order,
                              Session, SessionGroup, Signal, Strategy,
                              Subscription, Tag)
@@ -63,11 +63,6 @@ class MarketViewSet(viewsets.ReadOnlyModelViewSet):
         iface.get_current_prices()
         market.refresh_from_db()
         return Response(MarketSerializer(market, context={'request': request}).data)
-
-    def get_queryset(self):
-        return Market.objects.annotate(
-            tradable_symbols_count=Count('symbols', filter=Q(symbols__spot_trading_enabled=True))
-        ).prefetch_related('symbols', 'accounts')
 
 
 class MarketAccountViewSet(viewsets.ReadOnlyModelViewSet):
@@ -112,7 +107,9 @@ class MarketSymbolViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_class = MarketSymbolFilter
 
     def get_queryset(self):
-        return MarketSymbol.objects.select_related('market', 'symbol')
+        return MarketSymbol.objects.select_related('market').prefetch_related(
+            Prefetch('symbol', queryset=GlobalSymbol.objects.only('id', 'cid', 'coingecko_response', 'image')),
+        )
 
     @action(detail=False, methods=['get'], url_path='market/(?P<market>[^/.]+)', url_name='market')
     def market(self, request, market):
@@ -138,17 +135,13 @@ class GlobalSymbolViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = GlobalSymbolSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_class = GlobalSymbolFilter
-    ordering = ['metrics__market_cap']
-
-    @method_decorator(cache_page(60 * 15))  # Cache for 15 minutes
-    def list(self, request):
-        return super().list(request)
+    #ordering = ['metrics__market_cap']
 
     def get_queryset(self):
-        return GlobalSymbol.objects.prefetch_related(
-            Prefetch('symbols', queryset=MarketSymbol.objects.select_related('market')),
-            Prefetch('tags', queryset=Tag.objects.select_related('metrics')),
-        ).select_related('metrics')
+        return GlobalSymbol.objects.all().select_related('metrics').prefetch_related(
+            Prefetch('symbols', queryset=MarketSymbol.objects.only('market', 'contract_type', 'symbol', 'base', 'quote', 'name').select_related('market')),
+            Prefetch('tags', queryset=Tag.objects.all()),
+        )
 
     @action(detail=True, methods=['get', 'post'])
     def refresh(self, request, pk):
@@ -451,11 +444,11 @@ class TagViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         results = Tag.objects.select_related('metrics').prefetch_related(
-            Prefetch('symbols', queryset=GlobalSymbol.objects.select_related('metrics')),
+            Prefetch('symbols', queryset=GlobalSymbol.objects.order_by('-metrics__volume')[:3].prefetch_related('metrics').only('id', 'cid', 'display', 'base', 'image', 'markets'), to_attr='top_symbols'),
         )
         return results
 
-    @method_decorator(cache_page(60 * 60 * 24 * 7))  # Cache for 7 days
+    #@method_decorator(cache_page(60 * 60 * 24 * 7))  # Cache for 7 days
     def list(self, request):
         return super().list(request)
 

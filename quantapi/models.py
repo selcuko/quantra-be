@@ -287,6 +287,7 @@ class MarketSymbol(models.Model):
     details = models.TextField(null=True, blank=True, help_text='JSON string of symbol detail from market')
     sessions: models.QuerySet['Session']
     contract_type = models.CharField(max_length=30, choices=ContractType.choices, default=ContractType.SPOT)
+    available_contracts = models.TextField(default='', help_text='Available contracts for this symbol')
     metrics: models.OneToOneField['MarketSymbolMetrics | None']
 
     def save(self, *args, **kwargs):
@@ -294,6 +295,7 @@ class MarketSymbol(models.Model):
             self.name = f'{self.base}-{self.quote}'
         if not self.base and not self.quote and self.name:
             self.base, self.quote = self.name.split('-')
+        
         super().save(*args, **kwargs)
 
     def to_dict(self):
@@ -314,9 +316,6 @@ class MarketSymbol(models.Model):
 
     def filters(self):
         return self.market.filters(self)
-
-    def available_contracts(self):
-        return MarketSymbol.objects.filter(name=self.name, market=self.market).values_list('contract_type', flat=True)
 
     @cached_property
     def volume(self):
@@ -858,8 +857,8 @@ class GlobalSymbolMetrics(models.Model):
     symbol = models.OneToOneField('GlobalSymbol', on_delete=models.CASCADE, related_name='metrics')
 
     # first hand metrics - from data providers (e.g. coingecko) or exchanges
-    volume = models.FloatField(null=True, blank=True, help_text='Volume in USD, rolling 24 hours')
-    market_cap = models.FloatField(null=True, blank=True, help_text='Market capitalization in USD')
+    volume = models.FloatField(null=True, blank=True, db_index=True, help_text='Volume in USD, rolling 24 hours')
+    market_cap = models.FloatField(null=True, blank=True, db_index=True, help_text='Market capitalization in USD')
     market_cap_change_24h = models.FloatField(null=True, blank=True, help_text='Market cap change in the last 24 hours')
     market_cap_change_percentage_24h = models.FloatField(null=True, blank=True, help_text='Market cap change percentage in the last 24 hours')
     ath = models.FloatField(null=True, blank=True, help_text='All time high in USD', verbose_name='ATH')
@@ -911,7 +910,8 @@ class GlobalSymbolMetrics(models.Model):
 
 class GlobalSymbol(models.Model):
     class Meta:
-        ordering = ('-metrics__market_cap',)
+        #ordering = ('-metrics__market_cap',)
+        pass
 
     class DataSource(models.TextChoices):
         COINGECKO =     'COINGECKO',     'CoinGecko'

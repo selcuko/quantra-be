@@ -99,17 +99,21 @@ class MarketSymbolSerializer(serializers.HyperlinkedModelSerializer):
     market = MarketSerializer()
     exchange_name = serializers.CharField(source='market.exchange_name')
     icon = serializers.URLField(source='symbol.image', allow_null=True)
-    price = serializers.SerializerMethodField()
+    #price = serializers.SerializerMethodField()
     price_updated = serializers.DateTimeField(source='market.prices_updated', allow_null=True)
     cid = serializers.CharField(source='symbol.cid', allow_null=True)
+    available_contracts = serializers.SerializerMethodField()
     class Meta:
         model = MarketSymbol
         fields = ['symbol', 'market', 'exchange_name', 'name', 'base', 'quote', 'base_precision', 'quote_precision', 
-                  'spot_trading_enabled', 'icon', 'price', 'price_updated', 'id', 'url', 'cid', 'contract_type', 'available_contracts', 'volume']
+                  'spot_trading_enabled', 'icon', 'price_updated', 'id', 'url', 'cid', 'contract_type', 'available_contracts', 'volume']
 
     def get_price(self, obj):
         prices = json.loads(obj.market.prices or '{}')
         return prices.get(obj.name)
+    
+    def get_available_contracts(self, obj):
+        return obj.available_contracts.split(',') if obj.available_contracts else []
 
 
 class InlineMarketSymbolSerializer(serializers.HyperlinkedModelSerializer):
@@ -129,13 +133,13 @@ class TagMetricsSerializer(serializers.HyperlinkedModelSerializer):
 class TagSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = Tag
-        fields = ['name', 'display', 'description', 'is_ecosystem', 'is_chain', 'is_portfolio', 'weight', 'best_symbols', 'metrics']
+        fields = ['name', 'display', 'description', 'is_ecosystem', 'is_chain', 'is_portfolio', 'weight', 'metrics', 'best_symbols']
 
     metrics = TagMetricsSerializer()
     best_symbols = serializers.SerializerMethodField()
 
     def get_best_symbols(self, obj):
-        return InlineGlobalSymbolSerializer(obj.symbols.all()[:3], many=True, context={'request': self.context['request']}).data
+        return InlineGlobalSymbolSerializer(obj.top_symbols, many=True, context={'request': self.context['request']}).data
 
 
 class InlineTagSerializer(serializers.HyperlinkedModelSerializer):
