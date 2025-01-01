@@ -167,17 +167,10 @@ class SessionGroupAdmin(admin.ModelAdmin):
         return super().get_queryset(request).select_related('symbol__market', 'interface__market', 'strategy', 'market').prefetch_related('sessions')
 
 
-class TagMetricsInline(admin.StackedInline):
-    model = TagMetrics
-    extra = 0
-    readonly_fields = ('data_updated', 'last_updated')
-
-
 class TagAdmin(admin.ModelAdmin):
     list_display = ('name', 'symbol_count', 'is_chain', 'is_portfolio', 'is_ecosystem')
     search_fields = ('name', )
     list_filter = ('is_chain', 'is_portfolio', 'is_ecosystem')
-    inlines = [TagMetricsInline]
 
     def symbol_count(self, obj):
         return obj.symbols.count()
@@ -207,4 +200,3 @@ admin.site.register(Backtest, BacktestAdmin)
 admin.site.register(Strategy)
 admin.site.register(Tag, TagAdmin)
 admin.site.register(ContactForm, ContactFormAdmin)
-admin.site.register(TagMetrics)

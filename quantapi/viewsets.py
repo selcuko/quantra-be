@@ -442,7 +442,7 @@ class TagViewSet(viewsets.ModelViewSet):
     lookup_field = 'name'
 
     def get_queryset(self):
-        results = Tag.objects.select_related('metrics').prefetch_related(
+        results = Tag.objects.prefetch_related(
             Prefetch('symbols', queryset=GlobalSymbol.objects.order_by('-volume')[:3].only('id', 'cid', 'display', 'base', 'image', 'markets'), to_attr='top_symbols'),
         )
         return results

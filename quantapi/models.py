@@ -974,18 +974,6 @@ class GlobalSymbol(models.Model):
         super().save(*args, **kwargs)
 
 
-class TagMetrics(models.Model):
-    tag = models.OneToOneField('Tag', on_delete=models.CASCADE, related_name='metrics')
-    volume = models.FloatField(null=True, blank=True)
-    market_cap = models.FloatField(null=True, blank=True)
-    market_cap_change_24h = models.FloatField(null=True, blank=True)
-    last_updated = models.DateTimeField(auto_now=True, help_text='Last time this tag was updated in our system')
-    data_updated = models.DateTimeField(null=True, blank=True, help_text='Last time this tag was fetched from the data source')
-
-    def __str__(self):
-        return f'{self.tag!r} Metrics'
-
-
 class Tag(models.Model):
     '''M:M relationship with GlobalSymbol'''
     name = models.CharField(max_length=100, unique=True)
@@ -996,7 +984,11 @@ class Tag(models.Model):
     is_portfolio = models.BooleanField(default=False)
     weight = models.IntegerField(default=0)
     symbols: models.QuerySet[GlobalSymbol]
-    metrics: models.OneToOneField[TagMetrics | None]
+    volume = models.FloatField(null=True, blank=True)
+    market_cap = models.FloatField(null=True, blank=True)
+    market_cap_change_24h = models.FloatField(null=True, blank=True)
+    last_updated = models.DateTimeField(auto_now=True, help_text='Last time this tag was updated in our system')
+    data_updated = models.DateTimeField(null=True, blank=True, help_text='Last time this tag was fetched from the data source')
 
     def __str__(self):
         return self.name
@@ -1011,7 +1003,6 @@ class Tag(models.Model):
         if not self.weight and self.pk:
             self.weight = self.symbols.count()
         super().save(*args, **kwargs)
-
 
     class Meta:
         verbose_name_plural = 'Tags'

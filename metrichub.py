@@ -7,7 +7,7 @@ import os
 import pytz
 from coingecko import CoinGecko
 from coinmcap import CoinMarketCap
-from quantapi.models import GlobalSymbol, MarketSymbol, Tag, TagMetrics
+from quantapi.models import GlobalSymbol, MarketSymbol, Tag
 
 
 def update_symbol(gs: GlobalSymbol):
@@ -18,7 +18,7 @@ def update_symbol(gs: GlobalSymbol):
         print('Symbol mismatch:', gs.base, cg_symbol['symbol'].upper())
         return
     gs.image = cg_symbol['image']['large']
-    if not gs.image.startswith('http'):
+    if gs.image and not gs.image.startswith('http'):
         gs.image = cg_symbol['image']['small']
     gs.description = cg_symbol['description']['en']
     gs.homepage = cg_symbol['links']['homepage'][0] if cg_symbol.get('links', {}).get('homepage') else None
@@ -142,7 +142,7 @@ def update_all_coins_coingecko():
 
     # Create a dictionary of existing symbols for quick lookup
     existing_symbols = {s.cid: s for s in symbols}
-    symbols_to_skip = {s.cid for s in GlobalSymbol.objects.filter(metrics__data_updated__gte=datetime.now(pytz.UTC)-timedelta(minutes=30))} 
+    symbols_to_skip = {s.cid for s in GlobalSymbol.objects.filter(data_updated__gte=datetime.now(pytz.UTC)-timedelta(minutes=30))} 
 
     for cg_symbol in cg_symbols:
         cid = cg_symbol['id']
@@ -185,24 +185,24 @@ def update_all_coins_coingecko():
 
 
 def update_all_coins_coingecko_metrics():
-    symbols = {gs.cid: gs for gs in GlobalSymbol.objects.select_related('metrics')}
+    symbols = {gs.cid: gs for gs in GlobalSymbol.objects.all()}
 
     # Update symbol metrics
     for cg_symbol in CoinGecko().all_coins_with_market_data():
         symbol = symbols[cg_symbol['id']]
         update_symbol_metrics_mini(symbol, cg_symbol)
-        print('Prepared metrics to update for:', symbol)
+        print('Prepared to update for:', symbol)
 
     updated_count = GlobalSymbol.objects.bulk_update(
         symbols.values(), 
         ['market_cap', 'market_cap_change_24h', 'market_cap_change_percentage_24h', 'price', 'volume', 'price_change_24h', 'price_change_percentage_24h', 'price_high_24h', 'price_low_24h', 'ath', 'ath_date', 'ath_prox', 'atl', 'atl_date', 'atl_prox', 'data_updated', 'total_supply', 'circulating_supply', 'max_supply', 'raw_payload'],
         batch_size=1000)
-    print(f'Updated {updated_count} symbol metrics')
+    print(f'Updated {updated_count} symbols')
 
 
 
 def match_symbols():
-    gs = GlobalSymbol.objects.filter().select_related('metrics').exclude(metrics__market_cap__isnull=True, metrics__volume__isnull=True).order_by('-metrics__market_cap')
+    gs = GlobalSymbol.objects.filter().exclude(market_cap__isnull=True, volume__isnull=True).order_by('-market_cap')
     ms = MarketSymbol.objects.filter(quote='USDT', symbol__isnull=True)
     ms = [m for m in ms if m.base in {s.base for s in gs}]
     ms_to_update = []
@@ -218,14 +218,12 @@ def match_symbols():
 def update_all_tags():
     cg = CoinGecko()
     payload = cg.categories()
-    
+
     # Fetch all existing tags to avoid repetitive queries
     existing_tags = {tag.name: tag for tag in Tag.objects.all()}
-    
+
     tags_to_update = []
     tags_to_create = []
-    metrics_to_update = []
-    metrics_to_create = []
 
     for category in payload:
         tag = existing_tags.get(category['id'])
@@ -243,39 +241,19 @@ def update_all_tags():
                 description=category['content']
             )
             tags_to_create.append(tag)
-        
-        # Handle tag metrics (create if not exists)
-        try:
-            metrics = tag.metrics
-        except Tag.gs.RelatedObjectDoesNotExist:
-            metrics = TagMetrics(tag=tag)
-            metrics_to_create.append(metrics)
-        
-        # Update metrics with new data
-        assert metrics
-        gs.market_cap = category['market_cap']
-        gs.market_cap_change_24h = category['market_cap_change_24h']
-        gs.volume = category['volume_24h']
-        gs.data_updated = category['updated_at']
-        metrics_to_update.append(metrics)
+
+        # Update tags with new data
+        tag.market_cap = category['market_cap']
+        tag.market_cap_change_24h = category['market_cap_change_24h']
+        tag.volume = category['volume_24h']
+        tag.data_updated = category['updated_at']
 
     # Bulk create and update tags
     if tags_to_create:
         Tag.objects.bulk_create(tags_to_create)
-    
+
     if tags_to_update:
-        Tag.objects.bulk_update(tags_to_update, ['display', 'description'])
-    
-    # Bulk create TagMetrics
-    if metrics_to_create:
-        Taggs.objects.bulk_create(metrics_to_create)
-    
-    # Bulk update TagMetrics
-    if metrics_to_update:
-        Taggs.objects.bulk_update(
-            metrics_to_update, 
-            ['market_cap', 'market_cap_change_24h', 'volume', 'data_updated']
-        )
+        Tag.objects.bulk_update(tags_to_update, ['volume', 'market_cap', 'market_cap_change_24h', 'data_updated'])
 
 from django.db import transaction
 
@@ -318,9 +296,7 @@ def cmc_match_tags():
         # Update all_tags with newly created tags
         for tag in created_tags:
             all_tags[tag.name] = tag
-    
-    # Create missing TagMetrics for newly created tags and link to symbols
-    new_tag_metrics = []
+
     through_model_entries = []
 
     for symbol, existing_tags, cmc_tags in symbol_tag_relations:
@@ -332,14 +308,6 @@ def cmc_match_tags():
             through_model_entries.append(
                 symbol.tags.through(symbol_id=symbol.id, tag_id=tag.pk)
             )
-        
-        # Create TagMetrics for any newly created tags
-        for tag_name in cmc_tags:
-            if tag_name in tags_to_create:
-                new_tag_gs.append(TagMetrics(tag=all_tags[tag_name]))
-
-    # Bulk create TagMetrics for new tags
-    Taggs.objects.bulk_create(new_tag_metrics)
     
     # Bulk insert the many-to-many relationship through the intermediary table
     with transaction.atomic():
@@ -377,20 +345,18 @@ def cg_match_tags():
 def create_missing_tags(tag_names):
     for tag_name in tag_names:
         name = slugify(tag_name)
-        tag = Tag.objects.create(display=tag_name, name=name)
-        Taggs.objects.create(tag=tag)
+        Tag.objects.create(display=tag_name, name=name)
 
 
 def calculate_tag_metrics():
-    tags = Tag.objects.prefetch_related('metrics', 'symbols').filter(metrics__volume__isnull=True, metrics__market_cap__isnull=True, symbols__isnull=False).distinct()
+    tags = Tag.objects.prefetch_related('symbols').filter(volume__isnull=True, market_cap__isnull=True, symbols__isnull=False).distinct()
     print('Calculating metrics for', tags.count(), 'tags')
 
     for tag in tags:
-        assert tag.metrics
-        aggregated = tag.symbols.aggregate(volume_sum=Sum('metrics__volume'), marketcap_sum=Sum('metrics__market_cap'))
-        tag.gs.volume = aggregated['volume_sum']
-        tag.gs.market_cap = aggregated['marketcap_sum']
-        tag.gs.save()
+        aggregated = tag.symbols.aggregate(volume_sum=Sum('volume'), marketcap_sum=Sum('market_cap'))
+        tag.volume = aggregated['volume_sum']
+        tag.market_cap = aggregated['marketcap_sum']
+        tag.save()
 
 def calculate_tag_weights():
     update = []
