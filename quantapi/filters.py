@@ -26,7 +26,7 @@ class MarketSymbolFilter(filters.FilterSet):
             ('name', 'name'),
             ('market__exchange_name', 'market'),
             ('symbol__market_cap', 'market_cap'),
-            ('symbol__metrics__volume', 'volume'),
+            ('symbol__volume', 'volume'),
         ))
     market = filters.CharFilter(field_name='market__exchange_name', lookup_expr='iexact')
     name = filters.CharFilter(field_name='name', lookup_expr='istartswith')
@@ -34,7 +34,7 @@ class MarketSymbolFilter(filters.FilterSet):
     quote = filters.CharFilter(field_name='quote', lookup_expr='iexact')
     spot_enabled = filters.BooleanFilter(field_name='spot_trading_enabled')
     contract_type = filters.CharFilter(field_name='contract_type', lookup_expr='iexact')
-    volume = filters.RangeFilter(field_name='symbol__metrics__volume')
+    volume = filters.RangeFilter(field_name='symbol__volume')
 
     class Meta:
         model = MarketSymbol
