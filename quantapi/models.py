@@ -853,61 +853,6 @@ class Backtest(models.Model):
         return f'{self.symbol} {self.market} {self.status}'
 
 
-class GlobalSymbolMetrics(models.Model):
-    symbol = models.OneToOneField('GlobalSymbol', on_delete=models.CASCADE, related_name='metrics')
-
-    # first hand metrics - from data providers (e.g. coingecko) or exchanges
-    volume = models.FloatField(null=True, blank=True, db_index=True, help_text='Volume in USD, rolling 24 hours')
-    market_cap = models.FloatField(null=True, blank=True, db_index=True, help_text='Market capitalization in USD')
-    market_cap_change_24h = models.FloatField(null=True, blank=True, help_text='Market cap change in the last 24 hours')
-    market_cap_change_percentage_24h = models.FloatField(null=True, blank=True, help_text='Market cap change percentage in the last 24 hours')
-    ath = models.FloatField(null=True, blank=True, help_text='All time high in USD', verbose_name='ATH')
-    atl = models.FloatField(null=True, blank=True, help_text='All time low in USD', verbose_name='ATL')
-    ath_date = models.DateTimeField(null=True, blank=True, help_text='Date of all time high', verbose_name='ATH Date')
-    atl_date = models.DateTimeField(null=True, blank=True, help_text='Date of all time low', verbose_name='ATL Date')
-    ath_prox = models.FloatField(null=True, blank=True, help_text='Proximity to all time high (0-1)', verbose_name='ATH Proximity')
-    atl_prox = models.FloatField(null=True, blank=True, help_text='Proximity to all time low (0-1)', verbose_name='ATL Proximity')
-    ath_ratio = models.FloatField(null=True, blank=True, help_text='ATH / Current price', verbose_name='ATH Ratio')
-    atl_ratio = models.FloatField(null=True, blank=True, help_text='Current price / ATL', verbose_name='ATL Ratio')
-    circulating_supply = models.FloatField(null=True, blank=True)
-    total_supply = models.FloatField(null=True, blank=True)
-    max_supply = models.FloatField(null=True, blank=True)
-    price = models.FloatField(null=True, blank=True, help_text='Current price in USD')
-    price_change_24h = models.FloatField(null=True, blank=True, help_text='Price change in the last 24 hours (rolling)')
-    price_change_percentage_24h = models.FloatField(null=True, blank=True)
-    price_high_24h = models.FloatField(null=True, blank=True, help_text='Highest price in the last 24 hours')
-    price_low_24h = models.FloatField(null=True, blank=True, help_text='Lowest price in the last 24 hours')
-
-    fully_diluted_valuation = models.FloatField(null=True, blank=True, help_text='Fully diluted valuation in USD')
-    market_cap_fdv_ratio = models.FloatField(null=True, blank=True, help_text='Market cap / Fully diluted valuation')
-    price_change_percentage_7d = models.FloatField(null=True, blank=True, help_text='Price change percentage in the last 7 days')
-    price_change_percentage_14d = models.FloatField(null=True, blank=True, help_text='Price change percentage in the last 14 days')
-    price_change_percentage_30d = models.FloatField(null=True, blank=True, help_text='Price change percentage in the last 30 days')
-    price_change_percentage_60d = models.FloatField(null=True, blank=True, help_text='Price change percentage in the last 60 days')
-    price_change_percentage_200d = models.FloatField(null=True, blank=True, help_text='Price change percentage in the last 200 days')
-    price_change_percentage_1y = models.FloatField(null=True, blank=True, help_text='Price change percentage in the last 1 year')
-
-    # derived metrics
-    supply_ratio = models.FloatField(null=True, blank=True, help_text='Circulating supply / Total supply')
-    volume24h_to_mcap = models.FloatField(null=True, blank=True, help_text='Volume 24H / Market cap')
-    is_stablecoin = models.BooleanField(default=False)
-
-    raw_payload = models.TextField(null=True, blank=True)
-    last_updated = models.DateTimeField(auto_now=True, help_text='Last time this symbol was updated in our system')
-    data_updated = models.DateTimeField(help_text='Last time this symbol was fetched from the data source')
-
-    def __str__(self):
-        return f'{self.symbol!r} Metrics'
-
-    def calculate(self):
-        self.supply_ratio = (self.circulating_supply / self.total_supply) if self.circulating_supply and self.total_supply else None
-        self.ath_prox = ((self.ath - self.price) / (self.ath - self.atl)) if self.ath != self.atl and self.ath and self.atl and self.price else None
-        self.atl_prox = ((self.price - self.atl) / (self.ath - self.atl)) if self.ath != self.atl and self.ath and self.atl and self.price else None
-        self.ath_ratio = ((self.ath - self.price) * 100 / self.ath) if self.ath and self.price else None
-        self.atl_ratio = (self.price / self.atl) if self.atl and self.price else None
-        self.volume24h_to_mcap = (self.volume / self.market_cap) if self.volume and self.market_cap else None
-
-
 class GlobalSymbol(models.Model):
     class Meta:
         #ordering = ('-metrics__market_cap',)
@@ -948,8 +893,46 @@ class GlobalSymbol(models.Model):
     image = models.URLField(null=True, blank=True, max_length=1024, help_text='URL to image of this symbol')
     tags = models.ManyToManyField('Tag', related_name='symbols')
     markets = models.JSONField(null=True, blank=True, help_text='List of markets where this symbol is traded')
+
+    volume = models.FloatField(null=True, blank=True, db_index=True, help_text='Volume in USD, rolling 24 hours')
+    market_cap = models.FloatField(null=True, blank=True, db_index=True, help_text='Market capitalization in USD')
+    market_cap_change_24h = models.FloatField(null=True, blank=True, help_text='Market cap change in the last 24 hours')
+    market_cap_change_percentage_24h = models.FloatField(null=True, blank=True, help_text='Market cap change percentage in the last 24 hours')
+    ath = models.FloatField(null=True, blank=True, help_text='All time high in USD', verbose_name='ATH')
+    atl = models.FloatField(null=True, blank=True, help_text='All time low in USD', verbose_name='ATL')
+    ath_date = models.DateTimeField(null=True, blank=True, help_text='Date of all time high', verbose_name='ATH Date')
+    atl_date = models.DateTimeField(null=True, blank=True, help_text='Date of all time low', verbose_name='ATL Date')
+    ath_prox = models.FloatField(null=True, blank=True, help_text='Proximity to all time high (0-1)', verbose_name='ATH Proximity')
+    atl_prox = models.FloatField(null=True, blank=True, help_text='Proximity to all time low (0-1)', verbose_name='ATL Proximity')
+    ath_ratio = models.FloatField(null=True, blank=True, help_text='ATH / Current price', verbose_name='ATH Ratio')
+    atl_ratio = models.FloatField(null=True, blank=True, help_text='Current price / ATL', verbose_name='ATL Ratio')
+    circulating_supply = models.FloatField(null=True, blank=True)
+    total_supply = models.FloatField(null=True, blank=True)
+    max_supply = models.FloatField(null=True, blank=True)
+    price = models.FloatField(null=True, blank=True, help_text='Current price in USD')
+    price_change_24h = models.FloatField(null=True, blank=True, help_text='Price change in the last 24 hours (rolling)')
+    price_change_percentage_24h = models.FloatField(null=True, blank=True)
+    price_high_24h = models.FloatField(null=True, blank=True, help_text='Highest price in the last 24 hours')
+    price_low_24h = models.FloatField(null=True, blank=True, help_text='Lowest price in the last 24 hours')
+
+    fully_diluted_valuation = models.FloatField(null=True, blank=True, help_text='Fully diluted valuation in USD')
+    market_cap_fdv_ratio = models.FloatField(null=True, blank=True, help_text='Market cap / Fully diluted valuation')
+    price_change_percentage_7d = models.FloatField(null=True, blank=True, help_text='Price change percentage in the last 7 days')
+    price_change_percentage_14d = models.FloatField(null=True, blank=True, help_text='Price change percentage in the last 14 days')
+    price_change_percentage_30d = models.FloatField(null=True, blank=True, help_text='Price change percentage in the last 30 days')
+    price_change_percentage_60d = models.FloatField(null=True, blank=True, help_text='Price change percentage in the last 60 days')
+    price_change_percentage_200d = models.FloatField(null=True, blank=True, help_text='Price change percentage in the last 200 days')
+    price_change_percentage_1y = models.FloatField(null=True, blank=True, help_text='Price change percentage in the last 1 year')
+
+    supply_ratio = models.FloatField(null=True, blank=True, help_text='Circulating supply / Total supply')
+    volume24h_to_mcap = models.FloatField(null=True, blank=True, help_text='Volume 24H / Market cap')
+    is_stablecoin = models.BooleanField(default=False)
+
+    raw_payload = models.TextField(null=True, blank=True)
+    last_updated = models.DateTimeField(auto_now=True, help_text='Last time this symbol was updated in our system')
+    data_updated = models.DateTimeField(auto_now_add=True, null=True, help_text='Last time this symbol was fetched from the data source')
+
     symbols: models.QuerySet[MarketSymbol]
-    metrics: models.OneToOneField[GlobalSymbolMetrics]
 
     @property
     def display_name(self):
@@ -972,11 +955,23 @@ class GlobalSymbol(models.Model):
     @cached_property
     def cex_volume(self):
         return self.volume_distribution
-    
+
     @property
     def updated_timedelta(self):
-        try: timezone.now() - self.metrics.data_updated if self.metrics and self.metrics.data_updated else timedelta.max
+        try: timezone.now() - self.data_updated if self.data_updated else timedelta.max
         except: return timedelta.max
+
+    def calculate(self):
+        self.supply_ratio = (self.circulating_supply / self.total_supply) if self.circulating_supply and self.total_supply else None
+        self.ath_prox = ((self.ath - self.price) / (self.ath - self.atl)) if self.ath != self.atl and self.ath and self.atl and self.price else None
+        self.atl_prox = ((self.price - self.atl) / (self.ath - self.atl)) if self.ath != self.atl and self.ath and self.atl and self.price else None
+        self.ath_ratio = ((self.ath - self.price) * 100 / self.ath) if self.ath and self.price else None
+        self.atl_ratio = (self.price / self.atl) if self.atl and self.price else None
+        self.volume24h_to_mcap = (self.volume / self.market_cap) if self.volume and self.market_cap else None
+
+    def save(self, *args, **kwargs):
+        self.calculate()
+        super().save(*args, **kwargs)
 
 
 class TagMetrics(models.Model):

@@ -129,18 +129,10 @@ class OrderAdmin(admin.ModelAdmin):
         return obj.oid or 'No ID'
 
 
-class GlobalSymbolMetricsInline(admin.StackedInline):
-    model = GlobalSymbolMetrics
-    extra = 0
-    readonly_fields = ('data_updated', 'last_updated')
-
-
 class GlobalSymbolAdmin(admin.ModelAdmin):
     list_display = ['display', 'cid', 'base', 'volume', 'markets']
     search_fields = ['base', 'display', 'cid']
-    #raw_id_fields = ['metrics']
-    inlines = [GlobalSymbolMetricsInline]
-    ordering = ['-metrics__volume']
+    ordering = ['-volume']
 
     def volume(self, obj):
         return obj.metrics.volume
@@ -215,5 +207,4 @@ admin.site.register(Backtest, BacktestAdmin)
 admin.site.register(Strategy)
 admin.site.register(Tag, TagAdmin)
 admin.site.register(ContactForm, ContactFormAdmin)
-admin.site.register(GlobalSymbolMetrics)
 admin.site.register(TagMetrics)

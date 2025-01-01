@@ -79,24 +79,24 @@ class GlobalSymbolFilter(filters.FilterSet):
     market = filters.CharFilter(method='filter_market')
     is_favorite = filters.BooleanFilter(field_name='favorite')
     is_stablecoin = filters.BooleanFilter(field_name='is_stablecoin')
-    volume = filters.RangeFilter(field_name='metrics__volume')
-    market_cap = filters.RangeFilter(field_name='metrics__market_cap')
-    ath_prox = filters.RangeFilter(field_name='metrics__ath_prox')
-    atl_prox = filters.RangeFilter(field_name='metrics__atl_prox')
-    price_change_percentage_24h = filters.RangeFilter(field_name='metrics__price_change_percentage_24h')
-    volume24h_to_mcap = filters.RangeFilter(field_name='metrics__volume24h_to_mcap')
+    volume = filters.RangeFilter(field_name='volume')
+    market_cap = filters.RangeFilter(field_name='market_cap')
+    ath_prox = filters.RangeFilter(field_name='ath_prox')
+    atl_prox = filters.RangeFilter(field_name='atl_prox')
+    price_change_percentage_24h = filters.RangeFilter(field_name='price_change_percentage_24h')
+    volume24h_to_mcap = filters.RangeFilter(field_name='volume24h_to_mcap')
 
     ordering = filters.OrderingFilter(
         fields=(
             ('name', 'name'),
             ('base', 'base'),
             ('quote', 'quote'),
-            ('metrics__market_cap', 'market_cap'),
-            ('metrics__volume', 'volume'),
-            ('metrics__ath_prox', 'ath_prox'),
-            ('metrics__atl_prox', 'atl_prox'),
-            ('metrics__price_change_percentage_24h', 'price_change_percentage_24h'),
-            ('metrics__volume24h_to_mcap', 'volume24h_to_mcap'),
+            ('market_cap', 'market_cap'),
+            ('volume', 'volume'),
+            ('ath_prox', 'ath_prox'),
+            ('atl_prox', 'atl_prox'),
+            ('price_change_percentage_24h', 'price_change_percentage_24h'),
+            ('volume24h_to_mcap', 'volume24h_to_mcap'),
         )
     )
 

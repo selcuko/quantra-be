@@ -7,7 +7,7 @@ import os
 import pytz
 from coingecko import CoinGecko
 from coinmcap import CoinMarketCap
-from quantapi.models import GlobalSymbol, MarketSymbol, GlobalSymbolMetrics, Tag, TagMetrics
+from quantapi.models import GlobalSymbol, MarketSymbol, Tag, TagMetrics
 
 
 def update_symbol(gs: GlobalSymbol):
@@ -62,42 +62,37 @@ def update_symbol(gs: GlobalSymbol):
     gs.volume_distribution = volume_map  # type: ignore
     gs.bid_ask_spread_percentage_distribution = bid_ask_spread  # type: ignore
 
-    try:
-        metrics = gs.metrics
-        assert metrics
-    except GlobalSymbol.metrics.RelatedObjectDoesNotExist:
-        metrics = GlobalSymbolMetrics(symbol=gs)
 
     mdata = cg_symbol['market_data']
-    metrics.market_cap = mdata['market_cap']['usd']
-    metrics.market_cap_change_24h = mdata['market_cap_change_24h']
-    metrics.market_cap_change_percentage_24h = mdata['market_cap_change_percentage_24h']
-    metrics.price = mdata['current_price']['usd']
-    metrics.volume = mdata['total_volume']['usd']
-    metrics.price_change_24h = mdata['price_change_24h']
-    metrics.price_change_percentage_24h = mdata['price_change_percentage_24h']
-    metrics.price_high_24h = mdata['high_24h']['usd']
-    metrics.price_low_24h = mdata['low_24h']['usd']
-    metrics.ath = mdata['ath']['usd']
-    metrics.ath_date = mdata['ath_date']['usd']
-    metrics.atl = mdata['atl']['usd']
-    metrics.atl_date = mdata['atl_date']['usd']
-    metrics.data_updated=mdata['last_updated']
-    metrics.total_supply = mdata['total_supply']
-    metrics.circulating_supply = mdata['circulating_supply']
-    metrics.max_supply = mdata['max_supply']
-    metrics.fully_diluted_valuation = mdata['fully_diluted_valuation']['usd']
-    metrics.market_cap_fdv_ratio = mdata['market_cap_fdv_ratio']
-    metrics.price_change_percentage_7d = mdata['price_change_percentage_7d']
-    metrics.price_change_percentage_14d = mdata['price_change_percentage_14d']
-    metrics.price_change_percentage_30d = mdata['price_change_percentage_30d']
-    metrics.price_change_percentage_60d = mdata['price_change_percentage_60d']
-    metrics.price_change_percentage_200d = mdata['price_change_percentage_200d']
-    metrics.price_change_percentage_1y = mdata['price_change_percentage_1y']
+    gs.market_cap = mdata['market_cap']['usd']
+    gs.market_cap_change_24h = mdata['market_cap_change_24h']
+    gs.market_cap_change_percentage_24h = mdata['market_cap_change_percentage_24h']
+    gs.price = mdata['current_price']['usd']
+    gs.volume = mdata['total_volume']['usd']
+    gs.price_change_24h = mdata['price_change_24h']
+    gs.price_change_percentage_24h = mdata['price_change_percentage_24h']
+    gs.price_high_24h = mdata['high_24h']['usd']
+    gs.price_low_24h = mdata['low_24h']['usd']
+    gs.ath = mdata['ath']['usd']
+    gs.ath_date = mdata['ath_date']['usd']
+    gs.atl = mdata['atl']['usd']
+    gs.atl_date = mdata['atl_date']['usd']
+    gs.data_updated=mdata['last_updated']
+    gs.total_supply = mdata['total_supply']
+    gs.circulating_supply = mdata['circulating_supply']
+    gs.max_supply = mdata['max_supply']
+    gs.fully_diluted_valuation = mdata['fully_diluted_valuation']['usd']
+    gs.market_cap_fdv_ratio = mdata['market_cap_fdv_ratio']
+    gs.price_change_percentage_7d = mdata['price_change_percentage_7d']
+    gs.price_change_percentage_14d = mdata['price_change_percentage_14d']
+    gs.price_change_percentage_30d = mdata['price_change_percentage_30d']
+    gs.price_change_percentage_60d = mdata['price_change_percentage_60d']
+    gs.price_change_percentage_200d = mdata['price_change_percentage_200d']
+    gs.price_change_percentage_1y = mdata['price_change_percentage_1y']
 
-    metrics.raw_payload = json.dumps(mdata)
-    metrics.calculate()
-    metrics.save()
+    gs.raw_payload = json.dumps(mdata)
+    gs.calculate()
+    gs.save()
     gs.save()
 
     # match with market symbols too
@@ -105,35 +100,34 @@ def update_symbol(gs: GlobalSymbol):
     ms_update = []
     for m in ms:
         try:
-            if m.symbol.metrics.market_cap < gs.metrics.market_cap:  # type: ignore
+            if m.symbol.market_cap < gs.market_cap:  # type: ignore
                 m.symbol = gs  # type: ignore
                 ms_update.append(m)
-        except (GlobalSymbolMetrics.DoesNotExist, AttributeError, TypeError):
+        except (AttributeError, TypeError):
             pass
     MarketSymbol.objects.bulk_update(ms_update, ['symbol'])
 
 
-def update_symbol_metrics_mini(metrics: GlobalSymbolMetrics, cg_symbol: dict):
-    metrics.market_cap = cg_symbol['market_cap']
-    metrics.market_cap_change_24h = cg_symbol['market_cap_change_24h']
-    metrics.market_cap_change_percentage_24h = cg_symbol['market_cap_change_percentage_24h']
-    metrics.price = cg_symbol['current_price']
-    metrics.volume = cg_symbol['total_volume']
-    metrics.price_change_24h = cg_symbol['price_change_24h']
-    metrics.price_change_percentage_24h = cg_symbol['price_change_percentage_24h']
-    metrics.price_high_24h = cg_symbol['high_24h']
-    metrics.price_low_24h = cg_symbol['low_24h']
-    metrics.ath = cg_symbol['ath']
-    metrics.ath_date = cg_symbol['ath_date']
-    metrics.atl = cg_symbol['atl']
-    metrics.atl_date = cg_symbol['atl_date']
-    metrics.data_updated=cg_symbol['last_updated'] or datetime.now(pytz.UTC)
-    metrics.total_supply = cg_symbol['total_supply']
-    metrics.circulating_supply = cg_symbol['circulating_supply']
-    metrics.max_supply = cg_symbol['max_supply']
-    metrics.raw_payload = json.dumps(cg_symbol)
-    metrics.calculate()
-    return metrics
+def update_symbol_metrics_mini(gs: GlobalSymbol, cg_symbol: dict):
+    gs.market_cap = cg_symbol['market_cap']
+    gs.market_cap_change_24h = cg_symbol['market_cap_change_24h']
+    gs.market_cap_change_percentage_24h = cg_symbol['market_cap_change_percentage_24h']
+    gs.price = cg_symbol['current_price']
+    gs.volume = cg_symbol['total_volume']
+    gs.price_change_24h = cg_symbol['price_change_24h']
+    gs.price_change_percentage_24h = cg_symbol['price_change_percentage_24h']
+    gs.price_high_24h = cg_symbol['high_24h']
+    gs.price_low_24h = cg_symbol['low_24h']
+    gs.ath = cg_symbol['ath']
+    gs.ath_date = cg_symbol['ath_date']
+    gs.atl = cg_symbol['atl']
+    gs.atl_date = cg_symbol['atl_date']
+    gs.data_updated=cg_symbol['last_updated'] or datetime.now(pytz.UTC)
+    gs.total_supply = cg_symbol['total_supply']
+    gs.circulating_supply = cg_symbol['circulating_supply']
+    gs.max_supply = cg_symbol['max_supply']
+    gs.raw_payload = json.dumps(cg_symbol)
+    gs.calculate()
 
 
 def update_all_coins_coingecko():
@@ -191,31 +185,16 @@ def update_all_coins_coingecko():
 
 
 def update_all_coins_coingecko_metrics():
-    metrics_to_save = []
-    symbols_to_create_metrics = [gs for gs in GlobalSymbol.objects.filter(metrics__isnull=True)]
-    metrics_to_create = []
-
-    # Create symbol metrics
-    for gs in symbols_to_create_metrics:
-        metrics = GlobalSymbolMetrics(symbol=gs, data_updated=datetime.now(pytz.UTC))
-        metrics_to_create.append(metrics)
-        print('Prepared metrics to create for:', gs)
-    
-    if metrics_to_create:
-        GlobalSymbolMetrics.objects.bulk_create(metrics_to_create)
-        print(f'Created {len(metrics_to_create)} symbol metrics')
-
     symbols = {gs.cid: gs for gs in GlobalSymbol.objects.select_related('metrics')}
 
     # Update symbol metrics
     for cg_symbol in CoinGecko().all_coins_with_market_data():
         symbol = symbols[cg_symbol['id']]
-        metrics = update_symbol_metrics_mini(symbol.metrics, cg_symbol)
+        update_symbol_metrics_mini(symbol, cg_symbol)
         print('Prepared metrics to update for:', symbol)
-        metrics_to_save.append(metrics)
 
-    updated_count = GlobalSymbolMetrics.objects.bulk_update(
-        metrics_to_save, 
+    updated_count = GlobalSymbol.objects.bulk_update(
+        symbols.values(), 
         ['market_cap', 'market_cap_change_24h', 'market_cap_change_percentage_24h', 'price', 'volume', 'price_change_24h', 'price_change_percentage_24h', 'price_high_24h', 'price_low_24h', 'ath', 'ath_date', 'ath_prox', 'atl', 'atl_date', 'atl_prox', 'data_updated', 'total_supply', 'circulating_supply', 'max_supply', 'raw_payload'],
         batch_size=1000)
     print(f'Updated {updated_count} symbol metrics')
@@ -268,16 +247,16 @@ def update_all_tags():
         # Handle tag metrics (create if not exists)
         try:
             metrics = tag.metrics
-        except Tag.metrics.RelatedObjectDoesNotExist:
+        except Tag.gs.RelatedObjectDoesNotExist:
             metrics = TagMetrics(tag=tag)
             metrics_to_create.append(metrics)
         
         # Update metrics with new data
         assert metrics
-        metrics.market_cap = category['market_cap']
-        metrics.market_cap_change_24h = category['market_cap_change_24h']
-        metrics.volume = category['volume_24h']
-        metrics.data_updated = category['updated_at']
+        gs.market_cap = category['market_cap']
+        gs.market_cap_change_24h = category['market_cap_change_24h']
+        gs.volume = category['volume_24h']
+        gs.data_updated = category['updated_at']
         metrics_to_update.append(metrics)
 
     # Bulk create and update tags
@@ -289,11 +268,11 @@ def update_all_tags():
     
     # Bulk create TagMetrics
     if metrics_to_create:
-        TagMetrics.objects.bulk_create(metrics_to_create)
+        Taggs.objects.bulk_create(metrics_to_create)
     
     # Bulk update TagMetrics
     if metrics_to_update:
-        TagMetrics.objects.bulk_update(
+        Taggs.objects.bulk_update(
             metrics_to_update, 
             ['market_cap', 'market_cap_change_24h', 'volume', 'data_updated']
         )
@@ -357,10 +336,10 @@ def cmc_match_tags():
         # Create TagMetrics for any newly created tags
         for tag_name in cmc_tags:
             if tag_name in tags_to_create:
-                new_tag_metrics.append(TagMetrics(tag=all_tags[tag_name]))
+                new_tag_gs.append(TagMetrics(tag=all_tags[tag_name]))
 
     # Bulk create TagMetrics for new tags
-    TagMetrics.objects.bulk_create(new_tag_metrics)
+    Taggs.objects.bulk_create(new_tag_metrics)
     
     # Bulk insert the many-to-many relationship through the intermediary table
     with transaction.atomic():
@@ -399,7 +378,7 @@ def create_missing_tags(tag_names):
     for tag_name in tag_names:
         name = slugify(tag_name)
         tag = Tag.objects.create(display=tag_name, name=name)
-        TagMetrics.objects.create(tag=tag)
+        Taggs.objects.create(tag=tag)
 
 
 def calculate_tag_metrics():
@@ -409,9 +388,9 @@ def calculate_tag_metrics():
     for tag in tags:
         assert tag.metrics
         aggregated = tag.symbols.aggregate(volume_sum=Sum('metrics__volume'), marketcap_sum=Sum('metrics__market_cap'))
-        tag.metrics.volume = aggregated['volume_sum']
-        tag.metrics.market_cap = aggregated['marketcap_sum']
-        tag.metrics.save()
+        tag.gs.volume = aggregated['volume_sum']
+        tag.gs.market_cap = aggregated['marketcap_sum']
+        tag.gs.save()
 
 def calculate_tag_weights():
     update = []

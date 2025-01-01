@@ -22,7 +22,7 @@ from order import OrderManager
 from orderpulse.keeper import KeeperPool
 from quantapi.filters import (GlobalSymbolFilter, MarketAccountFilter, MarketSymbolFilter,
                               SessionFilter, SessionGroupFilter, TagFilter)
-from quantapi.models import (ContactForm, GlobalSymbol, GlobalSymbolMetrics, GroupOrder, Market,
+from quantapi.models import (ContactForm, GlobalSymbol, GroupOrder, Market,
                              MarketAccount, MarketSymbol, Order,
                              Session, SessionGroup, Signal, Strategy,
                              Subscription, Tag)
@@ -135,10 +135,9 @@ class GlobalSymbolViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = GlobalSymbolSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_class = GlobalSymbolFilter
-    #ordering = ['metrics__market_cap']
 
     def get_queryset(self):
-        return GlobalSymbol.objects.all().select_related('metrics').prefetch_related(
+        return GlobalSymbol.objects.all().prefetch_related(
             Prefetch('symbols', queryset=MarketSymbol.objects.only('market', 'contract_type', 'symbol', 'base', 'quote', 'name').select_related('market')),
             Prefetch('tags', queryset=Tag.objects.all()),
         )
@@ -146,7 +145,7 @@ class GlobalSymbolViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=['get', 'post'])
     def refresh(self, request, pk):
         symbol: GlobalSymbol = self.get_object()
-        if not (symbol.metrics and (datetime.now(tz=pytz.UTC) - symbol.metrics.data_updated) < timedelta(minutes=15)):
+        if not (datetime.now(tz=pytz.UTC) - symbol.data_updated) < timedelta(minutes=15):
             symbol.refresh()
             symbol.refresh_from_db()
         return Response(GlobalSymbolSerializer(symbol, context={'request': request}).data)
@@ -444,7 +443,7 @@ class TagViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         results = Tag.objects.select_related('metrics').prefetch_related(
-            Prefetch('symbols', queryset=GlobalSymbol.objects.order_by('-metrics__volume')[:3].prefetch_related('metrics').only('id', 'cid', 'display', 'base', 'image', 'markets'), to_attr='top_symbols'),
+            Prefetch('symbols', queryset=GlobalSymbol.objects.order_by('-volume')[:3].only('id', 'cid', 'display', 'base', 'image', 'markets'), to_attr='top_symbols'),
         )
         return results
 

@@ -1,6 +1,6 @@
 import json
 from rest_framework import serializers
-from quantapi.models import (ContactForm, GlobalSymbol, GlobalSymbolMetrics, GroupOrder, Market, MarketAccount, MarketCredentials, 
+from quantapi.models import (ContactForm, GlobalSymbol, GroupOrder, Market, MarketAccount, MarketCredentials, 
                              MarketSymbol, Order, Session, SessionGroup, 
                              Signal, Strategy, Subscription, Tag, TagMetrics)
 from quantapi.validations import validate_order_payload, validate_symbol_against_market
@@ -154,26 +154,20 @@ class InlineGlobalSymbolSerializer(serializers.HyperlinkedModelSerializer):
         fields = ['id', 'cid', 'display', 'base', 'image', 'markets']
 
 
-class GlobalSymbolMetricsSerializer(serializers.HyperlinkedModelSerializer):
+class GlobalSymbolSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
-        model = GlobalSymbolMetrics
-        fields = ['volume', 'market_cap', 'market_cap_change_24h', 'market_cap_change_percentage_24h', 'ath',
+        model = GlobalSymbol
+        fields = ['cid', 'id', 'display', 'base', 'url', 'image', 'markets', 'symbols', 'description', 'homepage', 'cex_volume', 'tags',
+                  'blockchain_site', 'whitepaper', 'official_forum_url', 'chat_url', 'announcement_url', 'twitter_screen_name', 'facebook_username', 
+                  'subreddit_url', 'github_repo_url', 'genesis_date', 'sentiment_votes_up_percentage', 'sentiment_votes_down_percentage', 
+                  'watchlist_portfolio_users', 'market_cap_rank', 'twitter_followers', 'developer_data', 'volume_distribution', 'bid_ask_spread_percentage_distribution',
+                  'volume', 'market_cap', 'market_cap_change_24h', 'market_cap_change_percentage_24h', 'ath',
                   'ath_date', 'atl', 'atl_date', 'total_supply', 'circulating_supply', 'max_supply', 'ath_prox',
                   'atl_prox', 'ath_ratio', 'atl_ratio', 'data_updated', 'price_change_24h', 'price_change_percentage_24h',
                   'price_high_24h', 'price_low_24h', 'price', 'fully_diluted_valuation', 'market_cap_fdv_ratio', 'price_change_percentage_7d',
                   'price_change_percentage_7d', 'price_change_percentage_14d', 'price_change_percentage_30d', 'price_change_percentage_60d',
                   'price_change_percentage_200d', 'price_change_percentage_1y', 'volume24h_to_mcap']
-
-
-class GlobalSymbolSerializer(serializers.HyperlinkedModelSerializer):
-    class Meta:
-        model = GlobalSymbol
-        fields = ['cid', 'id', 'display', 'base', 'url', 'metrics', 'image', 'markets', 'symbols', 'description', 'homepage', 'cex_volume', 'tags',
-                  'blockchain_site', 'whitepaper', 'official_forum_url', 'chat_url', 'announcement_url', 'twitter_screen_name', 'facebook_username', 
-                  'subreddit_url', 'github_repo_url', 'genesis_date', 'sentiment_votes_up_percentage', 'sentiment_votes_down_percentage', 
-                  'watchlist_portfolio_users', 'market_cap_rank', 'twitter_followers', 'developer_data', 'volume_distribution', 'bid_ask_spread_percentage_distribution',]
     tags = InlineTagSerializer(many=True)
-    metrics = GlobalSymbolMetricsSerializer()
     symbols = InlineMarketSymbolSerializer(many=True)
     markets = serializers.SerializerMethodField()
 
