@@ -357,18 +357,12 @@ class MEXCMarket(IMarket):
     def _format_interval(interval):
         return {
             '1 min': '1m',
-            '3 min': '3m',
             '5 min': '5m',
             '15 min': '15m',
             '30 min': '30m',
             '1 hour': '1h',
-            '2 hour': '2h',
             '4 hour': '4h',
-            '6 hour': '6h',
-            '8 hour': '8h',
-            '12 hour': '12h',
             '1 day': '1d',
-            '3 day': '3d',
             '1 week': '1W',
             '1 month': '1M',
         }[interval]
@@ -447,7 +441,7 @@ class MEXCMarket(IMarket):
             if end - start > calculated_timerange:
                 # calculate how many candles are in the timerange
                 candles_in_timerange = (end - start) // timedelta(minutes=interval_to_minutes(interval))
-                raise InvalidUsage(f'We can get a maximum of 1000 klines per request (limit={limit}), your timerange is too wide ({candles_in_timerange} candles), please reduce the timerange or increase the interval')
+                #raise InvalidUsage(f'We can get a maximum of 1000 klines per request (limit={limit}), your timerange is too wide ({candles_in_timerange} candles), please reduce the timerange or increase the interval')
         try:
             if contract_type == 'SPOT':
                 # Max limit is 1000
