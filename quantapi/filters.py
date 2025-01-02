@@ -131,13 +131,13 @@ class TagFilter(filters.FilterSet):
     symbols = filters.CharFilter(method='filter_symbols')
     name = filters.CharFilter(field_name='name', lookup_expr='icontains')
     display = filters.CharFilter(field_name='display', lookup_expr='icontains')
-    volume = filters.RangeFilter(field_name='metrics__volume')
-    market_cap = filters.RangeFilter(field_name='metrics__market_cap')
+    volume = filters.RangeFilter(field_name='volume')
+    market_cap = filters.RangeFilter(field_name='market_cap')
     ordering = filters.OrderingFilter(
         fields=(
             ('name', 'name'),
-            ('metrics__market_cap', 'market_cap'),
-            ('metrics__volume', 'volume'),
+            ('market_cap', 'market_cap'),
+            ('volume', 'volume'),
         )
     )
 
