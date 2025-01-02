@@ -128,6 +128,7 @@ def update_symbol_metrics_mini(gs: GlobalSymbol, cg_symbol: dict):
     gs.max_supply = cg_symbol['max_supply']
     gs.raw_payload = json.dumps(cg_symbol)
     gs.calculate()
+    return gs
 
 
 def update_all_coins_coingecko():
@@ -142,13 +143,9 @@ def update_all_coins_coingecko():
 
     # Create a dictionary of existing symbols for quick lookup
     existing_symbols = {s.cid: s for s in symbols}
-    symbols_to_skip = {s.cid for s in GlobalSymbol.objects.filter(data_updated__gte=datetime.now(pytz.UTC)-timedelta(minutes=30))} 
 
     for cg_symbol in cg_symbols:
         cid = cg_symbol['id']
-        if cid in symbols_to_skip:
-            print('Skipping:', cg_symbol['name'])
-            continue
         if cid in existing_symbols:
             gs = existing_symbols[cid]
             # Add the symbol for bulk update later
@@ -156,19 +153,19 @@ def update_all_coins_coingecko():
             gs.display = cg_symbol['name']
             gs.image = cg_symbol['image'] if cg_symbol['image'].startswith('http') else None
             if symbols_to_update.get(cid):
-                print('Duplicate symbol:', gs)
+                # print('Duplicate symbol:', gs)
                 continue
             symbols_to_update[cid] = gs
         else:
             # Collect the new symbol to create
             gs = GlobalSymbol(
-                cid=cg_symbol['id'],
+                cid=cid,
                 base=cg_symbol['symbol'].upper(),
                 display=cg_symbol['name'],
                 image=cg_symbol['image'] if cg_symbol['image'].startswith('http') else None,
             )
             if symbols_to_create.get(cid):
-                print('Duplicate symbol:', gs)
+                # print('Duplicate symbol:', gs)
                 continue
             symbols_to_create[cid] = gs
             print('Prepared for creation:', gs)
@@ -186,19 +183,43 @@ def update_all_coins_coingecko():
 
 def update_all_coins_coingecko_metrics():
     symbols = {gs.cid: gs for gs in GlobalSymbol.objects.all()}
+    symbols_to_update = []
 
     # Update symbol metrics
     for cg_symbol in CoinGecko().all_coins_with_market_data():
         symbol = symbols[cg_symbol['id']]
-        update_symbol_metrics_mini(symbol, cg_symbol)
+        symbol_updated = update_symbol_metrics_mini(symbol, cg_symbol)
+        symbols_to_update.append(symbol_updated)
         print('Prepared to update for:', symbol)
 
     updated_count = GlobalSymbol.objects.bulk_update(
-        symbols.values(), 
-        ['market_cap', 'market_cap_change_24h', 'market_cap_change_percentage_24h', 'price', 'volume', 'price_change_24h', 'price_change_percentage_24h', 'price_high_24h', 'price_low_24h', 'ath', 'ath_date', 'ath_prox', 'atl', 'atl_date', 'atl_prox', 'data_updated', 'total_supply', 'circulating_supply', 'max_supply', 'raw_payload'],
+        symbols_to_update, 
+        [
+            'volume24h_to_mcap',
+            'volume',
+            'market_cap', 
+            'market_cap_change_24h', 
+            'market_cap_change_percentage_24h', 
+            'price', 
+            'volume', 
+            'price_change_24h', 
+            'price_change_percentage_24h', 
+            'price_high_24h', 
+            'price_low_24h', 
+            'ath', 
+            'ath_date', 
+            'ath_prox', 
+            'atl', 
+            'atl_date', 
+            'atl_prox', 
+            'data_updated', 
+            'total_supply', 
+            'circulating_supply', 
+            'max_supply', 
+            'raw_payload'
+        ],
         batch_size=1000)
     print(f'Updated {updated_count} symbols')
-
 
 
 def match_symbols():
