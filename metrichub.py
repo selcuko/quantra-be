@@ -14,6 +14,9 @@ def update_symbol(gs: GlobalSymbol):
     # Single symbol update
     cg = CoinGecko()
     cg_symbol = cg.coin_by_cid(gs.cid)
+    with open("cg-payloads/{}.json".format(gs.cid), "w") as f:
+        print("SAVING", gs.cid)
+        json.dump(cg_symbol, f)
     if not cg_symbol['symbol'].upper() == gs.base:
         print('Symbol mismatch:', gs.base, cg_symbol['symbol'].upper())
         return
@@ -26,8 +29,11 @@ def update_symbol(gs: GlobalSymbol):
     gs.whitepaper = cg_symbol.get('links', {}).get('whitepaper')
     gs.official_forum_url = cg_symbol.get('links', {}).get('official_forum_url')
     gs.chat_url = cg_symbol.get('links', {}).get('chat_url')
-    gs.announcement_url = cg_symbol.get('links', {}).get('announcement_url') 
-    gs.subreddit_url = cg_symbol['links']['subreddit_url'] if 'r/' in cg_symbol.get('links', {}).get('subreddit_url') else None
+    gs.announcement_url = cg_symbol.get('links', {}).get('announcement_url')
+    try:
+        gs.subreddit_url = cg_symbol['links']['subreddit_url'] if 'r/' in cg_symbol["links"]["subreddit_url"] else None
+    except (TypeError, KeyError):
+        gs.subreddit_url = None
     gs.github_repo_url = cg_symbol.get('links', {}).get('repos_url', {}).get('github')  
     gs.genesis_date = cg_symbol.get('genesis_date')
     gs.sentiment_votes_up_percentage = cg_symbol.get('sentiment_votes_up_percentage')
@@ -67,21 +73,21 @@ def update_symbol(gs: GlobalSymbol):
     gs.market_cap = mdata['market_cap']['usd']
     gs.market_cap_change_24h = mdata['market_cap_change_24h']
     gs.market_cap_change_percentage_24h = mdata['market_cap_change_percentage_24h']
-    gs.price = mdata['current_price']['usd']
-    gs.volume = mdata['total_volume']['usd']
+    gs.price = mdata['current_price']['usd'] if mdata.get('current_price') else None
+    gs.volume = mdata['total_volume']['usd'] if mdata.get('total_volume') else None
     gs.price_change_24h = mdata['price_change_24h']
     gs.price_change_percentage_24h = mdata['price_change_percentage_24h']
-    gs.price_high_24h = mdata['high_24h']['usd']
-    gs.price_low_24h = mdata['low_24h']['usd']
-    gs.ath = mdata['ath']['usd']
-    gs.ath_date = mdata['ath_date']['usd']
-    gs.atl = mdata['atl']['usd']
-    gs.atl_date = mdata['atl_date']['usd']
+    gs.price_high_24h = mdata.get('high_24h', {}).get('usd')
+    gs.price_low_24h = mdata.get('low_24h', {}).get('usd')
+    gs.ath = mdata.get('ath', {}).get('usd')
+    gs.ath_date = mdata.get('ath_date', {}).get('usd')
+    gs.atl = mdata.get('atl', {}).get('usd')
+    gs.atl_date = mdata.get('atl_date', {}).get('usd')
     gs.data_updated=mdata['last_updated']
     gs.total_supply = mdata['total_supply']
     gs.circulating_supply = mdata['circulating_supply']
     gs.max_supply = mdata['max_supply']
-    gs.fully_diluted_valuation = mdata['fully_diluted_valuation']['usd']
+    gs.fully_diluted_valuation = mdata.get('fully_diluted_valuation', {}).get('usd')
     gs.market_cap_fdv_ratio = mdata['market_cap_fdv_ratio']
     gs.price_change_percentage_7d = mdata['price_change_percentage_7d']
     gs.price_change_percentage_14d = mdata['price_change_percentage_14d']
@@ -92,7 +98,7 @@ def update_symbol(gs: GlobalSymbol):
 
     gs.raw_payload = json.dumps(mdata)
     gs.calculate()
-    gs.save()
+    print("gs", gs.base, gs.cid, gs.twitter_screen_name, gs.facebook_username, gs.display)
     gs.save()
 
     # match with market symbols too
