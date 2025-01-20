@@ -159,7 +159,7 @@ class GlobalSymbolSerializer(serializers.HyperlinkedModelSerializer):
                   'atl_prox', 'ath_ratio', 'atl_ratio', 'data_updated', 'price_change_24h', 'price_change_percentage_24h',
                   'price_high_24h', 'price_low_24h', 'price', 'fully_diluted_valuation', 'market_cap_fdv_ratio', 'price_change_percentage_7d',
                   'price_change_percentage_7d', 'price_change_percentage_14d', 'price_change_percentage_30d', 'price_change_percentage_60d',
-                  'price_change_percentage_200d', 'price_change_percentage_1y', 'volume24h_to_mcap']
+                  'price_change_percentage_200d', 'price_change_percentage_1y', 'volume24h_to_mcap', 'circulating_percent']
     tags = InlineTagSerializer(many=True)
     symbols = InlineMarketSymbolSerializer(many=True)
     markets = serializers.SerializerMethodField()

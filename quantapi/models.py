@@ -945,6 +945,13 @@ class GlobalSymbol(models.Model):
     def spot_symbols(self):
         return self.symbols.filter(symbol=self, contract_type=MarketSymbol.ContractType.SPOT)
 
+    @property
+    def circulating_percent(self):
+        try:
+            return (self.circulating_supply / self.total_supply) * 100 if self.circulating_supply and self.total_supply else 0
+        except (ZeroDivisionError, TypeError):
+            return 0
+
     def __str__(self):
         return f'{self.base} {self.data_source}'
 

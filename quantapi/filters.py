@@ -85,6 +85,9 @@ class GlobalSymbolFilter(filters.FilterSet):
     atl_prox = filters.RangeFilter(field_name='atl_prox')
     price_change_percentage_24h = filters.RangeFilter(field_name='price_change_percentage_24h')
     volume24h_to_mcap = filters.RangeFilter(field_name='volume24h_to_mcap')
+    price = filters.RangeFilter(field_name='price')
+    high_24h = filters.RangeFilter(field_name='high_24h')
+    low_24h = filters.RangeFilter(field_name='low_24h')
 
     ordering = filters.OrderingFilter(
         fields=(
@@ -97,6 +100,9 @@ class GlobalSymbolFilter(filters.FilterSet):
             ('atl_prox', 'atl_prox'),
             ('price_change_percentage_24h', 'price_change_percentage_24h'),
             ('volume24h_to_mcap', 'volume24h_to_mcap'),
+            ('price', 'price'),
+            ('high_24h', 'high_24h'),
+            ('low_24h', 'low_24h'),
         )
     )
 
