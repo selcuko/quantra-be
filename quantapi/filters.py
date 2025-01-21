@@ -103,7 +103,7 @@ class GlobalSymbolFilter(filters.FilterSet):
             'high_24h',
             'low_24h',
         ],
-        nulls_last=['price_change_percentage_24h', 'volume24h_to_mcap']
+        nulls_last=['price', 'price_change_percentage_24h', 'volume24h_to_mcap']
     )
 
     def filter_market(self, queryset, name, value):
