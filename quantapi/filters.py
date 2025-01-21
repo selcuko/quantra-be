@@ -1,5 +1,6 @@
 import django_filters as filters
 from django.db.models import Q, Count
+from quantapi.ordering import NullsLastOrderingFilter
 from .models import GlobalSymbol, MarketAccount, MarketSymbol, Session, SessionGroup, Tag
 
 
@@ -89,21 +90,22 @@ class GlobalSymbolFilter(filters.FilterSet):
     high_24h = filters.RangeFilter(field_name='high_24h')
     low_24h = filters.RangeFilter(field_name='low_24h')
 
-    ordering = filters.OrderingFilter(
-        fields=(
-            ('name', 'name'),
-            ('base', 'base'),
-            ('quote', 'quote'),
-            ('market_cap', 'market_cap'),
-            ('volume', 'volume'),
-            ('ath_prox', 'ath_prox'),
-            ('atl_prox', 'atl_prox'),
-            ('price_change_percentage_24h', 'price_change_percentage_24h'),
-            ('volume24h_to_mcap', 'volume24h_to_mcap'),
-            ('price', 'price'),
-            ('high_24h', 'high_24h'),
-            ('low_24h', 'low_24h'),
-        )
+    ordering = NullsLastOrderingFilter(
+        fields=[
+            'name',
+            'base',
+            'quote',
+            'market_cap',
+            'volume',
+            'ath_prox',
+            'atl_prox',
+            'price_change_percentage_24h',
+            'volume24h_to_mcap',
+            'price',
+            'high_24h',
+            'low_24h',
+        ],
+        nulls_last=['price_change_percentage_24h', 'volume24h_to_mcap']
     )
 
     def filter_market(self, queryset, name, value):
