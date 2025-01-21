@@ -73,8 +73,7 @@ class SessionGroupFilter(filters.FilterSet):
 
 class GlobalSymbolFilter(filters.FilterSet):
     contract_type = filters.CharFilter(field_name='contract_type', lookup_expr='iexact')
-    name = filters.CharFilter(field_name='name', lookup_expr='icontains')
-    base = filters.CharFilter(field_name='base', lookup_expr='iexact')
+    base = filters.CharFilter(field_name='base', lookup_expr='icontains')
     quote = filters.CharFilter(field_name='quote', lookup_expr='iexact')
     tags = filters.CharFilter(method='filter_tags')
     market = filters.CharFilter(method='filter_market')
@@ -92,7 +91,6 @@ class GlobalSymbolFilter(filters.FilterSet):
 
     ordering = NullsLastOrderingFilter(
         fields=[
-            'name',
             'base',
             'quote',
             'market_cap',
@@ -128,7 +126,7 @@ class GlobalSymbolFilter(filters.FilterSet):
 
     class Meta:
         model = GlobalSymbol
-        fields = ['market', 'name', 'base', 'quote', 'contract_type', 'tags', 'is_favorite', 'cid', 'volume', 'ordering', 'market_cap', 'ath_prox', 'atl_prox', 'price_change_percentage_24h', 'volume24h_to_mcap']
+        fields = ['base', 'quote', 'contract_type', 'tags', 'is_favorite', 'cid', 'volume', 'ordering', 'market_cap', 'ath_prox', 'atl_prox', 'price_change_percentage_24h', 'volume24h_to_mcap']
 
 
 class TagFilter(filters.FilterSet):
