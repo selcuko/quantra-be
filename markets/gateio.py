@@ -20,8 +20,7 @@ from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
 from match import MatchEngine
 from models import interval_to_minutes
 if typing.TYPE_CHECKING:
-    from quantapi.models import MarketAccount, MarketSymbol, Order, Market
-    from loops import LiveLoop
+    from quantapi.models import MarketAccount, MarketSymbol, Market
 
 
 class GateIOMarket(IMarket):
@@ -197,7 +196,7 @@ class GateIOMarket(IMarket):
                 raise KlineFetchFailed(error)
         return klines
 
-    def init_websocket(self, symbol:str, interval:str, callback:typing.Callable, liveloop:'LiveLoop|None', retries:int=30):
+    def init_websocket(self, symbol:str, interval:str, callback:typing.Callable, liveloop, retries:int=30):
         ws_uri = 'wss://api.gateio.ws/ws/v4/'
         try:
             ws = connect(ws_uri)
@@ -328,7 +327,7 @@ class GateIOMarket(IMarket):
             order.funds = float(funds)
         return order
 
-    def get_order(self, symbol:'MarketSymbol|str|None', order:'Order|str|int', retries=0) -> 'Order':
+    def get_order(self, symbol:'MarketSymbol|str|None', order, retries=0):
         if not isinstance(order, str) and not isinstance(order, int):
             order_id = order.oid
         else:
@@ -409,7 +408,7 @@ class GateIOMarket(IMarket):
         }
         return f'{mapping[symbol.contract_type]}.order_book_update'
 
-    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:typing.Callable, liveloop:'LiveLoop|None'=None, retries:int=30):
+    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:typing.Callable, liveloop=None, retries:int=30):
         if isinstance(symbol, str):
             symbol_obj = self.get_symbol_from_name(symbol)
         else:
@@ -471,7 +470,8 @@ class GateIOMarket(IMarket):
                 self.account.save()
         return equity
 
-    def prep_order(self, order:dict) -> 'Order':
+    def prep_order(self, order:dict):
+        raise NotImplementedError
         from quantapi.models import Order
         try:
             return Order(

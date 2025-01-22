@@ -18,9 +18,7 @@ from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
 from match import MatchEngine
 from models import interval_to_minutes
 if typing.TYPE_CHECKING:
-    from quantapi.models import MarketSymbol, Order, MarketAccount, Market
-    from loops import LiveLoop
-    from loops import LoopGroup
+    from quantapi.models import MarketSymbol, MarketAccount, Market
 
 # XXX: Volume is problematic, it is not matching the volume of website.
 class BybitMarket(IMarket):
@@ -228,7 +226,7 @@ class BybitMarket(IMarket):
                 raise KlineFetchFailed(error)
         return klines
 
-    def init_websocket(self, symbol:str, interval:str, callback:typing.Callable, liveloop:'LiveLoop|LoopGroup|None', retries:int=1):
+    def init_websocket(self, symbol:str, interval:str, callback:typing.Callable, liveloop, retries:int=1):
         ws_uri = 'wss://stream.bybit.com/v5/public/spot'
         try:
             ws = connect(ws_uri)
@@ -314,7 +312,7 @@ class BybitMarket(IMarket):
             engine.on_match(trade)
         ws.close()
 
-    def place_market_order(self, symbol:'MarketSymbol|str', side:typing.Literal['buy', 'sell'], funds:typing.Optional[str]=None, quantity:typing.Optional[str]=None, validate=True) -> 'Order':
+    def place_market_order(self, symbol:'MarketSymbol|str', side:typing.Literal['buy', 'sell'], funds:typing.Optional[str]=None, quantity:typing.Optional[str]=None, validate=True):
         symbol_object = self.get_symbol_from_name(symbol) if isinstance(symbol, str) else symbol
         if not symbol_object:
             raise ValueError(f'Symbol not found: {symbol}')
@@ -345,7 +343,8 @@ class BybitMarket(IMarket):
             order.funds = float(funds)
         return order
 
-    def get_order(self, symbol:'MarketSymbol|str', order:'Order|int', retries:int=1) -> 'Order':
+    def get_order(self, symbol:'MarketSymbol|str', order, retries:int=1):
+        raise NotImplementedError
         if not isinstance(order, str) and not isinstance(order, int):
             order_id = order.oid
         else:
@@ -414,7 +413,7 @@ class BybitMarket(IMarket):
             'asks': [ { 'price': Decimal(ask[0]), 'size': Decimal(ask[1]), 'count': 1 } for ask in data['a'] ]
         }
 
-    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:typing.Callable, liveloop:'LiveLoop|LoopGroup|None'=None, retries:int=0):
+    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:typing.Callable, liveloop=None, retries:int=0):
         symbol_object = self.get_symbol_from_name(symbol) if isinstance(symbol, str) else symbol
         if not symbol_object:
             raise ValueError(f'Symbol not found: {symbol}')
@@ -468,7 +467,8 @@ class BybitMarket(IMarket):
                 self.account.save()
         return equity
 
-    def prep_order(self, order:dict) -> 'Order':
+    def prep_order(self, order:dict):
+        raise NotImplementedError
         from quantapi.models import Order
         try:
             return Order(

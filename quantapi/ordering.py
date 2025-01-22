@@ -1,6 +1,7 @@
 from django.db.models import F
 from django_filters import filters
 
+
 class NullsLastOrderingFilter(filters.OrderingFilter):
     def __init__(self, *args, **kwargs):
         self.nulls_last = kwargs.pop('nulls_last', [])

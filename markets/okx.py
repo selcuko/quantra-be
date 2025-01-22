@@ -21,8 +21,7 @@ from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
 from match import MatchEngine
 from models import interval_to_minutes
 if typing.TYPE_CHECKING:
-    from quantapi.models import MarketAccount, MarketSymbol, Order, Market
-    from loops.liveloop import LiveLoop
+    from quantapi.models import MarketAccount, MarketSymbol, Market
 
 
 class OKXMarket(IMarket):
@@ -197,7 +196,7 @@ class OKXMarket(IMarket):
                 raise KlineFetchFailed(error)
         return klines
 
-    def init_websocket(self, symbol:str, interval:str, callback:typing.Callable, liveloop:'LiveLoop|None', retries:int=30):
+    def init_websocket(self, symbol:str, interval:str, callback:typing.Callable, liveloop, retries:int=30):
         ws_uri = 'wss://ws.okx.com:8443/ws/v5/business'
         try:
             ws = connect(ws_uri)
@@ -319,7 +318,7 @@ class OKXMarket(IMarket):
 
         return self.get_order(symbol_object, data['ordId'])
 
-    def get_order(self, symbol:'MarketSymbol|str', order:'Order|str|int', retries=0) -> 'Order':
+    def get_order(self, symbol:'MarketSymbol|str', order, retries=0):
         from quantapi.models import MarketSymbol
         if not isinstance(order, str) and not isinstance(order, int):
             order_id = order.oid
@@ -388,7 +387,7 @@ class OKXMarket(IMarket):
         }
         return self.format_symbol(symbol.name) + mapping[symbol.contract_type]
 
-    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:typing.Callable, liveloop:'LiveLoop|None'=None, retries:int=30):
+    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:typing.Callable, liveloop=None, retries:int=30):
         if isinstance(symbol, str):
             symbol_obj = self.get_symbol_from_name(symbol)
         else:
@@ -442,7 +441,8 @@ class OKXMarket(IMarket):
                 self.account.save()
         return equity
 
-    def prep_order(self, order:dict) -> 'Order':
+    def prep_order(self, order:dict):
+        raise NotImplementedError
         from quantapi.models import Order
         return Order(
             oid=order['ordId'],

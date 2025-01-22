@@ -22,8 +22,7 @@ from models import interval_to_minutes
 from threading import Event
 
 if typing.TYPE_CHECKING:
-    from loops import LiveLoop, LoopGroup
-    from quantapi.models import MarketAccount, MarketSymbol, Order, Market
+    from quantapi.models import MarketAccount, MarketSymbol, Market
 
 
 class BinanceMarket(IMarket):
@@ -121,7 +120,7 @@ class BinanceMarket(IMarket):
                 ws = connect(ws_uri)
                 continue
 
-    def init_websocket(self, symbol:str, interval:str, callback:Callable, liveloop:'LiveLoop|LoopGroup|None', retries:int=1):
+    def init_websocket(self, symbol:str, interval:str, callback:Callable, liveloop, retries:int=1):
         ws_uri = self.get_websocket_uri(symbol, interval)
         try:
             ws = connect(ws_uri)
@@ -232,7 +231,8 @@ class BinanceMarket(IMarket):
             )
         return exc_symbol
 
-    def _prep_order(self, order:dict) -> 'Order':
+    def _prep_order(self, order:dict):
+        raise NotImplementedError
         from quantapi.models import Order
         order_time = order.get('time') or order.get('workingTime') or order.get('transactTime') or order.get('updateTime') or 0
         return Order(
@@ -335,7 +335,7 @@ class BinanceMarket(IMarket):
 
         return self.symbols
 
-    def place_market_order(self, symbol:'MarketSymbol|str', side:Literal['buy', 'sell'], funds:Optional[str]=None, quantity:Optional[str]=None, validate=True) -> 'Order':
+    def place_market_order(self, symbol:'MarketSymbol|str', side:Literal['buy', 'sell'], funds:Optional[str]=None, quantity:Optional[str]=None, validate=True):
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         client_oid = uuid.uuid4().hex
@@ -359,7 +359,8 @@ class BinanceMarket(IMarket):
         order.symbol = symbol
         return order
 
-    def get_order(self, symbol:'MarketSymbol|str', order:'Order|int', retries:int=1) -> 'Order':
+    def get_order(self, symbol:'MarketSymbol|str', order, retries:int=1):
+        raise NotImplementedError
         from quantapi.models import Order
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
@@ -392,7 +393,7 @@ class BinanceMarket(IMarket):
             logger.error(f'Error while fetching orderbook for {symbol} on {self.name}', exc_info=True)
             return {}
 
-    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:Callable, liveloop:'LiveLoop|LoopGroup|None'=None, retries: int = 0):
+    def init_orderbook_websocket(self, symbol:'MarketSymbol|str', callback:Callable, liveloop=None, retries: int = 0):
         if isinstance(symbol, str):
             symbol = self._get_symbol_from_name(symbol)
         if symbol.contract_type == symbol.ContractType.SPOT:

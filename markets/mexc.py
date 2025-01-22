@@ -16,8 +16,6 @@ import requests
 from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
 from websockets.sync.client import ClientConnection, connect
 
-import incident
-from incident import market
 from logger import logger
 from markets import IMarket
 from markets.errors import InsufficientBalance, InvalidUsage, KlineFetchFailed, MarketAPIError, RejectedOrder
@@ -26,8 +24,7 @@ from match import MatchEngine
 from models import interval_to_minutes
 
 if typing.TYPE_CHECKING:
-    from loops.liveloop import LiveLoop
-    from quantapi.models import MarketAccount, MarketSymbol, Order, Market
+    from quantapi.models import MarketAccount, MarketSymbol, Market
 
 
 class MEXCMarket(IMarket):

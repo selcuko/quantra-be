@@ -1,43 +1,22 @@
 from datetime import datetime, timedelta
 import json
 
-from django.db.models import Prefetch, Count, Q, F
-from django.core.cache import cache
+from django.db.models import Prefetch
 from django_filters.rest_framework import DjangoFilterBackend
-from django.views.decorators.cache import cache_page
-from django.utils.decorators import method_decorator
 
 import pytz
 from rest_framework import viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import MethodNotAllowed
 from rest_framework.response import Response
 
-from cache import LIVELOOPS
-from loops import LiveLoop
-from markets.errors import OrderPlacementError
 from metrichub import fix_missing_images, match_symbols, update_all_coins_coingecko, update_all_coins_coingecko_metrics, update_all_tags
 from models import interval_to_minutes
-from order import OrderManager
 from orderpulse.keeper import KeeperPool
-from quantapi.filters import (GlobalSymbolFilter, MarketAccountFilter, MarketSymbolFilter,
-                              SessionFilter, SessionGroupFilter, TagFilter)
-from quantapi.models import (ContactForm, GlobalSymbol, GroupOrder, Market,
-                             MarketAccount, MarketSymbol, Order,
-                             Session, SessionGroup, Signal, Strategy,
-                             Subscription, Tag)
-from quantapi.serializers import (ContactFormSerializer, DraftSessionSerializer,
-                                  GlobalSymbolSerializer, GroupOrderSerializer,
-                                  
-                                  MarketAccountSerializer,
-                                  MarketSerializer, MarketSymbolSerializer, NewAccountSerializer,
-                                  OrderPlacementSerializer, OrderSerializer,
-                                  SessionGroupSerializer,
-                                  SessionOrderPlacementSerializer,
-                                  SessionSerializer, SessionUpdateSerializer,
-                                  SignalSerializer, StrategySerializer,
-                                  SubscriptionSerializer, TagSerializer)
-from quantapi.validations import validate_session_can_start
+from quantapi.filters import (GlobalSymbolFilter, MarketAccountFilter, MarketSymbolFilter, TagFilter)
+from quantapi.models import (ContactForm, GlobalSymbol, Market,
+                             MarketAccount, MarketSymbol, Tag)
+from quantapi.serializers import (ContactFormSerializer, GlobalSymbolSerializer, MarketAccountSerializer,
+                                  MarketSerializer, MarketSymbolSerializer, NewAccountSerializer, TagSerializer)
 
 
 class MarketViewSet(viewsets.ReadOnlyModelViewSet):
@@ -161,221 +140,6 @@ class GlobalSymbolViewSet(viewsets.ReadOnlyModelViewSet):
         return Response()
 
 
-class StrategyViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Strategy.objects.all()
-    serializer_class = StrategySerializer
-
-
-class SessionViewSet(viewsets.ModelViewSet):
-    queryset = Session.objects.none()
-    serializer_class = SessionSerializer
-    filter_backends = [DjangoFilterBackend]
-    filterset_class = SessionFilter
-    http_method_names = ['get', 'post', 'patch']
-
-    def get_queryset(self):
-        return Session.objects.select_related(
-            'account', 
-            'account__market', 
-            'account__credentials', 
-            'symbol', 
-            'symbol__symbol', 
-            'symbol__market', 
-            'strategy', 
-            'group',
-        ).prefetch_related(
-            Prefetch('account__market__symbols', queryset=MarketSymbol.objects.select_related('symbol', 'market')),
-            'issues'
-        ).exclude(group__isnull=False)
-
-    def get_serializer_class(self):
-        if self.request.method == 'POST':
-            return DraftSessionSerializer
-        if self.request.method == 'PATCH':
-            return SessionUpdateSerializer
-        if self.request.method == 'GET':
-            return SessionSerializer
-        else:
-            raise MethodNotAllowed(self.request.method)
-
-    def create(self, request):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)
-
-        get_serializer = SessionSerializer(instance=serializer.instance, context=self.get_serializer_context())
-        headers = self.get_success_headers(get_serializer.data)
-        return Response(get_serializer.data, status=201, headers=headers)
-
-    def update(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data, instance=self.get_object())
-        serializer.is_valid(raise_exception=True)
-        self.perform_update(serializer)
-
-        get_serializer = SessionSerializer(instance=serializer.instance, context=self.get_serializer_context())
-        headers = self.get_success_headers(get_serializer.data)
-        return Response(get_serializer.data, status=200, headers=headers)
-
-    @action(detail=True, methods=['get'])
-    def orders(self, request, pk):
-        session = self.get_object()
-        orders = session.orders.all()
-        serializer = OrderSerializer(orders, many=True, context={'request': request})
-        return Response(serializer.data)
-
-    @action(detail=True, methods=['get'])
-    def signals(self, request, pk):
-        session = self.get_object()
-        signals = session.signals.all()
-        serializer = SignalSerializer(signals, many=True, context={'request': request})
-        return Response(serializer.data)
-
-    @action(detail=True, methods=['post'])
-    def start(self, request, pk):
-        session = self.get_object()
-        validate_session_can_start(session)
-        ll = LiveLoop.from_session(session)
-        ll.run()
-        session.status = Session.Status.ONGOING
-        session.save()
-        return Response({'detail': 'Session will start in a few seconds.'})
-
-    @action(detail=True, methods=['post'])
-    def pause(self, request, pk):
-        session = self.get_object()
-        if session.status != Session.Status.ONGOING:
-            return Response({'detail': 'Session must be in ONGOING state to pause.'}, status=400)
-        ll = LIVELOOPS.get(session.id)
-        if not ll:
-            return Response({'detail': 'Session not found in the cache.'}, status=503)
-        ll.stop()
-        session.status = Session.Status.PAUSED
-        session.save()
-        return Response({'detail': 'Session will pause in a few seconds.'})
-
-    @action(detail=True, methods=['post'])
-    def resume(self, request, pk):
-        session = self.get_object()
-        validate_session_can_start(session)
-        ll = LiveLoop.from_session(session)
-        ll.run()
-        session.status = Session.Status.ONGOING
-        session.save()
-        return Response({'detail': 'Session will resume in a few seconds.'})
-
-    @action(detail=True, methods=['post'])
-    def terminate(self, request, pk):
-        session = self.get_object()
-        if session.status not in [Session.Status.ONGOING, Session.Status.PAUSED]:
-            return Response({'detail': 'Session must be in ONGOING or PAUSED state to terminate.'}, status=400)
-        ll = LIVELOOPS.get(session.id)
-        if not ll:
-            return Response({'detail': 'Session not found in the cache.'}, status=503)
-        ll.stop()
-        session.status = Session.Status.TERMINATED
-        session.save()
-        return Response({'detail': 'Session will terminate in a few seconds.'})
-
-    @action(detail=True, methods=['post'])
-    def place(self, request, pk):
-        session: Session = self.get_object()
-        serializer = SessionOrderPlacementSerializer(data={**request.data, 'session': session.pk})
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=400)
-        data = serializer.validated_data
-        if not isinstance(data, dict) or not data:
-            return Response({'detail': 'No data provided.'}, status=400)
-        
-        account: MarketAccount = session.account
-        symbol: MarketSymbol = session.symbol
-        side = data['side']
-        funds = data.get('funds')
-        deal_size = data.get('deal_size')
-        oman = OrderManager(account.get_interface(), session)
-
-        try:
-            order = oman.place(symbol, side.lower(), deal_size, funds)
-        except OrderPlacementError as e:
-            return Response({'detail': f'Order placement error: {e!s}'}, status=400)
-        return Response(OrderSerializer(order, context={'request': request}).data)
-
-
-class SessionGroupViewSet(viewsets.ModelViewSet):
-    queryset = SessionGroup.objects.all()
-    serializer_class = SessionGroupSerializer
-    filter_backends = [DjangoFilterBackend]
-    filterset_class = SessionGroupFilter
-
-    def get_queryset(self):
-        return SessionGroup.objects.select_related('symbol', 'interface').prefetch_related('sessions__orders', 'sessions__signals')
-
-    @action(detail=True, methods=['get'])
-    def sessions(self, request, pk=None):
-        group = self.get_object()
-        sessions = group.sessions.all()
-        serializer = SessionSerializer(sessions, many=True, context={'request': request})
-        return Response(serializer.data)
-
-
-class OrderViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Order.objects.all()
-    serializer_class = OrderSerializer
-    filter_backends = [DjangoFilterBackend]
-
-    def get_queryset(self):
-        return Order.objects.select_related('account', 'symbol', 'session').prefetch_related(
-            'symbol__symbol',
-            'symbol__market',
-            'account__market',
-            'account__credentials'
-        )
-
-    @action(detail=False, methods=['post'])
-    def place(self, request):
-        serializer = OrderPlacementSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=400)
-        data = serializer.validated_data
-        if not isinstance(data, dict) or not data:
-            return Response({'detail': 'No data provided.'}, status=400)
-        account: MarketAccount = data['account']
-        symbol = data['symbol']
-        side = data['side']
-        funds = data.get('funds', 0)
-        deal_size = data.get('deal_size', 0)
-        oman = OrderManager(account.get_interface())
-        try:
-            order = oman.place(symbol, side.lower(), deal_size, funds)
-        except OrderPlacementError as e:
-            return Response({'detail': f'Order placement error: {e!s}'}, status=400)
-        return Response(OrderSerializer(order, context={'request': request}).data)
-
-
-class GroupOrderViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = GroupOrder.objects.all()
-    serializer_class = GroupOrderSerializer
-    filter_backends = [DjangoFilterBackend]
-
-
-class SignalViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Signal.objects.all()
-    serializer_class = SignalSerializer
-    filter_backends = [DjangoFilterBackend]
-
-    @action(detail=True, methods=['get'])
-    def orders(self, request, pk):
-        signal = self.get_object()
-        orders = signal.orders.all()
-        serializer = OrderSerializer(orders, many=True, context={'request': request})
-        return Response(serializer.data)
-
-
-class SubscriptionViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Subscription.objects.all()
-    serializer_class = SubscriptionSerializer
-    filter_backends = [DjangoFilterBackend]
-
-
 class CandlesViewSet(viewsets.ViewSet):
     def list(self, request):
         return Response({'detail': 'Specify market, symbol and interval in the URI.'})
@@ -447,7 +211,6 @@ class TagViewSet(viewsets.ModelViewSet):
         )
         return results
 
-    #@method_decorator(cache_page(60 * 60 * 24 * 7))  # Cache for 7 days
     def list(self, request):
         return super().list(request)
 
@@ -471,11 +234,6 @@ class KeeperView(viewsets.ViewSet):
             payloads.append(payload)
         return Response(payloads)
 
-
-class CategoryViewSet(viewsets.ModelViewSet):
-    class Meta:
-        model = Tag
-        fields = ['name']
 
 class ReverseProxyView(viewsets.ViewSet):
     def get(self, request, url):

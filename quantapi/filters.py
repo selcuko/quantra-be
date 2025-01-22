@@ -1,7 +1,7 @@
 import django_filters as filters
 from django.db.models import Q, Count
 from quantapi.ordering import NullsLastOrderingFilter
-from .models import GlobalSymbol, MarketAccount, MarketSymbol, Session, SessionGroup, Tag
+from .models import GlobalSymbol, MarketAccount, MarketSymbol, Tag
 
 
 class MarketAccountFilter(filters.FilterSet):
@@ -40,35 +40,6 @@ class MarketSymbolFilter(filters.FilterSet):
     class Meta:
         model = MarketSymbol
         fields = ['market', 'name', 'base', 'quote', 'sort', 'spot_enabled', 'contract_type', 'volume']
-
-
-class SessionFilter(filters.FilterSet):
-    status = filters.CharFilter(method='filter_status')
-    source = filters.MultipleChoiceFilter(choices=Session.CandleSource.choices, field_name='candle_source')
-    account = filters.CharFilter(field_name='account__credentials__owner', label='account owner', lookup_expr='icontains')
-    strategy = filters.CharFilter(field_name='strategy__pk', label='strategy')
-    market = filters.CharFilter(field_name='account__market__exchange_name', lookup_expr='iexact', label='market ID')
-    symbol = filters.CharFilter(field_name='symbol__base', label='symbol ID')
-    created_after = filters.DateTimeFilter(field_name='started', lookup_expr='gte')
-
-    class Meta:
-        model = Session
-        fields = ['status', 'source', 'strategy', 'market', 'account', 'symbol', 'created_after']
-
-    def filter_status(self, queryset, name, value):
-        query = Q()
-        for status in value.split(","):
-            query |= Q(status=status)
-        return queryset.filter(query)
-
-
-class SessionGroupFilter(filters.FilterSet):
-    status = filters.MultipleChoiceFilter(choices=SessionGroup.Status.choices)
-    source = filters.MultipleChoiceFilter(choices=Session.CandleSource.choices, field_name='candle_source')
-
-    class Meta:
-        model = SessionGroup
-        fields = ['status']
 
 
 class GlobalSymbolFilter(filters.FilterSet):
