@@ -86,8 +86,8 @@ class GlobalSymbolFilter(filters.FilterSet):
     price_change_percentage_24h = filters.RangeFilter(field_name='price_change_percentage_24h')
     volume24h_to_mcap = filters.RangeFilter(field_name='volume24h_to_mcap')
     price = filters.RangeFilter(field_name='price')
-    high_24h = filters.RangeFilter(field_name='high_24h')
-    low_24h = filters.RangeFilter(field_name='low_24h')
+    price_high_24h = filters.RangeFilter(field_name='price_high_24h')
+    price_low_24h = filters.RangeFilter(field_name='price_low_24h')
 
     ordering = NullsLastOrderingFilter(
         fields=[
@@ -100,10 +100,10 @@ class GlobalSymbolFilter(filters.FilterSet):
             'price_change_percentage_24h',
             'volume24h_to_mcap',
             'price',
-            'high_24h',
-            'low_24h',
+            'price_high_24h',
+            'price_low_24h',
         ],
-        nulls_last=['price', 'price_change_percentage_24h', 'volume24h_to_mcap']
+        nulls_last=['price', 'price_change_percentage_24h', 'volume24h_to_mcap', 'price_high_24h', 'price_low_24h']
     )
 
     def filter_market(self, queryset, name, value):
