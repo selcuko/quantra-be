@@ -100,7 +100,6 @@ class OKXMarket(IMarket):
         data = data['data']
 
         self.futures_symbols = { self.standardize_symbol(symbol['instFamily']) + '.F': self.prep_futures_symbol(symbol) for symbol in data if symbol['settleCcy'] == 'USDT' }
-        print(len(self.futures_symbols))
         if self.market:
             from quantapi.models import MarketSymbol
             x = MarketSymbol.objects.bulk_create(self.futures_symbols.values(), update_conflicts=True, update_fields=[
@@ -376,7 +375,6 @@ class OKXMarket(IMarket):
 
     def format_orderbook_update(self, orderbook:dict) -> dict:
         if orderbook['seqId'] <= self.orderbook_seq:
-            print('skipping', orderbook['seqId'], self.orderbook_seq)
             return { 'bids': [], 'asks': [] }
         return {
             'bids': [{ 'price': Decimal(price), 'size': Decimal(size), 'count': int(count) } for price, size, _, count in orderbook['bids']],

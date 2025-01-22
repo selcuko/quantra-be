@@ -723,7 +723,6 @@ class KucoinMarket(IMarket):
         if not self.capital:
             logger.error(f'No capital (USDT) found for account on {self.name}')
 
-    @authentication_required
     def get_current_prices(self, save=True) -> dict:
         all_tickers = self.kmarket.get_all_tickers()
         if not all_tickers:

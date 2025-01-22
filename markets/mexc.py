@@ -644,7 +644,6 @@ class MEXCMarket(IMarket):
             logger.error(f'Error while getting order on {self.name}', exc_info=True)
             raise
 
-    @authentication_required
     def get_current_prices(self, save=True) -> dict:
         uri = f'{self.url}/api/v3/ticker/price'
         response = self.session.get(uri)

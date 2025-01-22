@@ -12,11 +12,6 @@ class Command(BaseCommand):
         parser.add_argument('--interval', type=str, default='1 min')
         parser.add_argument('--contract_type', type=str, default='SPOT')
 
-
-
-
-
-
     def handle(self, *args, **options):
         symbol = options['symbol']
         market = options['market']
@@ -30,6 +25,3 @@ class Command(BaseCommand):
         klines_df = OHLCVDataset(klines)
 
         print(klines_df.head())
-
-        
-       

@@ -10,13 +10,15 @@ from coinmcap import CoinMarketCap
 from quantapi.models import GlobalSymbol, MarketSymbol, Tag
 
 
-def update_symbol(gs: GlobalSymbol):
+def update_symbol(gs: GlobalSymbol, payload: dict|None = None, match=False):
     # Single symbol update
     cg = CoinGecko()
-    cg_symbol = cg.coin_by_cid(gs.cid)
-    with open("cg-payloads/{}.json".format(gs.cid), "w") as f:
-        print("SAVING", gs.cid)
-        json.dump(cg_symbol, f)
+    if payload:
+        cg_symbol = payload
+    else:
+        cg_symbol = cg.coin_by_cid(gs.cid)
+        with open("cg-payloads/{}.json".format(gs.cid), "w") as f:
+            json.dump(cg_symbol, f)
     if not cg_symbol['symbol'].upper() == gs.base:
         print('Symbol mismatch:', gs.base, cg_symbol['symbol'].upper())
         return
@@ -98,20 +100,20 @@ def update_symbol(gs: GlobalSymbol):
 
     gs.raw_payload = json.dumps(mdata)
     gs.calculate()
-    print("gs", gs.base, gs.cid, gs.twitter_screen_name, gs.facebook_username, gs.display)
     gs.save()
 
     # match with market symbols too
-    ms = MarketSymbol.objects.filter(base=gs.base, quote='USDT')
-    ms_update = []
-    for m in ms:
-        try:
-            if m.symbol.market_cap < gs.market_cap:  # type: ignore
-                m.symbol = gs  # type: ignore
-                ms_update.append(m)
-        except (AttributeError, TypeError):
-            pass
-    MarketSymbol.objects.bulk_update(ms_update, ['symbol'])
+    if match:
+        ms = MarketSymbol.objects.filter(base=gs.base, quote='USDT')
+        ms_update = []
+        for m in ms:
+            try:
+                if m.symbol.market_cap < gs.market_cap:  # type: ignore
+                    m.symbol = gs  # type: ignore
+                    ms_update.append(m)
+            except (AttributeError, TypeError):
+                pass
+        MarketSymbol.objects.bulk_update(ms_update, ['symbol'])
 
 
 def update_symbol_metrics_mini(gs: GlobalSymbol, cg_symbol: dict):

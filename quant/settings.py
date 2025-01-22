@@ -142,7 +142,7 @@ SQLITE = {
 default_db = SQLITE if ENVIRONMENT == 'local' else RDS
 
 DATABASES = {
-    'default': RDS
+    'default': default_db
 }
 
 
