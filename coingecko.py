@@ -7,16 +7,43 @@ import time
 import requests
 
 
+API_KEYS = [
+    'REDACTED',
+    'REDACTED',
+    'REDACTED'
+]
+
+
 class CoinGecko:
-    def __init__(self, api_key:str='REDACTED') -> None:
+    def __init__(self) -> None:
+        
         self.url = "https://api.coingecko.com/api/v3/"
-        self.api_key = api_key
+        self.api_key = API_KEYS[0]
+        self.key_cache = {}
+        for key in API_KEYS:
+            self.key_cache[key] = {
+                '429': 0,
+            }  
         self.session = requests.Session()
         self.session.headers.update({
             'x-cg-demo-api-key': self.api_key,
             "Accept": "application/json",
         })
         self.coins = self.coins_list()
+
+    def rotate_key(self):
+        for key in API_KEYS:
+            last_used = self.key_cache[key]['429']
+            if time.time() - last_used > 60:
+                self.api_key = key
+                self.session.headers.update({
+                    'x-cg-demo-api-key': self.api_key,
+                    "Accept": "application/json",
+                })
+                return
+        print('No keys available, waiting for 5s')
+        time.sleep(5)
+        return self.rotate_key()
 
     @staticmethod
     def handle_failed_request(response):
@@ -91,8 +118,10 @@ class CoinGecko:
         uri = self.url + f'coins/{cid}'
         response = self.session.get(uri)
         if response.status_code == 429:
-            print('Rate limited, sleeping for a bit')
-            time.sleep(15)
+            self.key_cache[self.api_key] = {
+                '429': time.time(),
+            }
+            self.rotate_key()
             return self.coin_by_cid(cid)
         return response.json()
 

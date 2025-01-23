@@ -7,12 +7,42 @@ import os
 import pytz
 from coingecko import CoinGecko
 from coinmcap import CoinMarketCap
-from quantapi.models import GlobalSymbol, MarketSymbol, Tag
+from quantapi.models import GlobalSymbol, Market, MarketSymbol, Tag
 
 
-def update_symbol(gs: GlobalSymbol, payload: dict|None = None, match=False):
+def prepare_symbol(payload):
+    return GlobalSymbol(
+        cid=payload["id"],
+        base=payload['symbol'].upper(),
+        display=payload['name'],
+        image=payload['image']['large'] if payload['image']['large'].startswith('http') else None,
+    )
+
+
+def match_symbols_full_payload(payload):
+    gs = GlobalSymbol.objects.get(cid=payload['id'])
+    not_found = []
+    to_save = []
+    for ms_payload in payload['tickers']:
+        if ms_payload['target'] != 'USDT' or ms_payload['base'] != gs.base:
+            continue
+        exchange = ms_payload['market']['name'].upper().replace('.', '')
+        if exchange not in Market.Exchange.values:
+            continue
+        try:
+            ms = MarketSymbol.objects.get(base=gs.base, quote=ms_payload['target'], market__exchange_name=exchange, contract_type=MarketSymbol.ContractType.SPOT)
+            ms.symbol = gs  # type: ignore
+            to_save.append(ms)
+        except MarketSymbol.DoesNotExist:
+            not_found.append(exchange)
+    return to_save, not_found
+
+
+def update_symbol(gs: GlobalSymbol, payload: dict|None = None, match=True, save=True):
     # Single symbol update
     cg = CoinGecko()
+    if not gs and not payload:
+        raise ValueError('Either GlobalSymbol or payload must be provided')
     if payload:
         cg_symbol = payload
     else:
@@ -20,8 +50,7 @@ def update_symbol(gs: GlobalSymbol, payload: dict|None = None, match=False):
         with open("cg-payloads/{}.json".format(gs.cid), "w") as f:
             json.dump(cg_symbol, f)
     if not cg_symbol['symbol'].upper() == gs.base:
-        print('Symbol mismatch:', gs.base, cg_symbol['symbol'].upper())
-        return
+        raise Exception('Symbol mismatch:', gs.base, cg_symbol['symbol'].upper())
     gs.image = cg_symbol['image']['large']
     if gs.image and not gs.image.startswith('http'):
         gs.image = cg_symbol['image']['small']
@@ -100,7 +129,8 @@ def update_symbol(gs: GlobalSymbol, payload: dict|None = None, match=False):
 
     gs.raw_payload = json.dumps(mdata)
     gs.calculate()
-    gs.save()
+    if save:
+        gs.save()
 
     # match with market symbols too
     if match:
@@ -114,6 +144,7 @@ def update_symbol(gs: GlobalSymbol, payload: dict|None = None, match=False):
             except (AttributeError, TypeError):
                 pass
         MarketSymbol.objects.bulk_update(ms_update, ['symbol'])
+    return gs
 
 
 def update_symbol_metrics_mini(gs: GlobalSymbol, cg_symbol: dict):

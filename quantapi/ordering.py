@@ -7,7 +7,6 @@ class NullsLastOrderingFilter(filters.OrderingFilter):
         self.nulls_last = kwargs.pop('nulls_last', [])
         super().__init__(*args, **kwargs)
         self.fields = kwargs.get('fields', {})
-        
 
     def filter(self, qs, value):
         result = super().filter(qs, value)

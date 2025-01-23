@@ -328,8 +328,7 @@ class MarketSymbol(models.Model):
 
 class GlobalSymbol(models.Model):
     class Meta:
-        #ordering = ('-metrics__market_cap',)
-        pass
+        ordering = ['-volume']
 
     class DataSource(models.TextChoices):
         COINGECKO =     'COINGECKO',     'CoinGecko'
@@ -421,7 +420,7 @@ class GlobalSymbol(models.Model):
     @property
     def circulating_percent(self):
         try:
-            return (self.circulating_supply / self.total_supply) * 100 if self.circulating_supply and self.total_supply else 0
+            return (self.circulating_supply / self.max_supply) * 100 if self.circulating_supply and self.max_supply else 0
         except (ZeroDivisionError, TypeError):
             return 0
 
