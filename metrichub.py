@@ -29,9 +29,9 @@ def match_symbols_full_payload(payload):
         if exchange not in Market.Exchange.values:
             continue
         try:
-            ms = MarketSymbol.objects.get(base=gs.base, quote=ms_payload['target'], market__exchange_name=exchange, contract_type=MarketSymbol.ContractType.SPOT)
-            ms.symbol = gs  # type: ignore
-            to_save.append(ms)
+            for ms in MarketSymbol.objects.filter(base=gs.base, quote=ms_payload['target'], market__exchange_name=exchange):
+                ms.symbol = gs  # type: ignore
+                to_save.append(ms)
         except MarketSymbol.DoesNotExist:
             not_found.append(exchange)
     return to_save, not_found
