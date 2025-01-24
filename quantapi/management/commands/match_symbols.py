@@ -7,7 +7,7 @@ from quantapi.models import GlobalSymbol, MarketSymbol
 
 
 class Command(BaseCommand):
-    help = ''
+    help = 'Match MarketSymbols to GlobalSymbols'
 
     def add_arguments(self, parser):
         pass

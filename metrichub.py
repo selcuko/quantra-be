@@ -15,7 +15,6 @@ def prepare_symbol(payload):
         cid=payload["id"],
         base=payload['symbol'].upper(),
         display=payload['name'],
-        image=payload['image']['large'] if payload['image']['large'].startswith('http') else None,
     )
 
 
@@ -38,6 +37,19 @@ def match_symbols_full_payload(payload):
     return to_save, not_found
 
 
+def assign_symbol_image(gs, payload, setnull=True):
+    image_payload = payload['image']
+    if (image := image_payload.get('large')).startswith('http'):
+        gs.image = image
+    elif (image := image_payload.get('small')).startswith('http'):
+        gs.image = image
+    elif (image := image_payload.get('thumb')).startswith('http'):
+        gs.image = image
+    elif setnull:
+        gs.image = None
+    return gs
+
+
 def update_symbol(gs: GlobalSymbol, payload: dict|None = None, match=True, save=True):
     # Single symbol update
     cg = CoinGecko()
@@ -51,9 +63,7 @@ def update_symbol(gs: GlobalSymbol, payload: dict|None = None, match=True, save=
             json.dump(cg_symbol, f)
     if not cg_symbol['symbol'].upper() == gs.base:
         raise Exception('Symbol mismatch:', gs.base, cg_symbol['symbol'].upper())
-    gs.image = cg_symbol['image']['large']
-    if gs.image and not gs.image.startswith('http'):
-        gs.image = cg_symbol['image']['small']
+    gs = assign_symbol_image(gs, cg_symbol)
     gs.description = cg_symbol['description']['en']
     gs.homepage = cg_symbol['links']['homepage'][0] if cg_symbol.get('links', {}).get('homepage') else None
     gs.blockchain_site = cg_symbol.get('links', {}).get('blockchain_site')
@@ -101,7 +111,7 @@ def update_symbol(gs: GlobalSymbol, payload: dict|None = None, match=True, save=
 
 
     mdata = cg_symbol['market_data']
-    gs.market_cap = mdata['market_cap']['usd']
+    gs.market_cap = mdata['market_cap'].get('usd')
     gs.market_cap_change_24h = mdata['market_cap_change_24h']
     gs.market_cap_change_percentage_24h = mdata['market_cap_change_percentage_24h']
     gs.price = mdata['current_price']['usd'] if mdata.get('current_price') else None

@@ -468,6 +468,7 @@ class Tag(models.Model):
     market_cap_change_24h = models.FloatField(null=True, blank=True)
     last_updated = models.DateTimeField(auto_now=True, help_text='Last time this tag was updated in our system')
     data_updated = models.DateTimeField(null=True, blank=True, help_text='Last time this tag was fetched from the data source')
+    top_3_coin_ids = models.CharField(max_length=200, null=True, blank=True, help_text='Top 3 coin ids in this tag')
 
     def __str__(self):
         return self.name

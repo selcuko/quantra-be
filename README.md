@@ -34,3 +34,15 @@ Populating GlobalSymbols is a bit tricky as it involves remote API payloads and 
     ```bash
     python manage.py match_symbols
     ```
+
+### Populate Tags
+
+1. Create Tag objects based on CoinGecko categories
+    ```bash
+    python manage.py reload_cg_tags
+    ```
+
+2. Match previously created Tags with their corresponing GlobalSymbols (M2M)
+    ```bash
+    python manage.py match_tags
+    ```

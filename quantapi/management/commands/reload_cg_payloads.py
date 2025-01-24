@@ -9,41 +9,55 @@ class Command(BaseCommand):
     help = 'Create GlobalSymbol objects from CoinGecko payloads'
 
     def add_arguments(self, parser):
-        pass
+        parser.add_argument(
+            '--update',
+            action='store_true',
+            default=False,
+            help='Update existing GlobalSymbols',
+        )
 
     def handle_bulk(self, gs_bulk, bulk_count):
         self.stdout.write(f"BULK {bulk_count}", ending="\t")
-        created = GlobalSymbol.objects.bulk_create(gs_bulk)
+        created = GlobalSymbol.objects.bulk_create(gs_bulk, ignore_conflicts=True)
         self.stdout.write(self.style.SUCCESS(f'{len(created)} CREATED'))
 
     def handle(self, *args, **options):
         folder = 'cg-payloads'
         files = os.listdir(folder)
         cids = [f.split('.')[0] for f in files]
-        existing = GlobalSymbol.objects.filter(cid__in=cids).values_list('cid', flat=True)
+        existing_gs = GlobalSymbol.objects.filter(cid__in=cids)
+        existing = existing_gs.values_list('cid', flat=True)
         files.sort()
         gs_bulk = []
-        bulk_size = 50
+        bulk_size = 10
         bulk_count = 0
         errors = []
         for file in files:
+            gs = None
             self.stdout.write(f"Processing {file}", ending="\t")
             if not file.endswith('.json'):
                 self.stdout.write(self.style.WARNING(f'SKIPPED'))
                 continue
             if file.split('.')[0] in existing:
-                self.stdout.write(self.style.WARNING(f'ALREADY EXISTS'))
-                continue
+                if options.get('update'):
+                    gs = existing_gs.get(cid=file.split('.')[0])
+                else:
+                    self.stdout.write(self.style.WARNING(f'ALREADY EXISTS'))
+                    continue
             with open(f'{folder}/{file}', 'r') as f:
                 try:
                     payload = json.load(f)
-                    gs = prepare_symbol(payload)
+                    if not gs:
+                        gs = prepare_symbol(payload)
                     gs = update_symbol(gs, payload, match=False, save=False)
                     gs_bulk.append(gs)
                     self.stdout.write(self.style.SUCCESS(f'QUEUED'))
-                except:
+                except KeyboardInterrupt:
+                    self.stdout.write(self.style.ERROR(f'INTERRUPTED'))
+                    break
+                except Exception as e:
                     errors.append(file)
-                    self.stdout.write(self.style.ERROR(f'ERROR'))
+                    self.stdout.write(self.style.ERROR(f'ERROR: {e}'))
             if len(gs_bulk) >= bulk_size:
                 bulk_count += 1
                 self.handle_bulk(gs_bulk, bulk_count)
