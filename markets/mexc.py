@@ -502,6 +502,7 @@ class MEXCMarket(IMarket):
         self.symbols = { self._standardize_symbol(symbol['symbol']): self._prep_symbol(symbol) for symbol in symbols if symbol['quoteAsset'] == 'USDT' }
         self.symbols = { key: value for key, value in self.symbols.items() if value.quote == 'USDT'}
         MarketSymbol.objects.bulk_create(self.symbols.values(), ignore_conflicts=True)
+        MarketSymbol.objects.filter(market=self.market, contract_type=MarketSymbol.ContractType.SPOT).exclude(name__in=[symbol.name for symbol in self.symbols.values()]).delete()
         return self.symbols
 
     def get_futures_symbols(self):

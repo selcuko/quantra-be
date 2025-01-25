@@ -86,11 +86,15 @@ class CoinGecko:
                 coins = self.coins_list_market(vs_currency=vs_currency, order=order, per_page=250, page=page)
                 time.sleep(1)
             except:
+                self.key_cache[self.api_key] = {
+                    '429': time.time(),
+                }
+                self.rotate_key()
                 error += 1
-                if error > 5:
+                if error > len(API_KEYS) * 2:
                     print('Too many errors, stopping')
                     break
-                time.sleep(5)
+                # time.sleep(5)
                 continue
             all_coins += coins
             if len(coins) < 250:

@@ -121,6 +121,7 @@ class BybitMarket(IMarket):
                 'base_precision',
                 'quote_precision',
             ], unique_fields=['name', 'market', 'contract_type'], batch_size=50)
+            MarketSymbol.objects.filter(market=self.market, contract_type=MarketSymbol.ContractType.FUTURES).exclude(name__in=[symbol.name for symbol in self.symbols.values()]).delete()
         return self.futures_symbols
 
     def get_symbols(self) -> dict[str, 'MarketSymbol']:
@@ -146,6 +147,7 @@ class BybitMarket(IMarket):
                 'base_precision',
                 'quote_precision',
             ], unique_fields=['name', 'market', 'contract_type'], batch_size=50)
+            MarketSymbol.objects.filter(market=self.market, contract_type=MarketSymbol.ContractType.SPOT).exclude(name__in=[symbol.name for symbol in self.symbols.values()]).delete()
         self.future_symbols = self.get_future_symbols()
         return self.symbols
 

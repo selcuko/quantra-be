@@ -101,13 +101,14 @@ class OKXMarket(IMarket):
         self.futures_symbols = { self.standardize_symbol(symbol['instFamily']) + '.F': self.prep_futures_symbol(symbol) for symbol in data if symbol['settleCcy'] == 'USDT' }
         if self.market:
             from quantapi.models import MarketSymbol
-            x = MarketSymbol.objects.bulk_create(self.futures_symbols.values(), update_conflicts=True, update_fields=[
+            MarketSymbol.objects.bulk_create(self.futures_symbols.values(), update_conflicts=True, update_fields=[
                 'spot_trading_enabled', 
                 'margin_trading_enabled', 
                 'details',
                 'base_precision',
                 'quote_precision',
             ], unique_fields=['name', 'market', 'contract_type'])
+            MarketSymbol.objects.filter(market=self.market, contract_type=MarketSymbol.ContractType.FUTURES).exclude(name__in=[symbol.name for symbol in self.symbols.values()]).delete()
         return self.futures_symbols
 
     def get_symbols(self):
@@ -128,6 +129,7 @@ class OKXMarket(IMarket):
                 'base_precision',
                 'quote_precision',
             ], unique_fields=['name', 'market', 'contract_type'], batch_size=50)
+            MarketSymbol.objects.filter(market=self.market, contract_type=MarketSymbol.ContractType.SPOT).exclude(name__in=[symbol.name for symbol in self.symbols.values()]).delete()
         self.futures_symbols = self.get_futures_symbols()
         return self.symbols, self.futures_symbols
 

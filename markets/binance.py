@@ -320,6 +320,7 @@ class BinanceMarket(IMarket):
                 'base_precision',
                 'quote_precision',
             ], unique_fields=['name', 'market', 'contract_type'])
+            MarketSymbol.objects.filter(market=self.market, contract_type=MarketSymbol.ContractType.SPOT).exclude(name__in=[symbol.name for symbol in self.symbols.values()]).delete()
 
         futures_exchange_info = self.client.futures_exchange_info()
         self.futures_symbols = { self._standardize_symbol(symbol['symbol']) + '.F': self._prep_symbol(symbol) for symbol in futures_exchange_info.get('symbols', []) }
@@ -332,6 +333,7 @@ class BinanceMarket(IMarket):
                 'base_precision',
                 'quote_precision',
             ], unique_fields=['name', 'market', 'contract_type'])
+            MarketSymbol.objects.filter(market=self.market, contract_type=MarketSymbol.ContractType.FUTURES).exclude(name__in=[symbol.name for symbol in self.futures_symbols.values()]).delete()
 
         return self.symbols
 

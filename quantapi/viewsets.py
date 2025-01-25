@@ -3,13 +3,14 @@ import json
 
 from django.db.models import Prefetch
 from django_filters.rest_framework import DjangoFilterBackend
+from django.core.management import call_command
 
 import pytz
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from metrichub import fix_missing_images, match_symbols, update_all_coins_coingecko, update_all_coins_coingecko_metrics, update_all_tags
+from metrichub import  refresh_all_market_symbols, refresh_symbols_with_delta
 from models import interval_to_minutes
 from orderpulse.keeper import KeeperPool
 from quantapi.filters import (GlobalSymbolFilter, MarketAccountFilter, MarketSymbolFilter, TagFilter)
@@ -131,12 +132,11 @@ class GlobalSymbolViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=False, methods=['get', 'post'], url_path='refresh', url_name='refresh-all')
     def refresh_all(self, request):
-        update_all_coins_coingecko()
-        update_all_coins_coingecko_metrics()
-        match_symbols()
-        update_all_tags()
-        # match_tags()  # migrating to CoinGecko tags
-        fix_missing_images()
+        refresh_symbols_with_delta()
+        refresh_all_market_symbols()
+        call_command('match_symbols')
+        call_command('reload_cg_tags')
+        call_command('match_tags')
         return Response()
 
 

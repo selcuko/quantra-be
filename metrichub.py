@@ -440,3 +440,61 @@ def calculate_tag_weights():
 def fix_missing_images():
     gs = GlobalSymbol.objects.exclude(image__startswith='http')
     gs.update(image=None)
+
+
+def refresh_symbols_with_delta():
+    cg = CoinGecko()
+    gs = {gs.cid: gs for gs in GlobalSymbol.objects.all()}
+    payloads = cg.all_coins_with_market_data()
+    payload_map = { s["id"]: s for s in payloads }
+    bulk_update = []
+    bulk_create = []
+
+    # walk thru every coin in cg
+    for cid, payload in payload_map.items():
+        try:
+            # update
+            symbol = gs.pop(cid)
+            symbol_updated = update_symbol_metrics_mini(symbol, payload)
+            bulk_update.append(symbol_updated)
+        except KeyError:
+            # create
+            symbol = prepare_symbol(payload)
+            symbol_updated = update_symbol_metrics_mini(symbol, payload)
+            bulk_create.append(symbol_updated)
+
+    # any remaining are delisted
+    for symbol in gs.values():
+        symbol.delete()
+
+    GlobalSymbol.objects.bulk_create(bulk_create)
+    GlobalSymbol.objects.bulk_update(bulk_update, fields=[
+            'volume24h_to_mcap',
+            'volume',
+            'market_cap', 
+            'market_cap_change_24h', 
+            'market_cap_change_percentage_24h', 
+            'price', 
+            'volume', 
+            'price_change_24h', 
+            'price_change_percentage_24h', 
+            'price_high_24h', 
+            'price_low_24h', 
+            'ath', 
+            'ath_date', 
+            'ath_prox', 
+            'atl', 
+            'atl_date', 
+            'atl_prox', 
+            'data_updated', 
+            'total_supply', 
+            'circulating_supply', 
+            'max_supply', 
+            'raw_payload'
+        ], batch_size=500)
+
+
+def refresh_all_market_symbols():
+    for market in Market.objects.all():
+        iface = market.get_interface()
+        iface.get_symbols()

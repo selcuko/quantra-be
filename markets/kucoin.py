@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Literal
 if typing.TYPE_CHECKING:
-    from quantapi.models import MarketSymbol, Order, MarketAccount
+    from quantapi.models import MarketSymbol, MarketAccount
 
 import pytz
 from kucoin.client import Market, Trade, User
@@ -413,6 +413,7 @@ class KucoinMarket(IMarket):
         MarketSymbol.objects.bulk_create(self.futures_symbols.values(), update_conflicts=True, update_fields=[
                 'details',
             ], unique_fields=['name', 'market', 'contract_type'])
+        MarketSymbol.objects.filter(market=self.market, contract_type=MarketSymbol.ContractType.FUTURES).exclude(name__in=[symbol.name for symbol in self.symbols.values()]).delete()
         return self.futures_symbols
 
     def get_symbols(self) -> dict[str, 'MarketSymbol']:
@@ -430,6 +431,7 @@ class KucoinMarket(IMarket):
                 'base_precision',
                 'quote_precision',
             ], unique_fields=['name', 'market', 'contract_type'])
+        MarketSymbol.objects.filter(market=self.market, contract_type=MarketSymbol.ContractType.SPOT).exclude(name__in=[symbol.name for symbol in self.symbols.values()]).delete()
         self.futures_symbols = self.get_future_symbols()
         return self.symbols
 
