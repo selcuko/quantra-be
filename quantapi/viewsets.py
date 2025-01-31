@@ -122,6 +122,14 @@ class GlobalSymbolViewSet(viewsets.ReadOnlyModelViewSet):
             Prefetch('tags', queryset=Tag.objects.all()),
         )
 
+    @action(detail=False, methods=['get'], url_path='cid/(?P<pk>[^/.]+)', url_name='cid')
+    def cid(self, request, pk):
+        try:
+            symbol = GlobalSymbol.objects.get(cid=pk)
+            return Response(self.serializer_class(instance=symbol, context={'request': request}).data)
+        except GlobalSymbol.DoesNotExist:
+            return Response({'detail': 'Symbol not found.'}, status=404)
+
     @action(detail=True, methods=['get', 'post'])
     def refresh(self, request, pk):
         symbol: GlobalSymbol = self.get_object()
