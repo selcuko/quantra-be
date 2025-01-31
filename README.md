@@ -46,3 +46,16 @@ Populating GlobalSymbols is a bit tricky as it involves remote API payloads and 
     ```bash
     python manage.py match_tags
     ```
+
+## Management Commands
+These commands are meant to quickly play around with structures in the codebase, such as _LiveLoops_ or _BookKeepers_.
+You'll be running these like
+```bash
+python manage.py command_name args --kwargs
+```
+|Command name|What it does|
+|---|---|
+|`get_klines`|see the format of candles received, play around with candle fetching|
+|`run_match_engine`|MatchEngine tracks the trade feed and generates candles|
+|`start_keeper`|Starts the BookKeeper structure, which tracks the orderbook in an exchange|
+|`start_aggregator`|Starts the BookAggregator structure, which tracks multiple BookKeepers|

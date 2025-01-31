@@ -1,0 +1,2 @@
+class SessionCannotContinue(Exception):
+    pass

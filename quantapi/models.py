@@ -1,5 +1,6 @@
 from functools import cached_property
 import json
+import threading
 import typing
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -10,12 +11,18 @@ from django.conf import settings
 from django.utils import timezone
 from django.contrib.contenttypes.fields import GenericRelation
 from django.db import models
+# import User
+from django.contrib.auth.models import User
 
+from cache import get_loopgroup
+from errors import SessionCannotContinue
 from logger import logger
+from models import interval_to_minutes
 from relay.models import Issue
 
 if typing.TYPE_CHECKING:
     from markets import IMarket
+    from loops import LiveLoop
 
 
 class Market(models.Model):
@@ -498,3 +505,459 @@ class ContactForm(models.Model):
 
     def __str__(self):
         return f'{self.name} <{self.email}>'
+
+class Session(models.Model):
+    class CandleSource(models.TextChoices):
+        TRADE = 'TRADE', 'Trade'
+        WEBSOCKET = 'WEBSOCKET', 'Websocket'
+        REST  = 'REST',  'REST'
+    class Type(models.TextChoices):
+        BACKTEST     = 'backtest',     'Backtest'
+        LIVE_BASIC   = 'live.basic',   'Live Basic'
+        LIVE_SANDBOX = 'live.sandbox', 'Live Testnet'
+        LIVE_MAINNET = 'live.mainnet', 'Live Mainnet'
+    class Status(models.TextChoices):
+        ONGOING    = 'ONGOING',    'Ongoing'
+        COMPLETED  = 'COMPLETED',  'Completed'
+        ERROR      = 'ERROR',      'Error'
+        PURGED     = 'PURGED',     'Purged'
+        PAUSED     = 'PAUSED',     'Paused'
+        PLANNED    = 'PLANNED',    'Planned'
+        TERMINATED = 'TERMINATED', 'Terminated'
+    class Freq(models.TextChoices):
+        MIN1  = '1 min',  '1 minute'
+        MIN3  = '3 min',  '3 minutes'
+        MIN5  = '5 min',  '5 minutes'
+        MIN15 = '15 min', '15 minutes'
+        MIN30 = '30 min', '30 minutes'
+        HOUR1 = '1 hour', '1 hour'
+        HOUR2 = '2 hour', '2 hours'
+        HOUR4 = '4 hour', '4 hours'
+        HOUR6 = '6 hour', '6 hours'
+        HOUR8 = '8 hour', '8 hours'
+        HOUR12 = '12 hour', '12 hours'
+        DAY1  = '1 day',  '1 day'
+        WEEK1 = '1 week', '1 week'
+        MONTH1 = '1 month', '1 month'
+    session_type = models.CharField(max_length=30, choices=Type.choices, default=Type.LIVE_MAINNET)
+    freq = models.CharField(max_length=30, default=Freq.MIN15, choices=Freq.choices)
+    account = models.ForeignKey(MarketAccount, on_delete=models.PROTECT, related_name='sessions')
+    group = models.ForeignKey('SessionGroup', on_delete=models.PROTECT, related_name='sessions', null=True, blank=True)
+    started = models.DateTimeField(auto_now_add=True)
+    ended = models.DateTimeField(null=True, blank=True)
+    symbol = models.ForeignKey(MarketSymbol, on_delete=models.PROTECT, related_name='sessions')
+    strategy = models.ForeignKey('Strategy', on_delete=models.PROTECT, related_name='sessions')
+    planned_shutdown = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(max_length=30, choices=Status.choices, default=Status.PLANNED)
+    report = models.CharField(max_length=256, null=True, blank=True, help_text='Report file name')
+    last_heartbeat = models.DateTimeField(null=True, blank=True)
+    last_price = models.FloatField(null=True, blank=True)
+    last_kline_timestamp = models.DateTimeField(null=True, blank=True)
+    signals: models.QuerySet['Signal']
+    subscriptions: models.QuerySet['Subscription']
+    initial_capital = models.FloatField(default=0)
+    initial_assets = models.FloatField(default=0)
+    capital = models.FloatField(default=0)
+    assets = models.FloatField(default=0)
+    thread_id = models.BigIntegerField(null=True, blank=True)
+    use_heikin_ashi = models.BooleanField(default=False)
+    candle_source = models.CharField(max_length=30, choices=CandleSource.choices, default=CandleSource.TRADE)
+    strategy_parameters = models.TextField(null=True, blank=True, help_text='JSON string of parameters for this strategy, leave blank to use defaults.')
+    details = models.TextField(null=True, blank=True, help_text='JSON string of session details from market')
+    initial_price = models.FloatField(null=True, blank=True)
+    buy_enabled = models.BooleanField(default=True)
+    sell_enabled = models.BooleanField(default=True)
+    initiated_at = models.DateTimeField(auto_now_add=True)
+    orders: models.QuerySet['Order']
+    issues = GenericRelation(Issue)
+    @property
+    def equity(self):
+        try:
+            last_price = self.last_price or self.group.last_price if (self.group and self.group.last_price) else 0
+        except (AttributeError, ZeroDivisionError):
+            last_price = 0
+        return round(self.capital + self.assets * last_price, 2)
+    def __str__(self):
+        return f'Session <{self.pk}>'
+    @property
+    def analytics(self):
+        from quantapi.analytics import SessionAnalytics
+        return SessionAnalytics(self)
+    @property
+    def thread(self):
+        for thread in threading.enumerate():
+            if thread.ident == self.thread_id:
+                return thread
+    def resume(self):
+        """Resume an interrupted session."""
+        from quantapi.validations import validate_session_can_start
+        validate_session_can_start(self)
+        from loops import LiveLoop
+        ll = LiveLoop.from_session(self)
+        ll.run()
+        return ll
+    def refresh(self, interface, save=True):
+        # Update session capital and assets to ensure they are not higher than the interface's
+        interface = interface or self.account.get_interface()
+        new_capital = min(self.capital, interface.capital)
+        new_assets  = min(self.assets, interface.assets.get(self.symbol.base, 0))
+        if new_capital != self.capital:
+            logger.warning(f'Capital changed from {self.capital} to {new_capital} (SessionID:{self.pk})')
+        if new_assets != self.assets:
+            logger.warning(f'Assets changed from {self.assets} to {new_assets} (SessionID:{self.pk})')
+        self.capital = new_capital
+        self.assets = new_assets
+        if save:
+            self.save()
+    def save(self, **kwargs):
+        from quantapi.validations import validate_session_can_save
+        validate_session_can_save(self)
+        super().save(**kwargs)
+    def health(self):
+        if self.status != Session.Status.ONGOING:
+            return 'Not ongoing'
+        if not self.last_kline_timestamp:
+            return 'No heartbeat'
+        candle_mins = interval_to_minutes(self.freq)
+        if self.last_kline_timestamp < datetime.now(pytz.utc) - timedelta(minutes=candle_mins*3):
+            return 'No heartbeat for 3 candles'
+        thread = self.thread
+        if not thread or not thread.is_alive():
+            return 'Thread not alive'
+        return 'Healthy'
+class SessionGroup(models.Model):
+    class Status(models.TextChoices):
+        PLANNED = 'PLANNED', 'Planned'
+        ONGOING = 'ONGOING', 'Ongoing'
+        COMPLETED = 'COMPLETED', 'Completed'
+        ERROR = 'ERROR', 'Error'
+        PAUSED = 'PAUSED', 'Paused'
+        PURGED = 'PURGED', 'Purged'
+    symbol = models.ForeignKey(MarketSymbol, on_delete=models.PROTECT, related_name='groups')
+    market = models.ForeignKey(Market, on_delete=models.PROTECT, related_name='groups')
+    interface = models.ForeignKey(MarketAccount, on_delete=models.PROTECT, related_name='groups', null=True, blank=True)
+    sessions: models.QuerySet['Session']
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    stopped_at = models.DateTimeField(null=True, blank=True)
+    strategy = models.ForeignKey('Strategy', on_delete=models.PROTECT, related_name='groups')
+    status = models.CharField(max_length=30, choices=Status.choices, default=Status.PLANNED)
+    last_kline_dt = models.DateTimeField(null=True, blank=True, verbose_name='Last candle timestamp')
+    last_price = models.FloatField(null=True, blank=True, verbose_name='Last price')
+    thread_id = models.BigIntegerField(null=True, blank=True, verbose_name='Thread ID')
+    buy_enabled = models.BooleanField(default=True)
+    sell_enabled = models.BooleanField(default=True)
+    source = models.CharField(max_length=30, choices=Session.CandleSource.choices, default=Session.CandleSource.TRADE)
+    freq = models.CharField(max_length=30, choices=Session.Freq.choices, default=Session.Freq.MIN15)
+    issues     = GenericRelation(Issue)
+    def __str__(self):
+        return f'SessionGroup <{self.pk}>'
+    @property
+    def capital(self):
+        return sum([session.capital for session in self.sessions.all()])
+    @property
+    def assets(self):
+        return sum([session.assets for session in self.sessions.all()])
+    @property
+    def equity(self):
+        return round(sum([session.equity for session in self.sessions.all()]), 2)
+    @property
+    def thread(self):
+        loop = get_loopgroup(self.pk)
+        if loop and loop.is_alive():
+            return loop.thread
+        threads = threading.enumerate()
+        for thread in threads:
+            if thread.ident == self.thread_id and thread.is_alive():
+                return thread
+    def resume(self):
+        if not self.status == SessionGroup.Status.ONGOING:
+            raise ValueError(f'SessionGroup status should be ONGOING to resume, not {self.status}')
+        if not self.pk:
+            raise ValueError('SessionGroup must be saved before resuming')
+        if not self.strategy:
+            raise ValueError('SessionGroup must have a strategy to resume')
+        from loops import LoopGroup
+        loop = LoopGroup(group=self, freq=self.freq)
+        try:
+            loop.run(source=self.source)
+        except Exception as e:
+            raise SessionCannotContinue(f'Failed to resume group {self} due to {e!r}')
+        return loop
+    def add_account(self, account:MarketAccount, validate=True):
+        if not self.pk:
+            raise ValueError('SessionGroup must be saved before adding accounts.')
+        for session in self.sessions.all():
+            if session.account == account:
+                return session
+        if validate:
+            try:
+                ms = MarketSymbol.objects.get(contract_type=self.symbol.contract_type, name=self.symbol.name, market=account.market)
+                if not ms.spot_trading_enabled:
+                    raise ValueError(f'Spot trading is not enabled for {ms.name} in {account.market}')
+            except MarketSymbol.DoesNotExist:
+                raise ValueError(f'Symbol {self.symbol.name} not available in {account.market}')
+        session = Session.objects.create(
+            group=self,
+            freq=self.freq,
+            account=account,
+            symbol=self.symbol,
+            strategy=self.strategy,
+            status=self.status,
+            initial_capital=0,
+            initial_assets=0,
+            capital=0,
+            assets=0,
+            session_type=Session.Type.LIVE_MAINNET,
+            buy_enabled=self.buy_enabled,
+            sell_enabled=self.sell_enabled,
+        )
+        return session
+    def save(self, *args, **kwargs):
+        if self.interface:
+            try:
+                self.symbol = self.interface.market.symbols.get(name=self.symbol.name, contract_type=self.symbol.contract_type)
+            except MarketSymbol.DoesNotExist:
+                raise ValueError('Symbol must be available in the market to set interface.')
+            self.market = self.interface.market
+        super().save(*args, **kwargs)
+class Strategy(models.Model):
+    name = models.CharField(max_length=30)
+    technical_name = models.CharField(max_length=30, null=True, blank=True)
+    code = models.CharField(max_length=5, default='null')
+    version = models.CharField(max_length=30, default='1.0')
+    description = models.CharField(max_length=256, null=True, blank=True)
+    sessions: models.QuerySet[Session]
+    class Meta:
+        verbose_name_plural = 'Strategies'
+    def __str__(self):
+        return f'{self.name} {self.version}'
+class Signal(models.Model):
+    class Side(models.TextChoices):
+        BUY = 'BUY'
+        SELL = 'SELL'
+    session = models.ForeignKey(Session, on_delete=models.PROTECT, related_name='signals', null=True, blank=True)
+    group = models.ForeignKey(SessionGroup, on_delete=models.PROTECT, related_name='signals', null=True, blank=True)
+    timestamp = models.DateTimeField()
+    side = models.CharField(max_length=30, choices=Side.choices)
+    price = models.FloatField()
+    raw = models.CharField(max_length=512)
+    orders: models.QuerySet['Order']
+    issues     = GenericRelation(Issue)
+    def save(self, *args, **kwargs):
+        if not self.group and not self.session:
+            raise ValueError('Signal must belong to a Session or a SessionGroup.')
+        return super().save(*args, **kwargs)
+    def __str__(self) -> str:
+        return f'{self.side} {self.price}'
+    
+    @property
+    def symbol(self):
+        return self.session.symbol if self.session else self.group.symbol if self.group else None
+    @property
+    def cum_order(self):
+        orders = self.orders.all()
+        all_filled = all([order.status == Order.Status.FILLED for order in orders])
+        return Order(
+            price=self.price,
+            oid='cumulative',
+            client_oid='cumulative',
+            deal_size=sum([order.deal_size for order in orders if order.deal_size]),
+            deal_funds=sum([order.deal_funds for order in orders if order.deal_funds]),
+            funds=sum([order.funds for order in orders if order.funds]),
+            order_type=Order.Type.MARKET,
+            signal=self,
+            created_at=self.timestamp,
+            status=Order.Status.FILLED if all_filled else Order.Status.OPEN,
+            side=self.side,
+            symbol=self.symbol,
+        )
+class Order(models.Model):
+    class Type(models.TextChoices):
+        MARKET = 'MARKET'
+        LIMIT = 'LIMIT'
+    class Side(models.TextChoices):
+        BUY = 'BUY'
+        SELL = 'SELL'
+    class Status(models.TextChoices):
+        NOT_PLACED = 'NOT_PLACED'
+        OPEN = 'OPEN'
+        FILLED = 'FILLED'
+        CANCELLED = 'CANCELLED'
+        REJECTED = 'REJECTED'
+        EXPIRED = 'EXPIRED'
+        ERROR = 'ERROR'
+        INSUFFICIENT_BALANCE = 'INSUFFICIENT_BALANCE'
+    oid = models.CharField(max_length=256, unique=True, null=True, blank=True)
+    client_oid = models.CharField(max_length=256, unique=True, null=True, blank=True)
+    deal_size = models.FloatField(help_text='Amount of quote currency in this order (e.g. BTC)', null=True, blank=True)
+    price = models.FloatField(help_text='Price represented as (price of base)/(price of quote)', null=True, blank=True)
+    deal_funds = models.FloatField(help_text='Amount of base currency in this order (e.g. USDT)', null=True, blank=True)
+    funds = models.FloatField(help_text='Amount of base currency of this order initially placed with', null=True, blank=True)
+    order_type = models.CharField(max_length=30, choices=Type.choices, default=Type.MARKET)
+    market_timestamp = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(max_length=30, choices=Status.choices)
+    force = models.BooleanField(default=False)
+    details = models.TextField(null=True, blank=True)
+    request = models.TextField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
+    placed_at = models.DateTimeField(null=True, blank=True)
+    side = models.CharField(max_length=30, choices=Side.choices, null=True)
+    messages_raw = models.TextField(default='')
+    pnl = models.FloatField(null=True, blank=True)
+    average_cost = models.FloatField(null=True, blank=True)
+    session = models.ForeignKey(Session, on_delete=models.PROTECT, related_name='orders', null=True, blank=True)
+    signal = models.ForeignKey(Signal, on_delete=models.PROTECT, related_name='orders', null=True, blank=True)
+    symbol = models.ForeignKey(MarketSymbol, on_delete=models.PROTECT, related_name='orders')
+    account = models.ForeignKey(MarketAccount, on_delete=models.PROTECT, related_name='orders', null=True, blank=True)
+    group = models.ForeignKey('GroupOrder', on_delete=models.PROTECT, related_name='orders', null=True, blank=True)
+    issues = GenericRelation(Issue)
+    def save(self, *args, **kwargs):
+        if not self.side and self.signal: 
+            self.side = self.signal.side
+        if not self.price and self.deal_funds and self.deal_size:
+            self.price = self.deal_funds / self.deal_size
+        if not self.deal_funds and self.price and self.deal_size:
+            self.deal_funds = self.price * self.deal_size
+        if not self.deal_size and self.price and self.deal_funds:
+            self.deal_size = self.deal_funds / self.price
+        if not self.funds and self.deal_funds:
+            self.funds = self.deal_funds
+        super().save(*args, **kwargs)
+        if not self.pnl and not self.average_cost:
+            from quantapi.analytics import OrderAnalytics
+            order_analytics = OrderAnalytics(self)
+            self.pnl = order_analytics.pnl
+            self.average_cost = order_analytics.average_cost
+            if self.pnl or self.average_cost:
+                super().save(*args, **kwargs)
+    @property
+    def messages(self):
+        return self.messages_raw.split(r'\n')
+    
+    @messages.setter
+    def messages(self, value):
+        self.messages_raw = '\n'.join(value)
+    def add_message(self, message):
+        messages = self.messages
+        messages.append(message)
+        self.messages = messages
+    def __str__(self) -> str:
+        return f'Order <{self.pk}> {self.side} {self.status}'
+    def refresh_from_market(self, market_interface):
+        if not self.oid:
+            raise ValueError('Cannot refresh order without oid')
+        order = market_interface.get_order(self.symbol, self.oid)
+        self.status = order.status
+        self.deal_funds = order.deal_funds
+        self.price = order.price
+        self.deal_size = order.deal_size
+        self.funds = order.funds
+        self.order_type = order.order_type
+        self.market_timestamp = order.market_timestamp
+        self.client_oid = order.client_oid
+        self.save()
+    @property
+    def display_price(self):
+        if self.price and float(self.price) > 0:
+            return self.price
+        elif self.deal_funds and self.deal_size:
+            return self.deal_funds / self.deal_size
+        return None
+    def to_dict(self):
+        return {
+            'id': self.pk,
+            'oid': self.oid,
+            'client_oid': self.client_oid,
+            'deal_size': self.deal_size,
+            'price': self.price,
+            'deal_funds': self.deal_funds,
+            'funds': self.funds,
+            'order_type': self.order_type,
+            'status': self.status,
+            'force': self.force,
+            'details': self.details,
+            'request': self.request,
+            'placed_at': self.placed_at,
+            'side': self.side,
+            'messages_raw': self.messages_raw,
+            'pnl': self.pnl,
+            'average_cost': self.average_cost,
+            'session': self.session.pk if self.session else None,
+            'symbol': self.symbol.name,
+        }
+class GroupOrder(models.Model):
+    class Status(models.TextChoices):
+        FILLED = 'FILLED'
+        PARTIAL = 'PARTIAL'
+        EXPIRED = 'EXPIRED'
+        PENDING = 'PENDING'
+    group = models.ForeignKey(SessionGroup, on_delete=models.PROTECT, related_name='orders')
+    signal = models.ForeignKey(Signal, on_delete=models.PROTECT, related_name='group_orders', null=True, blank=True)
+    side = models.CharField(max_length=30, choices=Order.Side.choices)
+    deal_size = models.FloatField(default=0)
+    deal_funds = models.FloatField(default=0)
+    status = models.CharField(max_length=30, choices=Status.choices)
+    manual = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    issues = GenericRelation(Issue)
+    orders: models.QuerySet[Order]
+    @property
+    def price(self):
+        return self.deal_funds / self.deal_size if self.deal_size else 0
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        if self.signal:
+            self.orders.update(signal=self.signal)
+class ComplexOrder(models.Model):
+    class Type(models.TextChoices):
+        TARGET_PRICE = 'TARGET_PRICE'
+    class Status(models.TextChoices):
+        PENDING = 'PENDING'
+        FILLED = 'FILLED'
+        ERRORED = 'ERRORED'
+    type = models.CharField(max_length=30, choices=Type.choices, default=Type.TARGET_PRICE)
+    status = models.CharField(max_length=30, choices=Status.choices)
+    session = models.ForeignKey(Session, on_delete=models.PROTECT, related_name='complex_orders')
+    target_price = models.FloatField(null=True, blank=True)
+    deal_funds = models.FloatField(null=True, blank=True)
+    deal_size = models.FloatField(null=True, blank=True)
+    side = models.CharField(max_length=30, choices=Order.Side.choices)
+    market_order = models.OneToOneField(Order, on_delete=models.PROTECT, related_name='complex_order', null=True, blank=True)
+    def __str__(self) -> str:
+        return f'{self.status} {self.type}'
+    def is_ready(self, ll:'LiveLoop') -> bool:
+        if self.type == ComplexOrder.Type.TARGET_PRICE and self.target_price:
+            if self.side == Order.Side.BUY:
+                return ll.session.last_price <= self.target_price if ll.session.last_price else False
+            elif self.side == Order.Side.SELL:
+                return ll.session.last_price >= self.target_price if ll.session.last_price else False
+        return False
+    def execute(self, ll:'LiveLoop'):
+        pass
+class Subscription(models.Model):
+    user = models.ForeignKey(User, on_delete=models.PROTECT, related_name='subscriptions')
+    session = models.ForeignKey(Session, on_delete=models.PROTECT, related_name='subscriptions')
+    def __str__(self) -> str:
+        return f'SUB {self.user.username} - {self.session.strategy} - {self.session.symbol.name}'
+class Backtest(models.Model):
+    class Status(models.TextChoices):
+        INIT = 'INIT'
+        ONGOING = 'ONGOING'
+        ERROR = 'ERROR'
+        COMPLETED = 'COMPLETED'
+    timestamp = models.DateTimeField(auto_now_add=True)
+    start = models.DateTimeField()
+    end = models.DateField(null=True, blank=True)
+    profit = models.FloatField(null=True, blank=True)
+    freq = models.CharField(max_length=100, choices=Session.Freq.choices)
+    report = models.TextField(null=True, blank=True)
+    symbol = models.CharField(max_length=100)
+    market = models.CharField(max_length=100)
+    status = models.CharField(max_length=100, choices=Status.choices)
+    details = models.TextField(null=True, blank=True)
+    use_heikin_ashi = models.BooleanField(default=False)
+    parameters = models.TextField(null=True, blank=True)
+    def __str__(self) -> str:
+        return f'{self.symbol} {self.market} {self.status}'
