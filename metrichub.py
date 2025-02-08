@@ -95,17 +95,14 @@ def update_symbol(gs: GlobalSymbol, payload: dict|None = None, match=True, save=
         'bybit_spot': 'BYBIT',
     }
     volume_map = {
-        'OTHER': 0,
     }
     bid_ask_spread = {}
     for ticker in cg_symbol['tickers']:
         if ticker['target']!= 'USDT':
             continue
-        if excname := market_map.get(ticker['market']['identifier']):
-            volume_map[excname] = ticker['converted_volume']['usd']
-            bid_ask_spread[excname] = ticker['bid_ask_spread_percentage']
-        else:
-            volume_map['OTHER'] += ticker['converted_volume']['usd']
+        excname = ticker['market']['name']
+        volume_map[excname] = ticker['converted_volume']['usd']
+        bid_ask_spread[excname] = ticker['bid_ask_spread_percentage']
     gs.volume_distribution = volume_map  # type: ignore
     gs.bid_ask_spread_percentage_distribution = bid_ask_spread  # type: ignore
 

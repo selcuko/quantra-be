@@ -115,6 +115,8 @@ class GlobalSymbolViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = GlobalSymbolSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_class = GlobalSymbolFilter
+    lookup_field = 'cid'
+    lookup_url_kwarg = 'pk'
 
     def get_queryset(self):
         return GlobalSymbol.objects.all().prefetch_related(
